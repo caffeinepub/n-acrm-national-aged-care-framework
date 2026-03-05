@@ -10,6 +10,7 @@ import {
   RISK_CRITERIA_LABELS,
 } from "../../data/mockData";
 import { useAllHighRiskCohorts } from "../../hooks/useQueries";
+import CohortRiskDetail from "./CohortRiskDetail";
 
 type FilterType = "all" | "high" | "medium" | "resolved";
 
@@ -78,6 +79,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function HighRiskCohorts() {
   const [filter, setFilter] = useState<FilterType>("all");
+  const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
 
   const { data: liveData, isLoading } = useAllHighRiskCohorts();
 
@@ -98,6 +100,16 @@ export default function HighRiskCohorts() {
     if (filter === "resolved") return cohort.status === "resolved";
     return true;
   });
+
+  // Show detail view if a cohort is selected
+  if (selectedCohortId) {
+    return (
+      <CohortRiskDetail
+        cohortId={selectedCohortId}
+        onBack={() => setSelectedCohortId(null)}
+      />
+    );
+  }
 
   const counts = {
     total: rawData.length,
@@ -316,6 +328,8 @@ export default function HighRiskCohorts() {
                             size="sm"
                             className="h-6 text-xs rounded-none border-primary text-primary hover:bg-primary hover:text-white"
                             aria-label={`View details for cohort ${cohort.id}`}
+                            onClick={() => setSelectedCohortId(cohort.id)}
+                            data-ocid={`high_risk.view_details.button.${idx + 1}`}
                           >
                             View Details
                           </Button>

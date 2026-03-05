@@ -1,5 +1,12 @@
+import { StarRating } from "@/components/ui/StarRating";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, DollarSign, TrendingUp, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  DollarSign,
+  RefreshCw,
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -12,9 +19,35 @@ import {
   YAxis,
 } from "recharts";
 import {
+  CITY_PROVIDERS,
   PAY_FOR_IMPROVEMENT_DATA,
   PAY_FOR_IMPROVEMENT_THRESHOLDS,
 } from "../../data/mockData";
+import {
+  type DomainScores,
+  calcWeightedProviderRating,
+  scoreToStarBand,
+} from "../../utils/ratingEngine";
+
+// ── Provider star rating lookup ───────────────────────────────────────────────
+
+// Map PFI provider names to city providers for rating lookup
+const ALL_CITY_PROVIDERS = Object.values(CITY_PROVIDERS).flat();
+
+function getProviderOverallStars(providerName: string): number | null {
+  const found = ALL_CITY_PROVIDERS.find((p) => p.name === providerName);
+  if (!found) return null;
+  const domains: DomainScores = {
+    safety: found.indicators.safetyClinical,
+    preventive: found.indicators.preventiveCare,
+    quality: found.indicators.qualityMeasures,
+    staffing: found.indicators.staffing,
+    compliance: found.indicators.compliance,
+    experience: (found.indicators.residents + found.indicators.experience) / 2,
+  };
+  const { score } = calcWeightedProviderRating(domains);
+  return scoreToStarBand(score);
+}
 
 interface PayForImprovementProps {
   currentQuarter: string;
@@ -58,6 +91,133 @@ export default function PayForImprovement({
           eligibility assessment
         </p>
       </div>
+
+      {/* Ratings synchronized banner */}
+      <div
+        className="flex items-center gap-3 px-4 py-2.5 border text-xs"
+        style={{
+          background: "oklch(0.97 0.01 254)",
+          borderColor: "oklch(0.82 0.05 254)",
+          color: "oklch(0.40 0.04 254)",
+        }}
+        data-ocid="pfi.sync.panel"
+      >
+        <RefreshCw
+          className="w-3.5 h-3.5 flex-shrink-0"
+          style={{ color: "oklch(0.45 0.15 145)" }}
+        />
+        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
+          <CheckCircle2 className="w-3.5 h-3.5 text-gov-green flex-shrink-0" />
+          <span className="text-gov-green font-bold">Ratings Synchronized</span>
+          <span className="text-muted-foreground font-normal mx-1">·</span>
+          <span>Indicator Performance</span>
+          <span>→</span>
+          <span>Indicator Rating</span>
+          <span>→</span>
+          <span>Provider Scorecard</span>
+          <span>→</span>
+          <span>Overall Rating</span>
+          <span>→</span>
+          <span>Pay-for-Improvement Eligibility</span>
+        </div>
+      </div>
+
+      {/* Eligibility Logic Explanation */}
+      <Card className="rounded-none border">
+        <CardHeader className="pb-2 pt-4 px-4 border-b">
+          <CardTitle className="text-sm font-semibold text-gov-navy">
+            Eligibility Logic — How Ratings Drive Incentives
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div
+              className="border p-3"
+              style={{
+                background: "oklch(0.96 0.025 145)",
+                borderColor: "oklch(0.72 0.12 145)",
+              }}
+              data-ocid="pfi.eligibility.bonus.card"
+            >
+              <div
+                className="text-xs font-bold uppercase tracking-wide mb-1"
+                style={{ color: "oklch(0.28 0.14 145)" }}
+              >
+                Bonus Incentive
+              </div>
+              <div
+                className="text-xs space-y-0.5"
+                style={{ color: "oklch(0.30 0.06 254)" }}
+              >
+                <p>Overall rating ≥ 4 stars</p>
+                <p>AND Safety improvement ≥ 15%</p>
+              </div>
+              <div
+                className="mt-2 font-bold text-sm"
+                style={{ color: "oklch(var(--gov-gold-dark))" }}
+              >
+                Est. $120,000
+              </div>
+            </div>
+            <div
+              className="border p-3"
+              style={{
+                background: "oklch(0.97 0.03 80)",
+                borderColor: "oklch(0.75 0.12 75)",
+              }}
+              data-ocid="pfi.eligibility.base.card"
+            >
+              <div
+                className="text-xs font-bold uppercase tracking-wide mb-1"
+                style={{ color: "oklch(0.43 0.14 72)" }}
+              >
+                Base Incentive
+              </div>
+              <div
+                className="text-xs space-y-0.5"
+                style={{ color: "oklch(0.30 0.06 254)" }}
+              >
+                <p>Overall rating ≥ 4 stars</p>
+                <p>Safety improvement any %</p>
+              </div>
+              <div
+                className="mt-2 font-bold text-sm"
+                style={{ color: "oklch(var(--gov-gold-dark))" }}
+              >
+                Est. $75,000
+              </div>
+            </div>
+            <div
+              className="border p-3"
+              style={{
+                background: "oklch(0.97 0.01 240)",
+                borderColor: "oklch(0.82 0.01 240)",
+              }}
+              data-ocid="pfi.eligibility.not.card"
+            >
+              <div
+                className="text-xs font-bold uppercase tracking-wide mb-1"
+                style={{ color: "oklch(0.48 0.02 240)" }}
+              >
+                Not Eligible
+              </div>
+              <div
+                className="text-xs space-y-0.5"
+                style={{ color: "oklch(0.30 0.06 254)" }}
+              >
+                <p>Overall rating &lt; 4 stars</p>
+                <p>Improvement below threshold</p>
+              </div>
+              <div
+                className="mt-2 font-bold text-sm"
+                style={{ color: "oklch(0.55 0.02 240)" }}
+              >
+                $0
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -151,6 +311,7 @@ export default function PayForImprovement({
                   <th className="text-right">Current</th>
                   <th className="text-right">Improvement %</th>
                   <th className="text-right">Threshold Required</th>
+                  <th className="text-left">Overall Rating</th>
                   <th className="text-left">Funding Eligible</th>
                   <th className="text-right">Est. Funding</th>
                 </tr>
@@ -162,6 +323,7 @@ export default function PayForImprovement({
                     (PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
                       (t) => t.metric === row.metric,
                     )?.threshold || 0);
+                  const overallStars = getProviderOverallStars(row.provider);
                   return (
                     <tr key={row.id}>
                       <td className="font-medium">{row.provider}</td>
@@ -183,6 +345,17 @@ export default function PayForImprovement({
                           (t) => t.metric === row.metric,
                         )?.threshold ?? "—"}
                         %
+                      </td>
+                      <td>
+                        {overallStars !== null ? (
+                          <StarRating
+                            value={overallStars}
+                            size="sm"
+                            showLabel={false}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td>
                         {row.eligible ? (

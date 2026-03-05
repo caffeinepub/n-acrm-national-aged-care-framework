@@ -1,7 +1,15 @@
+import { StarRating } from "@/components/ui/StarRating";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Minus, Search, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  CheckCircle2,
+  Minus,
+  RefreshCw,
+  Search,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { useState } from "react";
 import {
   CartesianGrid,
@@ -23,6 +31,7 @@ import {
   useIndicatorResults,
   useScorecardsByProvider,
 } from "../../hooks/useQueries";
+import { calcIndicatorStarRating } from "../../utils/ratingEngine";
 
 interface ProviderPerformanceProps {
   currentQuarter: string;
@@ -179,6 +188,36 @@ export default function ProviderPerformance({
         <p className="text-sm text-muted-foreground mt-0.5">
           Provider scorecards and indicator results — {currentQuarter}
         </p>
+      </div>
+
+      {/* Ratings Synchronized status banner */}
+      <div
+        className="flex items-center gap-3 px-4 py-2.5 border text-xs"
+        style={{
+          background: "oklch(0.97 0.01 254)",
+          borderColor: "oklch(0.82 0.05 254)",
+          color: "oklch(0.40 0.04 254)",
+        }}
+        data-ocid="provider_performance.sync.panel"
+      >
+        <RefreshCw
+          className="w-3.5 h-3.5 flex-shrink-0"
+          style={{ color: "oklch(0.45 0.15 145)" }}
+        />
+        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
+          <CheckCircle2 className="w-3.5 h-3.5 text-gov-green flex-shrink-0" />
+          <span className="text-gov-green font-bold">Ratings Synchronized</span>
+          <span className="text-muted-foreground font-normal mx-1">·</span>
+          <span>Indicator Data</span>
+          <span>→</span>
+          <span>Indicator Rating</span>
+          <span>→</span>
+          <span>Scorecard</span>
+          <span>→</span>
+          <span>Overall Rating</span>
+          <span>→</span>
+          <span>Pay-for-Improvement</span>
+        </div>
       </div>
 
       <div className="flex gap-4">
@@ -400,6 +439,7 @@ export default function ProviderPerformance({
                         <th className="text-right">Benchmark</th>
                         <th className="text-left">Quintile</th>
                         <th className="text-left">Trend</th>
+                        <th className="text-left">Star Rating</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -411,7 +451,7 @@ export default function ProviderPerformance({
                         return [
                           <tr key={`dim-${dim}`}>
                             <td
-                              colSpan={6}
+                              colSpan={7}
                               className="font-bold text-xs uppercase tracking-wide py-1.5"
                               style={{
                                 background: "oklch(0.94 0.012 240)",
@@ -424,6 +464,10 @@ export default function ProviderPerformance({
                           </tr>,
                           ...dimIndicators.map((ind) => {
                             const qStyle = getQuintileStyle(ind.quintileRank);
+                            const starRating = calcIndicatorStarRating(
+                              ind.quintileRank,
+                              ind.trend,
+                            );
                             return (
                               <tr key={ind.id}>
                                 <td className="font-medium">
@@ -454,6 +498,13 @@ export default function ProviderPerformance({
                                   <span className="ml-1 text-xs capitalize">
                                     {ind.trend}
                                   </span>
+                                </td>
+                                <td>
+                                  <StarRating
+                                    value={starRating}
+                                    size="sm"
+                                    showLabel={false}
+                                  />
                                 </td>
                               </tr>
                             );

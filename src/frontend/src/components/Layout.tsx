@@ -6,7 +6,10 @@ import DataQuality from "./pages/DataQuality";
 import HighRiskCohorts from "./pages/HighRiskCohorts";
 import NationalOverview from "./pages/NationalOverview";
 import PayForImprovement from "./pages/PayForImprovement";
+import PolicyAnalytics from "./pages/PolicyAnalytics";
+import ProviderDashboard from "./pages/ProviderDashboard";
 import ProviderPerformance from "./pages/ProviderPerformance";
+import PublicView from "./pages/PublicView";
 import RegionalProviderDrillDown from "./pages/RegionalProviderDrillDown";
 import ScreeningTracking from "./pages/ScreeningTracking";
 import StateHeatmaps from "./pages/StateHeatmaps";
@@ -29,9 +32,14 @@ export default function Layout({
   setCurrentQuarter,
 }: LayoutProps) {
   const renderPage = () => {
-    // Public role only sees national overview
+    // Public role sees the dedicated public provider directory
     if (currentRole === "Public") {
-      return <NationalOverview currentQuarter={currentQuarter} />;
+      return <PublicView />;
+    }
+
+    // Provider role: national_overview defaults to Provider Dashboard
+    if (currentRole === "Provider" && activePage === "national_overview") {
+      return <ProviderDashboard />;
     }
 
     switch (activePage) {
@@ -58,6 +66,8 @@ export default function Layout({
         return <AuditGovernance />;
       case "regional_provider":
         return <RegionalProviderDrillDown />;
+      case "policy_analytics":
+        return <PolicyAnalytics />;
       default:
         return (
           <NationalOverview

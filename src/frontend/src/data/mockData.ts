@@ -2162,6 +2162,1334 @@ export const CITY_LIST = Object.keys(CITY_PROVIDERS);
 
 // ──────────────────────────────────────────────────────────────────────────────
 
+// ── Cohort Risk Investigation Detail ─────────────────────────────────────────
+
+export interface CohortDetail {
+  cohortId: string;
+  providerName: string;
+  region: string;
+  riskCriteria: string[];
+  cohortSize: number;
+  flagDate: string;
+  urgency: "high" | "medium" | "low";
+  status: string;
+  riskScore: number;
+  riskLevel: "HIGH" | "MEDIUM" | "LOW";
+  riskIndicators: Array<{
+    indicator: string;
+    currentValue: string;
+    benchmark: string;
+    riskLevel: "HIGH" | "MEDIUM" | "LOW";
+    barPercent: number;
+  }>;
+  screeningBundle: Array<{
+    name: string;
+    completed: number;
+    pending: number;
+    overdue: number;
+    total: number;
+  }>;
+  residents: Array<{
+    id: string;
+    age: number;
+    riskFactors: string;
+    screeningStatus: "Completed" | "Pending" | "Overdue";
+  }>;
+  recommendedAlerts: string[];
+  suggestedActions: string[];
+  trendData: Array<{ quarter: string; highRiskResidents: number }>;
+  performanceImpact: Array<{
+    indicator: string;
+    stars: number;
+  }>;
+  performanceMessage: string;
+}
+
+export const COHORT_DETAIL_DATA: Record<string, CohortDetail> = {
+  "HRC-001": {
+    cohortId: "HRC-001",
+    providerName: "Sunridge Aged Care",
+    region: "Queensland",
+    riskCriteria: ["Recent Hospital Discharge", "Age ≥80 + Polypharmacy"],
+    cohortSize: 12,
+    flagDate: "20 Nov 2025",
+    urgency: "high",
+    status: "ACTIVE",
+    riskScore: 82,
+    riskLevel: "HIGH",
+    riskIndicators: [
+      {
+        indicator: "Recent hospital discharge rate",
+        currentValue: "38.5%",
+        benchmark: "18.2%",
+        riskLevel: "HIGH",
+        barPercent: 82,
+      },
+      {
+        indicator: "Polypharmacy rate",
+        currentValue: "41.7%",
+        benchmark: "21.4%",
+        riskLevel: "HIGH",
+        barPercent: 78,
+      },
+      {
+        indicator: "Falls history rate",
+        currentValue: "33.3%",
+        benchmark: "19.8%",
+        riskLevel: "MEDIUM",
+        barPercent: 55,
+      },
+      {
+        indicator: "Frailty score",
+        currentValue: "4.2 / 5",
+        benchmark: "3.1 / 5",
+        riskLevel: "HIGH",
+        barPercent: 84,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 7,
+        pending: 3,
+        overdue: 2,
+        total: 12,
+      },
+      {
+        name: "Medication Review",
+        completed: 5,
+        pending: 4,
+        overdue: 3,
+        total: 12,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 8,
+        pending: 2,
+        overdue: 2,
+        total: 12,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 6,
+        pending: 3,
+        overdue: 3,
+        total: 12,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 9,
+        pending: 2,
+        overdue: 1,
+        total: 12,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 7,
+        pending: 4,
+        overdue: 1,
+        total: 12,
+      },
+    ],
+    residents: [
+      {
+        id: "R-1032",
+        age: 84,
+        riskFactors: "Polypharmacy",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-1044",
+        age: 88,
+        riskFactors: "Falls History",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-1092",
+        age: 82,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-1015",
+        age: 86,
+        riskFactors: "Polypharmacy + Falls",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-1067",
+        age: 81,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-1078",
+        age: 85,
+        riskFactors: "Dementia",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-1033",
+        age: 83,
+        riskFactors: "Frailty",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-1088",
+        age: 89,
+        riskFactors: "Polypharmacy",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-1055",
+        age: 80,
+        riskFactors: "Comorbidities",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-1021",
+        age: 87,
+        riskFactors: "Falls History",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-1041",
+        age: 84,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-1099",
+        age: 82,
+        riskFactors: "Polypharmacy",
+        screeningStatus: "Overdue",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Medication review required for 4 residents",
+      "⚠ Falls prevention intervention recommended for 3 residents",
+      "⚠ Nutrition review required for 2 residents",
+      "⚠ Cognitive assessment overdue for 2 residents",
+    ],
+    suggestedActions: [
+      "Pharmacist medication review",
+      "Occupational therapy home safety check",
+      "Physiotherapy falls prevention program",
+      "Dietitian consultation",
+      "Advance care planning review",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 8 },
+      { quarter: "Q3 2025", highRiskResidents: 10 },
+      { quarter: "Q4 2025", highRiskResidents: 12 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 2 },
+      { indicator: "Preventive Care", stars: 2 },
+      { indicator: "Quality Measures", stars: 3 },
+    ],
+    performanceMessage:
+      "This provider shows lower preventive care performance due to incomplete screening bundles.",
+  },
+  "HRC-002": {
+    cohortId: "HRC-002",
+    providerName: "Central Queensland Aged Care",
+    region: "Central Queensland",
+    riskCriteria: ["Falls History", "Dementia with BPSD"],
+    cohortSize: 8,
+    flagDate: "18 Nov 2025",
+    urgency: "high",
+    status: "ACTIVE",
+    riskScore: 76,
+    riskLevel: "HIGH",
+    riskIndicators: [
+      {
+        indicator: "Falls history rate",
+        currentValue: "42.1%",
+        benchmark: "19.8%",
+        riskLevel: "HIGH",
+        barPercent: 76,
+      },
+      {
+        indicator: "Dementia with BPSD prevalence",
+        currentValue: "37.5%",
+        benchmark: "22.0%",
+        riskLevel: "HIGH",
+        barPercent: 72,
+      },
+      {
+        indicator: "Behavioural incident rate",
+        currentValue: "28.4%",
+        benchmark: "18.6%",
+        riskLevel: "MEDIUM",
+        barPercent: 52,
+      },
+      {
+        indicator: "Cognitive assessment overdue rate",
+        currentValue: "50.0%",
+        benchmark: "10.2%",
+        riskLevel: "HIGH",
+        barPercent: 80,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 4,
+        pending: 2,
+        overdue: 2,
+        total: 8,
+      },
+      {
+        name: "Medication Review",
+        completed: 3,
+        pending: 3,
+        overdue: 2,
+        total: 8,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 5,
+        pending: 1,
+        overdue: 2,
+        total: 8,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 4,
+        pending: 2,
+        overdue: 2,
+        total: 8,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 6,
+        pending: 1,
+        overdue: 1,
+        total: 8,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 3,
+        pending: 2,
+        overdue: 3,
+        total: 8,
+      },
+    ],
+    residents: [
+      {
+        id: "R-2011",
+        age: 83,
+        riskFactors: "Falls History + Dementia",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-2024",
+        age: 87,
+        riskFactors: "BPSD",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-2038",
+        age: 85,
+        riskFactors: "Falls History",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-2045",
+        age: 81,
+        riskFactors: "Dementia",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-2059",
+        age: 89,
+        riskFactors: "BPSD + Polypharmacy",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-2062",
+        age: 80,
+        riskFactors: "Falls History",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-2074",
+        age: 84,
+        riskFactors: "Dementia",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-2081",
+        age: 86,
+        riskFactors: "Falls History + BPSD",
+        screeningStatus: "Pending",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Behavioral intervention required for 3 residents",
+      "⚠ Falls prevention assessment overdue for 2 residents",
+      "⚠ Cognitive reassessment required for 2 residents",
+    ],
+    suggestedActions: [
+      "Dementia specialist consultation",
+      "Physiotherapy falls prevention program",
+      "Behavioral support plan review",
+      "Psychogeriatric assessment referral",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 5 },
+      { quarter: "Q3 2025", highRiskResidents: 7 },
+      { quarter: "Q4 2025", highRiskResidents: 8 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 2 },
+      { indicator: "Preventive Care", stars: 2 },
+      { indicator: "Quality Measures", stars: 2 },
+    ],
+    performanceMessage:
+      "This provider demonstrates elevated risk in dementia-related behavioral incidents. Mandatory behavioral assessment completion is critically overdue.",
+  },
+  "HRC-003": {
+    cohortId: "HRC-003",
+    providerName: "Perth Metro Seniors Living",
+    region: "Western Australia",
+    riskCriteria: ["Frailty Score ≥ Threshold", "≥3 Comorbidities"],
+    cohortSize: 23,
+    flagDate: "15 Nov 2025",
+    urgency: "medium",
+    status: "MONITORING",
+    riskScore: 61,
+    riskLevel: "MEDIUM",
+    riskIndicators: [
+      {
+        indicator: "Frailty score",
+        currentValue: "3.8 / 5",
+        benchmark: "3.1 / 5",
+        riskLevel: "MEDIUM",
+        barPercent: 61,
+      },
+      {
+        indicator: "Comorbidity burden rate",
+        currentValue: "56.5%",
+        benchmark: "38.2%",
+        riskLevel: "MEDIUM",
+        barPercent: 58,
+      },
+      {
+        indicator: "Polypharmacy rate",
+        currentValue: "26.1%",
+        benchmark: "21.4%",
+        riskLevel: "MEDIUM",
+        barPercent: 48,
+      },
+      {
+        indicator: "Functional decline rate",
+        currentValue: "21.7%",
+        benchmark: "16.4%",
+        riskLevel: "LOW",
+        barPercent: 38,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 16,
+        pending: 5,
+        overdue: 2,
+        total: 23,
+      },
+      {
+        name: "Medication Review",
+        completed: 14,
+        pending: 6,
+        overdue: 3,
+        total: 23,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 18,
+        pending: 3,
+        overdue: 2,
+        total: 23,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 15,
+        pending: 6,
+        overdue: 2,
+        total: 23,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 19,
+        pending: 3,
+        overdue: 1,
+        total: 23,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 17,
+        pending: 4,
+        overdue: 2,
+        total: 23,
+      },
+    ],
+    residents: [
+      {
+        id: "R-3001",
+        age: 82,
+        riskFactors: "Frailty + 3 Comorbidities",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-3014",
+        age: 85,
+        riskFactors: "Comorbidities",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-3022",
+        age: 80,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-3031",
+        age: 88,
+        riskFactors: "Comorbidities + Frailty",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-3044",
+        age: 83,
+        riskFactors: "4 Comorbidities",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-3057",
+        age: 81,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-3063",
+        age: 86,
+        riskFactors: "Comorbidities",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-3078",
+        age: 84,
+        riskFactors: "Frailty + Polypharmacy",
+        screeningStatus: "Pending",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Frailty reassessment required for 5 residents",
+      "⚠ Medication review overdue for 3 residents",
+      "⚠ Nutrition assessment pending for 6 residents",
+    ],
+    suggestedActions: [
+      "Geriatrician frailty assessment",
+      "Pharmacist medication reconciliation",
+      "Physiotherapy strength and balance program",
+      "Dietitian consultation",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 16 },
+      { quarter: "Q3 2025", highRiskResidents: 20 },
+      { quarter: "Q4 2025", highRiskResidents: 23 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 3 },
+      { indicator: "Preventive Care", stars: 3 },
+      { indicator: "Quality Measures", stars: 3 },
+    ],
+    performanceMessage:
+      "This provider is monitoring a growing frailty cohort. Screening completion rates are adequate but improvement in medication review turnaround is required.",
+  },
+  "HRC-004": {
+    cohortId: "HRC-004",
+    providerName: "Darwin Territory Care",
+    region: "Northern Territory",
+    riskCriteria: ["Age ≥80 + Polypharmacy"],
+    cohortSize: 5,
+    flagDate: "12 Nov 2025",
+    urgency: "high",
+    status: "ACTIVE",
+    riskScore: 79,
+    riskLevel: "HIGH",
+    riskIndicators: [
+      {
+        indicator: "Polypharmacy rate (≥10 meds)",
+        currentValue: "60.0%",
+        benchmark: "21.4%",
+        riskLevel: "HIGH",
+        barPercent: 79,
+      },
+      {
+        indicator: "Age ≥80 in cohort",
+        currentValue: "100.0%",
+        benchmark: "42.0%",
+        riskLevel: "HIGH",
+        barPercent: 85,
+      },
+      {
+        indicator: "Medication-related incident rate",
+        currentValue: "24.8%",
+        benchmark: "9.4%",
+        riskLevel: "HIGH",
+        barPercent: 72,
+      },
+      {
+        indicator: "Pharmacist review completion",
+        currentValue: "20.0%",
+        benchmark: "78.4%",
+        riskLevel: "HIGH",
+        barPercent: 88,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 2,
+        pending: 2,
+        overdue: 1,
+        total: 5,
+      },
+      {
+        name: "Medication Review",
+        completed: 1,
+        pending: 1,
+        overdue: 3,
+        total: 5,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 3,
+        pending: 1,
+        overdue: 1,
+        total: 5,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 2,
+        pending: 2,
+        overdue: 1,
+        total: 5,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 3,
+        pending: 1,
+        overdue: 1,
+        total: 5,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 2,
+        pending: 2,
+        overdue: 1,
+        total: 5,
+      },
+    ],
+    residents: [
+      {
+        id: "R-4001",
+        age: 84,
+        riskFactors: "Polypharmacy (12 meds)",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-4009",
+        age: 81,
+        riskFactors: "Polypharmacy (10 meds)",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-4017",
+        age: 87,
+        riskFactors: "Polypharmacy + Falls",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-4025",
+        age: 80,
+        riskFactors: "Polypharmacy (11 meds)",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-4033",
+        age: 86,
+        riskFactors: "Polypharmacy (13 meds)",
+        screeningStatus: "Completed",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Urgent medication review required for 3 residents",
+      "⚠ Medication-related risk indicators are above acceptable threshold",
+      "⚠ Pharmacist review critically overdue",
+    ],
+    suggestedActions: [
+      "Urgent pharmacist medication review",
+      "Deprescribing protocol initiation",
+      "GP medication reconciliation referral",
+      "Medication safety risk assessment",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 3 },
+      { quarter: "Q3 2025", highRiskResidents: 4 },
+      { quarter: "Q4 2025", highRiskResidents: 5 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 1 },
+      { indicator: "Preventive Care", stars: 2 },
+      { indicator: "Quality Measures", stars: 2 },
+    ],
+    performanceMessage:
+      "This provider has critically low medication management performance. Polypharmacy prevalence is significantly above national benchmarks and requires urgent intervention.",
+  },
+  "HRC-005": {
+    cohortId: "HRC-005",
+    providerName: "Bayside Home Care Services",
+    region: "Victoria",
+    riskCriteria: ["Recent Hospital Discharge"],
+    cohortSize: 14,
+    flagDate: "10 Nov 2025",
+    urgency: "medium",
+    status: "MONITORING",
+    riskScore: 58,
+    riskLevel: "MEDIUM",
+    riskIndicators: [
+      {
+        indicator: "Recent hospital discharge rate",
+        currentValue: "28.6%",
+        benchmark: "18.2%",
+        riskLevel: "MEDIUM",
+        barPercent: 58,
+      },
+      {
+        indicator: "Post-discharge bundle completion (7-day)",
+        currentValue: "42.9%",
+        benchmark: "72.4%",
+        riskLevel: "HIGH",
+        barPercent: 72,
+      },
+      {
+        indicator: "Readmission risk score",
+        currentValue: "3.4 / 5",
+        benchmark: "2.6 / 5",
+        riskLevel: "MEDIUM",
+        barPercent: 52,
+      },
+      {
+        indicator: "GP follow-up completion (14-day)",
+        currentValue: "57.1%",
+        benchmark: "82.0%",
+        riskLevel: "MEDIUM",
+        barPercent: 45,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 9,
+        pending: 3,
+        overdue: 2,
+        total: 14,
+      },
+      {
+        name: "Medication Review",
+        completed: 7,
+        pending: 4,
+        overdue: 3,
+        total: 14,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 10,
+        pending: 2,
+        overdue: 2,
+        total: 14,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 8,
+        pending: 4,
+        overdue: 2,
+        total: 14,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 11,
+        pending: 2,
+        overdue: 1,
+        total: 14,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 9,
+        pending: 3,
+        overdue: 2,
+        total: 14,
+      },
+    ],
+    residents: [
+      {
+        id: "R-5001",
+        age: 82,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-5008",
+        age: 79,
+        riskFactors: "Hospital Discharge + Falls",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-5015",
+        age: 85,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-5022",
+        age: 77,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-5029",
+        age: 83,
+        riskFactors: "Hospital Discharge + Polypharmacy",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-5036",
+        age: 80,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-5043",
+        age: 88,
+        riskFactors: "Hospital Discharge",
+        screeningStatus: "Completed",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Post-discharge medication review overdue for 3 residents",
+      "⚠ Falls risk reassessment required for 2 residents post-discharge",
+      "⚠ GP follow-up referral outstanding for 6 residents",
+    ],
+    suggestedActions: [
+      "Post-discharge care coordination review",
+      "GP follow-up appointment scheduling",
+      "Pharmacist medication reconciliation",
+      "Occupational therapy home assessment",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 10 },
+      { quarter: "Q3 2025", highRiskResidents: 12 },
+      { quarter: "Q4 2025", highRiskResidents: 14 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 3 },
+      { indicator: "Preventive Care", stars: 3 },
+      { indicator: "Quality Measures", stars: 3 },
+    ],
+    performanceMessage:
+      "Post-discharge care coordination requires improvement. Completion of the 7-day bundle is below the national benchmark for this provider.",
+  },
+  "HRC-006": {
+    cohortId: "HRC-006",
+    providerName: "Adelaide Southern Care",
+    region: "South Australia",
+    riskCriteria: ["Falls History"],
+    cohortSize: 7,
+    flagDate: "05 Nov 2025",
+    urgency: "low",
+    status: "RESOLVED",
+    riskScore: 34,
+    riskLevel: "LOW",
+    riskIndicators: [
+      {
+        indicator: "Falls history rate",
+        currentValue: "21.4%",
+        benchmark: "19.8%",
+        riskLevel: "LOW",
+        barPercent: 34,
+      },
+      {
+        indicator: "Falls with harm rate",
+        currentValue: "8.6%",
+        benchmark: "5.1%",
+        riskLevel: "MEDIUM",
+        barPercent: 42,
+      },
+      {
+        indicator: "Falls risk screening completion",
+        currentValue: "85.7%",
+        benchmark: "88.4%",
+        riskLevel: "LOW",
+        barPercent: 28,
+      },
+      {
+        indicator: "Environment hazard score",
+        currentValue: "2.4 / 5",
+        benchmark: "2.8 / 5",
+        riskLevel: "LOW",
+        barPercent: 22,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 7,
+        pending: 0,
+        overdue: 0,
+        total: 7,
+      },
+      {
+        name: "Medication Review",
+        completed: 6,
+        pending: 1,
+        overdue: 0,
+        total: 7,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 7,
+        pending: 0,
+        overdue: 0,
+        total: 7,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 6,
+        pending: 1,
+        overdue: 0,
+        total: 7,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 7,
+        pending: 0,
+        overdue: 0,
+        total: 7,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 6,
+        pending: 1,
+        overdue: 0,
+        total: 7,
+      },
+    ],
+    residents: [
+      {
+        id: "R-6001",
+        age: 81,
+        riskFactors: "Falls History",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-6008",
+        age: 84,
+        riskFactors: "Falls History",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-6015",
+        age: 79,
+        riskFactors: "Falls History",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-6022",
+        age: 83,
+        riskFactors: "Falls History + Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-6029",
+        age: 80,
+        riskFactors: "Falls History",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-6036",
+        age: 86,
+        riskFactors: "Falls History",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-6043",
+        age: 82,
+        riskFactors: "Falls History",
+        screeningStatus: "Completed",
+      },
+    ],
+    recommendedAlerts: [
+      "ℹ Ongoing monitoring recommended for 1 resident with pending review",
+      "ℹ Quarterly falls risk reassessment scheduled for all cohort members",
+    ],
+    suggestedActions: [
+      "Continue falls prevention program",
+      "Quarterly reassessment scheduling",
+      "Environmental safety monitoring",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 9 },
+      { quarter: "Q3 2025", highRiskResidents: 8 },
+      { quarter: "Q4 2025", highRiskResidents: 7 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 4 },
+      { indicator: "Preventive Care", stars: 4 },
+      { indicator: "Quality Measures", stars: 4 },
+    ],
+    performanceMessage:
+      "This provider has successfully resolved the high-risk falls cohort through effective intervention. Performance indicators are tracking positively.",
+  },
+  "HRC-007": {
+    cohortId: "HRC-007",
+    providerName: "Hunter Valley Care Group",
+    region: "New South Wales",
+    riskCriteria: ["Dementia with BPSD", "≥3 Comorbidities"],
+    cohortSize: 18,
+    flagDate: "28 Nov 2025",
+    urgency: "high",
+    status: "ACTIVE",
+    riskScore: 88,
+    riskLevel: "HIGH",
+    riskIndicators: [
+      {
+        indicator: "Dementia with BPSD prevalence",
+        currentValue: "44.4%",
+        benchmark: "22.0%",
+        riskLevel: "HIGH",
+        barPercent: 88,
+      },
+      {
+        indicator: "Comorbidity burden (≥3 conditions)",
+        currentValue: "61.1%",
+        benchmark: "38.2%",
+        riskLevel: "HIGH",
+        barPercent: 80,
+      },
+      {
+        indicator: "Unplanned hospitalisation rate",
+        currentValue: "27.8%",
+        benchmark: "12.4%",
+        riskLevel: "HIGH",
+        barPercent: 82,
+      },
+      {
+        indicator: "Behavioral incident rate",
+        currentValue: "38.9%",
+        benchmark: "18.6%",
+        riskLevel: "HIGH",
+        barPercent: 76,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 10,
+        pending: 4,
+        overdue: 4,
+        total: 18,
+      },
+      {
+        name: "Medication Review",
+        completed: 8,
+        pending: 5,
+        overdue: 5,
+        total: 18,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 12,
+        pending: 3,
+        overdue: 3,
+        total: 18,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 9,
+        pending: 4,
+        overdue: 5,
+        total: 18,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 13,
+        pending: 3,
+        overdue: 2,
+        total: 18,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 7,
+        pending: 5,
+        overdue: 6,
+        total: 18,
+      },
+    ],
+    residents: [
+      {
+        id: "R-7001",
+        age: 86,
+        riskFactors: "Dementia + BPSD",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-7012",
+        age: 82,
+        riskFactors: "3 Comorbidities + Dementia",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-7023",
+        age: 88,
+        riskFactors: "BPSD + Polypharmacy",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-7034",
+        age: 83,
+        riskFactors: "Dementia",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-7045",
+        age: 85,
+        riskFactors: "4 Comorbidities",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-7056",
+        age: 81,
+        riskFactors: "BPSD",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-7067",
+        age: 87,
+        riskFactors: "Dementia + Frailty",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-7078",
+        age: 84,
+        riskFactors: "3 Comorbidities",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-7089",
+        age: 80,
+        riskFactors: "Dementia + Hospital Discharge",
+        screeningStatus: "Overdue",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Urgent behavioral support plan required for 6 residents",
+      "⚠ Medication review critically overdue for 5 residents",
+      "⚠ Nutrition assessment overdue for 5 residents",
+      "⚠ Unplanned hospitalisation rate significantly above benchmark",
+    ],
+    suggestedActions: [
+      "Psychogeriatric specialist assessment",
+      "Behavioral support plan development",
+      "Pharmacist medication review and deprescribing",
+      "Dietitian nutritional assessment",
+      "Advance care planning review",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 11 },
+      { quarter: "Q3 2025", highRiskResidents: 15 },
+      { quarter: "Q4 2025", highRiskResidents: 18 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 1 },
+      { indicator: "Preventive Care", stars: 1 },
+      { indicator: "Quality Measures", stars: 2 },
+    ],
+    performanceMessage:
+      "This provider has critically poor performance across safety and preventive care indicators. Urgent regulatory intervention and clinical review are recommended.",
+  },
+  "HRC-008": {
+    cohortId: "HRC-008",
+    providerName: "Geelong Aged Care Network",
+    region: "Victoria",
+    riskCriteria: ["Frailty Score ≥ Threshold"],
+    cohortSize: 9,
+    flagDate: "25 Nov 2025",
+    urgency: "medium",
+    status: "MONITORING",
+    riskScore: 55,
+    riskLevel: "MEDIUM",
+    riskIndicators: [
+      {
+        indicator: "Frailty score",
+        currentValue: "3.6 / 5",
+        benchmark: "3.1 / 5",
+        riskLevel: "MEDIUM",
+        barPercent: 55,
+      },
+      {
+        indicator: "Functional decline rate",
+        currentValue: "33.3%",
+        benchmark: "16.4%",
+        riskLevel: "MEDIUM",
+        barPercent: 52,
+      },
+      {
+        indicator: "Weight loss prevalence (>5%)",
+        currentValue: "22.2%",
+        benchmark: "14.8%",
+        riskLevel: "MEDIUM",
+        barPercent: 46,
+      },
+      {
+        indicator: "Activity participation rate",
+        currentValue: "44.4%",
+        benchmark: "68.8%",
+        riskLevel: "LOW",
+        barPercent: 32,
+      },
+    ],
+    screeningBundle: [
+      {
+        name: "Falls Risk Assessment",
+        completed: 6,
+        pending: 2,
+        overdue: 1,
+        total: 9,
+      },
+      {
+        name: "Medication Review",
+        completed: 5,
+        pending: 3,
+        overdue: 1,
+        total: 9,
+      },
+      {
+        name: "Cognitive Assessment",
+        completed: 7,
+        pending: 1,
+        overdue: 1,
+        total: 9,
+      },
+      {
+        name: "Nutrition Assessment",
+        completed: 5,
+        pending: 3,
+        overdue: 1,
+        total: 9,
+      },
+      {
+        name: "Pain Assessment",
+        completed: 7,
+        pending: 1,
+        overdue: 1,
+        total: 9,
+      },
+      {
+        name: "Behavioral Assessment",
+        completed: 6,
+        pending: 2,
+        overdue: 1,
+        total: 9,
+      },
+    ],
+    residents: [
+      {
+        id: "R-8001",
+        age: 82,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-8009",
+        age: 85,
+        riskFactors: "Frailty + Weight Loss",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-8017",
+        age: 80,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-8025",
+        age: 88,
+        riskFactors: "Frailty + Functional Decline",
+        screeningStatus: "Overdue",
+      },
+      {
+        id: "R-8033",
+        age: 83,
+        riskFactors: "Frailty + Comorbidities",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-8041",
+        age: 81,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-8049",
+        age: 86,
+        riskFactors: "Frailty + Weight Loss",
+        screeningStatus: "Pending",
+      },
+      {
+        id: "R-8057",
+        age: 84,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+      {
+        id: "R-8065",
+        age: 79,
+        riskFactors: "Frailty",
+        screeningStatus: "Completed",
+      },
+    ],
+    recommendedAlerts: [
+      "⚠ Nutrition review required for 3 residents with weight loss",
+      "⚠ Frailty reassessment pending for 2 residents",
+      "⚠ Activity engagement program referral recommended",
+    ],
+    suggestedActions: [
+      "Geriatrician frailty assessment review",
+      "Dietitian nutritional consultation",
+      "Physiotherapy strength and balance program",
+      "Social engagement and activity program",
+    ],
+    trendData: [
+      { quarter: "Q2 2025", highRiskResidents: 6 },
+      { quarter: "Q3 2025", highRiskResidents: 8 },
+      { quarter: "Q4 2025", highRiskResidents: 9 },
+    ],
+    performanceImpact: [
+      { indicator: "Safety & Clinical", stars: 3 },
+      { indicator: "Preventive Care", stars: 3 },
+      { indicator: "Quality Measures", stars: 4 },
+    ],
+    performanceMessage:
+      "This provider is proactively monitoring a frailty cohort. Nutrition and activity engagement require focused improvement to prevent deterioration.",
+  },
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 export const RISK_CRITERIA_LABELS: Record<string, string> = {
   recent_hospital_discharge: "Recent Hospital Discharge",
   polypharmacy_80plus: "Age ≥80 + Polypharmacy",

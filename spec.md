@@ -2,60 +2,92 @@
 
 ## Current State
 
-The app has a working `RegionalProviderDrillDown` page with:
-- City dropdown using CITY_LIST (Hyderabad, Kolkata, Delhi, Mumbai, Chennai, Bengaluru, Pune, Ahmedabad)
-- Provider grid cards showing overall average star rating
-- Provider detail view with an 8-indicator scorecard table (equal weights)
-- Simple mini bar breakdown at the bottom of the detail view
-- No weighted rating calculation (all indicators use weight: 1)
-- No trend arrows on indicators
-- No color-coded risk indicators per indicator
-- No indicator insight popups
-- No bar chart comparing providers in a region
-- No KPI cards at top of provider detail
-- No low-performance visual warnings/red icons
-- Provider names differ from what the user requested (e.g. "Sunshine Senior Care" instead of "Green Valley Aged Care")
+The app has:
+- 4 roles: Regulator, Provider, Policy Analyst, Public (selector in header)
+- Sidebar navigation gated by role (Regulator sees all, Policy Analyst sees subset, Provider sees subset, Public sees only National Overview)
+- Pages: NationalOverview, StateHeatmaps, ProviderPerformance, HighRiskCohorts, CohortRiskDetail, ScreeningTracking, PayForImprovement, DataQuality, AuditGovernance, RegionalProviderDrillDown
+- RegionalProviderDrillDown shows city dropdown (Hyderabad, Kolkata, Delhi, Mumbai, Chennai, Bangalore), provider list, provider scorecard with 8 indicator star ratings, insight popups, weighted overall rating, KPI cards, and regional bar chart comparison
+- ProviderPerformance shows provider list + scorecard with 4-quarter trend + indicator table (rate, benchmark, quintile, trend)
+- PayForImprovement shows eligibility table with improvement %, thresholds, estimated funding
+- mockData.ts has CITY_PROVIDERS with per-indicator star ratings (1-5) and indicatorMeta for insights
+- No dedicated "Provider" dashboard with data submission portal; no dedicated "Policy Analyst" analytics page
+- No Rating Engine module that auto-calculates indicator star ratings from quintile + benchmark + trend
+- Public role only sees NationalOverview (not the full regional provider lookup with comparison charts)
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Exact provider names** as specified: Hyderabad (Green Valley Aged Care, Sunrise Elder Support, Harmony Care Centre), Kolkata (Eastern Life Care, Bengal Senior Living), Delhi (Capital Elder Home, Silver Years Residency)
-- **Weighted indicator rating calculation** using: Residents Experience 33%, Compliance 30%, Staffing 22%, Quality Measures 15%, Safety & Clinical as adjustment factor (-0.5 to +0.5 applied after weighted sum), Preventive Care as adjustment factor (-0.3 to +0.3)
-- **Trend arrows** on each indicator row: improving (green up arrow), declining (red down arrow), stable (gray right arrow)
-- **Color indicators** per row: green (score >= 4.0), yellow (3.0–3.9), red (< 3.0)
-- **Low-performance indicator warnings**: red warning icon (AlertTriangle) shown for indicators with score < 3.0; simulate at least one provider with low falls safety, one with poor preventive screening, one with very high staffing
-- **Indicator Insight Popup**: clicking any indicator row opens a Dialog/Popover with a contextual explanation message (why rating is high or low); clicking a provider card also shows a brief summary popup before navigating to detail
-- **KPI cards** at top of provider detail view: Overall Rating card, highest-performing indicator card, lowest-performing indicator card, and total indicators below benchmark card
-- **Bar chart** on the provider list view comparing all providers in the selected region by overall weighted rating (Recharts BarChart)
-- **Regional provider comparison chart**: horizontal bar chart or grouped bars showing all providers in the region side-by-side
-- **Indicator performance grid** in provider detail: visual grid with color-coded cells per indicator
-- **Overall rating explanation text**: "Overall rating calculated using weighted composite score of key indicators." with weight breakdown tooltip
+
+1. **Rating Engine utility** (`src/utils/ratingEngine.ts`): Pure functions that compute:
+   - `calcIndicatorStarRating(quintile, rate, benchmark, trend)`: Q1→5, Q2→4, Q3→3, Q4→2, Q5→1, +0.2 for improving, -0.2 for declining, clamped 1–5
+   - `calcDomainScore(indicators[])`: average of indicator star ratings in a domain
+   - `calcWeightedProviderRating(domainScores)`: Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%; returns numeric score and star band (1-5)
+   - `calcPayForImprovementEligibility(overallRating, safetyImprovement, screeningCompletion)`: returns eligibility tier and estimated payment
+
+2. **Public role view** — replace NationalOverview-only with a dedicated `PublicView.tsx`:
+   - Regional provider lookup with city dropdown
+   - Provider list for selected city
+   - Provider detail with indicator star ratings and overall provider rating
+   - Provider comparison bar chart
+   - NO resident data, NO regulatory actions, NO high-risk cohort data
+   - Reads from CITY_PROVIDERS mock data
+
+3. **Provider role dashboard** — dedicated `ProviderDashboard.tsx` page:
+   - Shows only one hardcoded provider (e.g. "Green Valley Aged Care" / HYD-001)
+   - Performance indicators with star ratings (uses ratingEngine)
+   - Screening completion rates (donut/progress bars)
+   - High-risk cohort alerts (count + urgency badge)
+   - Recommended actions panel (system-generated interventions)
+   - Pay-for-Improvement eligibility summary (tier, estimated payment)
+   - Data Submission portal section (form to submit data — mock, no real backend call needed)
+   - Cannot see other providers' data
+
+4. **Policy Analyst dashboard** — dedicated `PolicyAnalytics.tsx` page:
+   - National risk trends (line chart of safety + preventive scores over 4 quarters)
+   - Regional heatmap summary (bar chart of state-level safety + screening compliance)
+   - Indicator performance trends (table of key indicators with trend arrows)
+   - Screening completion statistics (completion rate KPI cards by screening type)
+   - Equity indicators (referral-to-placement gap, CALD gap)
+   - Pay-for-Improvement outcomes summary (total eligible, total funding, improvement avg)
+   - Cannot see individual resident records or provider operational details
+
+5. **Synchronized Rating Engine integration** into existing pages:
+   - ProviderPerformance: add a "Star Rating" column to the indicator table using calcIndicatorStarRating
+   - RegionalProviderDrillDown: overall rating calculation should visibly use the weighted formula from ratingEngine (display formula note)
+   - PayForImprovement: add an "Overall Star Rating" column that updates based on indicator data (using ratingEngine)
+   - Add a visible "Ratings synchronized" status banner/badge showing the calculation chain: Indicator Data → Indicator Rating → Scorecard → Overall Rating → Pay-for-Improvement
 
 ### Modify
-- `CITY_PROVIDERS` mockData: update Hyderabad, Kolkata, Delhi entries to use user-specified provider names; add realistic low-performance data to specific providers
-- `INDICATOR_CONFIG` in `RegionalProviderDrillDown.tsx`: update weights to 33/30/22/15 for core indicators; add trend and insight fields
-- `calcOverall()` function: replace equal average with weighted composite formula
-- Provider detail scorecard table: add trend arrow column, color indicator column, warning icon for low performers
-- Overall rating card: add weight explanation and breakdown
+
+- `Layout.tsx`:
+  - Public role → render `PublicView` instead of `NationalOverview`
+  - Provider role → `activePage === "national_overview"` becomes default to `ProviderDashboard`
+  - Policy Analyst role → add "policy_analytics" as a visible page
+  - Add "policy_analytics" to `ActivePage` type in App.tsx
+
+- `Sidebar.tsx`:
+  - Provider role: only show National Overview (as Provider Dashboard), High-Risk Cohorts, Screening Tracking, Pay-for-Improvement, Data Quality
+  - Policy Analyst role: show National Overview, State Heatmaps, Policy Analytics, Pay-for-Improvement
+  - Public role: no sidebar (already hidden)
+  - Add "policy_analytics" nav item visible to Policy Analyst and Regulator
+
+- `ProviderPerformance.tsx`: add star rating column to indicator table; add rating sync status note
+
+- `PayForImprovement.tsx`: add "Overall Rating" column computed by ratingEngine; show eligibility logic note
 
 ### Remove
-- Nothing removed; existing features are enhanced
+
+- Nothing removed. All existing pages and data preserved.
 
 ## Implementation Plan
 
-1. **Update mockData.ts** – replace Hyderabad/Kolkata/Delhi provider names with user-specified ones; add `trend` and `insight` fields to `CityProvider` indicators; simulate low-performance scenarios (one provider with safetyClinical: 1.8, one with preventiveCare: 1.5, one with staffing: 4.9); add `lowPerformanceFlag` per indicator
-
-2. **Update `CityProvider` interface** – add `indicatorMeta` map: `{ [key]: { trend: 'improving'|'declining'|'stable', insight: string } }`
-
-3. **Update `RegionalProviderDrillDown.tsx`**:
-   - Fix `INDICATOR_CONFIG` with correct weights (33%, 30%, 22%, 15% for core 4; adjustment for safetyClinical and preventiveCare)
-   - Fix `calcOverall()` to use weighted formula
-   - Add `TrendArrow` component (up/right/down icon with color)
-   - Add `IndicatorInsightDialog` component (Dialog with insight text, triggered on row click)
-   - Add `ProviderInsightPopup` on provider card click (brief summary toast or inline popup before navigating)
-   - Add KPI summary cards row at top of ProviderDetail
-   - Add `RegionComparisonChart` (Recharts BarChart) below provider list
-   - Add warning icon (red AlertTriangle) on low-performing rows
-   - Add color dot/badge per indicator row
-   - Update overall rating card to show weight breakdown and explanation text
-   - Add `data-ocid` markers on all new interactive elements
+1. Create `src/utils/ratingEngine.ts` with pure calculation functions
+2. Create `src/components/pages/PublicView.tsx` (city dropdown → provider list → provider detail with star ratings, comparison chart)
+3. Create `src/components/pages/ProviderDashboard.tsx` (single-provider view with indicators, screening completion, cohort alerts, recommended actions, PFI eligibility, data submission form)
+4. Create `src/components/pages/PolicyAnalytics.tsx` (national trends, regional heatmap, indicator trends, screening stats, equity indicators, PFI outcomes)
+5. Update `App.tsx` — add "policy_analytics" to ActivePage type
+6. Update `Layout.tsx` — wire new pages to roles and active pages
+7. Update `Sidebar.tsx` — add policy_analytics nav item; adjust role-visibility per new spec
+8. Update `ProviderPerformance.tsx` — add star rating column using ratingEngine; add sync status badge
+9. Update `PayForImprovement.tsx` — add overall rating column; show eligibility logic chain
+10. Update `mockData.ts` — add any missing indicator quintile/benchmark data needed for ratingEngine demo

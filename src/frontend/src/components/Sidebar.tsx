@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Database,
   FileText,
+  LineChart,
   MapPin,
   Search,
   TrendingUp,
@@ -14,6 +15,7 @@ import type { ActivePage, AppRole } from "../App";
 interface NavItem {
   id: ActivePage;
   label: string;
+  labelOverride?: Partial<Record<AppRole, string>>;
   icon: React.ComponentType<{ className?: string }>;
   roles: AppRole[];
   ocid: string;
@@ -23,15 +25,16 @@ const navItems: NavItem[] = [
   {
     id: "national_overview",
     label: "National Overview",
+    labelOverride: { Provider: "My Dashboard" },
     icon: BarChart2,
-    roles: ["Regulator", "Provider", "Policy Analyst", "Public"],
+    roles: ["Regulator", "Provider", "Policy Analyst"],
     ocid: "nav.national_overview.link",
   },
   {
     id: "regional_provider",
     label: "Regional Provider Lookup",
     icon: Search,
-    roles: ["Regulator", "Provider", "Policy Analyst"],
+    roles: ["Regulator"],
     ocid: "nav.regional_provider.link",
   },
   {
@@ -45,8 +48,15 @@ const navItems: NavItem[] = [
     id: "provider_performance",
     label: "Provider Performance",
     icon: Building2,
-    roles: ["Regulator", "Provider", "Policy Analyst"],
+    roles: ["Regulator"],
     ocid: "nav.provider_performance.link",
+  },
+  {
+    id: "policy_analytics",
+    label: "Policy Analytics",
+    icon: LineChart,
+    roles: ["Regulator", "Policy Analyst"],
+    ocid: "nav.policy_analytics.link",
   },
   {
     id: "high_risk_cohorts",
@@ -130,7 +140,7 @@ export default function Sidebar({
               key={item.id}
               onClick={() => setActivePage(item.id)}
               data-ocid={item.ocid}
-              aria-label={item.label}
+              aria-label={item.labelOverride?.[currentRole] ?? item.label}
               aria-current={isActive ? "page" : undefined}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gov-gold"
               style={{
@@ -159,7 +169,7 @@ export default function Sidebar({
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
               <span className="text-xs font-medium leading-tight">
-                {item.label}
+                {item.labelOverride?.[currentRole] ?? item.label}
               </span>
             </button>
           );
