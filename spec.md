@@ -1,93 +1,52 @@
-# N-ACRM National Aged Care Framework
+# N-ACRM National Aged Care Framework — Rating Engine
 
 ## Current State
 
-The app has:
-- 4 roles: Regulator, Provider, Policy Analyst, Public (selector in header)
-- Sidebar navigation gated by role (Regulator sees all, Policy Analyst sees subset, Provider sees subset, Public sees only National Overview)
-- Pages: NationalOverview, StateHeatmaps, ProviderPerformance, HighRiskCohorts, CohortRiskDetail, ScreeningTracking, PayForImprovement, DataQuality, AuditGovernance, RegionalProviderDrillDown
-- RegionalProviderDrillDown shows city dropdown (Hyderabad, Kolkata, Delhi, Mumbai, Chennai, Bangalore), provider list, provider scorecard with 8 indicator star ratings, insight popups, weighted overall rating, KPI cards, and regional bar chart comparison
-- ProviderPerformance shows provider list + scorecard with 4-quarter trend + indicator table (rate, benchmark, quintile, trend)
-- PayForImprovement shows eligibility table with improvement %, thresholds, estimated funding
-- mockData.ts has CITY_PROVIDERS with per-indicator star ratings (1-5) and indicatorMeta for insights
-- No dedicated "Provider" dashboard with data submission portal; no dedicated "Policy Analyst" analytics page
-- No Rating Engine module that auto-calculates indicator star ratings from quintile + benchmark + trend
-- Public role only sees NationalOverview (not the full regional provider lookup with comparison charts)
+The application is a full-stack N-ACRM prototype with:
+
+- Motoko backend storing IndicatorResult, ProviderScorecard, HighRiskCohort, ScreeningWorkflow, AuditLog, and NationalOverviewStats as static mock data
+- Frontend ratingEngine.ts utility containing pure calculation functions: calcIndicatorStarRating, calcDomainScore, calcWeightedProviderRating, scoreToStarBand, calcPayForImprovementEligibility
+- ProviderPerformance page calling backend for live indicators/scorecards and falling back to mock data
+- PayForImprovement page using mock data only
+- No backend logic persisting provider indicator submissions or computing ratings server-side
+- No backend audit trail tied to rating calculation events
+- No API for submitting indicator data and triggering a full recalculation cascade
 
 ## Requested Changes (Diff)
 
 ### Add
 
-1. **Rating Engine utility** (`src/utils/ratingEngine.ts`): Pure functions that compute:
-   - `calcIndicatorStarRating(quintile, rate, benchmark, trend)`: Q1→5, Q2→4, Q3→3, Q4→2, Q5→1, +0.2 for improving, -0.2 for declining, clamped 1–5
-   - `calcDomainScore(indicators[])`: average of indicator star ratings in a domain
-   - `calcWeightedProviderRating(domainScores)`: Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%; returns numeric score and star band (1-5)
-   - `calcPayForImprovementEligibility(overallRating, safetyImprovement, screeningCompletion)`: returns eligibility tier and estimated payment
-
-2. **Public role view** — replace NationalOverview-only with a dedicated `PublicView.tsx`:
-   - Regional provider lookup with city dropdown
-   - Provider list for selected city
-   - Provider detail with indicator star ratings and overall provider rating
-   - Provider comparison bar chart
-   - NO resident data, NO regulatory actions, NO high-risk cohort data
-   - Reads from CITY_PROVIDERS mock data
-
-3. **Provider role dashboard** — dedicated `ProviderDashboard.tsx` page:
-   - Shows only one hardcoded provider (e.g. "Green Valley Aged Care" / HYD-001)
-   - Performance indicators with star ratings (uses ratingEngine)
-   - Screening completion rates (donut/progress bars)
-   - High-risk cohort alerts (count + urgency badge)
-   - Recommended actions panel (system-generated interventions)
-   - Pay-for-Improvement eligibility summary (tier, estimated payment)
-   - Data Submission portal section (form to submit data — mock, no real backend call needed)
-   - Cannot see other providers' data
-
-4. **Policy Analyst dashboard** — dedicated `PolicyAnalytics.tsx` page:
-   - National risk trends (line chart of safety + preventive scores over 4 quarters)
-   - Regional heatmap summary (bar chart of state-level safety + screening compliance)
-   - Indicator performance trends (table of key indicators with trend arrows)
-   - Screening completion statistics (completion rate KPI cards by screening type)
-   - Equity indicators (referral-to-placement gap, CALD gap)
-   - Pay-for-Improvement outcomes summary (total eligible, total funding, improvement avg)
-   - Cannot see individual resident records or provider operational details
-
-5. **Synchronized Rating Engine integration** into existing pages:
-   - ProviderPerformance: add a "Star Rating" column to the indicator table using calcIndicatorStarRating
-   - RegionalProviderDrillDown: overall rating calculation should visibly use the weighted formula from ratingEngine (display formula note)
-   - PayForImprovement: add an "Overall Star Rating" column that updates based on indicator data (using ratingEngine)
-   - Add a visible "Ratings synchronized" status banner/badge showing the calculation chain: Indicator Data → Indicator Rating → Scorecard → Overall Rating → Pay-for-Improvement
+- **IndicatorSubmission** backend type: providerId, quarter, list of indicator records (code, name, domain, rate, benchmark, quintile, trend)
+- **RatingEngineResult** backend type: providerId, quarter, indicatorRatings (per indicator star rating + trend adjustment), domainScores (safety, preventive, quality, staffing, compliance, experience), overallScore (float), overallStars (1–5 band), incentiveEligibility (tier, estimated payment, improvement score), calculatedAt timestamp
+- **submitIndicatorData** mutation: accepts a provider indicator submission, runs the full rating cascade in Motoko (quintile→stars, trend adjustment, domain averages, weighted overall score, star band, P4I eligibility), persists the RatingEngineResult, appends an audit log entry with all inputs/outputs
+- **getRatingEngineResult** query: retrieve the latest RatingEngineResult for a given providerId + quarter
+- **getAllRatingEngineResults** query (admin/regulator): returns results across all providers for a given quarter
+- **getProviderScorecardV2** query: returns a fully calculated scorecard derived from the persisted RatingEngineResult — indicator ratings, domain scores, benchmark comparisons, overall rating, incentive tier
+- Audit log entries automatically created on every rating recalculation event with: providerId, quarter, previous overall stars, new overall stars, trigger action
 
 ### Modify
 
-- `Layout.tsx`:
-  - Public role → render `PublicView` instead of `NationalOverview`
-  - Provider role → `activePage === "national_overview"` becomes default to `ProviderDashboard`
-  - Policy Analyst role → add "policy_analytics" as a visible page
-  - Add "policy_analytics" to `ActivePage` type in App.tsx
-
-- `Sidebar.tsx`:
-  - Provider role: only show National Overview (as Provider Dashboard), High-Risk Cohorts, Screening Tracking, Pay-for-Improvement, Data Quality
-  - Policy Analyst role: show National Overview, State Heatmaps, Policy Analytics, Pay-for-Improvement
-  - Public role: no sidebar (already hidden)
-  - Add "policy_analytics" nav item visible to Policy Analyst and Regulator
-
-- `ProviderPerformance.tsx`: add star rating column to indicator table; add rating sync status note
-
-- `PayForImprovement.tsx`: add "Overall Rating" column computed by ratingEngine; show eligibility logic note
+- **ProviderScorecard** type: add qualityScore, staffingScore, complianceScore fields to match the 6-domain weighted model (Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%)
+- **getIndicatorResults**: expand static seed data to include all 6 domains with realistic SAF-001–SAF-005 style codes, rates, benchmarks, quintiles, and trends
+- **NationalOverviewStats**: add avgQualityScore, avgComplianceScore, avgStaffingScore fields
+- Frontend **ProviderPerformance** page: consume getProviderScorecardV2 / getRatingEngineResult when available; show all 6 domain scores; display calculated overall star rating alongside numeric score
+- Frontend **PayForImprovement** page: consume incentiveEligibility from RatingEngineResult rather than mock calculation; display tier, estimated payment, improvement score from backend
+- Frontend **ratingEngine.ts** utility: keep pure functions for local fallback; add scoreToStarBand export used by new UI components
 
 ### Remove
 
-- Nothing removed. All existing pages and data preserved.
+- Nothing removed; existing endpoints remain for backward compatibility
 
 ## Implementation Plan
 
-1. Create `src/utils/ratingEngine.ts` with pure calculation functions
-2. Create `src/components/pages/PublicView.tsx` (city dropdown → provider list → provider detail with star ratings, comparison chart)
-3. Create `src/components/pages/ProviderDashboard.tsx` (single-provider view with indicators, screening completion, cohort alerts, recommended actions, PFI eligibility, data submission form)
-4. Create `src/components/pages/PolicyAnalytics.tsx` (national trends, regional heatmap, indicator trends, screening stats, equity indicators, PFI outcomes)
-5. Update `App.tsx` — add "policy_analytics" to ActivePage type
-6. Update `Layout.tsx` — wire new pages to roles and active pages
-7. Update `Sidebar.tsx` — add policy_analytics nav item; adjust role-visibility per new spec
-8. Update `ProviderPerformance.tsx` — add star rating column using ratingEngine; add sync status badge
-9. Update `PayForImprovement.tsx` — add overall rating column; show eligibility logic chain
-10. Update `mockData.ts` — add any missing indicator quintile/benchmark data needed for ratingEngine demo
+1. Extend Motoko types: add IndicatorSubmission, RatingEngineResult (with all sub-fields), IncentiveEligibility
+2. Implement pure rating calculation in Motoko: quintile map, trend adjustment, clamp [1,5], domain average, weighted sum, scoreToStarBand thresholds
+3. Implement P4I eligibility logic in Motoko: overallStars ≥ 4 → base; + safety improvement ≥ 10% → bonus; + screeningCompletion ≥ 85% → maximum
+4. Add submitIndicatorData shared function: validate, compute, persist RatingEngineResult, write AuditLog entry
+5. Add getRatingEngineResult query, getAllRatingEngineResults query, getProviderScorecardV2 query
+6. Expand static seed data for indicator results across all 6 domains (Safety, Preventive, Quality, Staffing, Compliance, Experience)
+7. Update backend.d.ts types to reflect new API
+8. Update frontend useQueries hooks: add useRatingEngineResult, useProviderScorecardV2, useSubmitIndicatorData, useAllRatingEngineResults
+9. Update ProviderPerformance page: show 6-domain scores from backend, overall star band
+10. Update PayForImprovement page: pull live incentive tier + payment from backend RatingEngineResult
+11. Add a "Rating Engine Status" panel to the Provider Performance page showing the last recalculation timestamp and sync chain status

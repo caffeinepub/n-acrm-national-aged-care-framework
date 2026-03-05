@@ -1,11 +1,14 @@
 import Map "mo:core/Map";
 import Array "mo:core/Array";
-import Order "mo:core/Order";
+import List "mo:core/List";
 import Text "mo:core/Text";
+import Float "mo:core/Float";
+import Order "mo:core/Order";
+import Int "mo:core/Int";
 import Iter "mo:core/Iter";
+import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Nat "mo:core/Nat";
-import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
@@ -39,6 +42,75 @@ actor {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
     userProfiles.add(caller, profile);
+  };
+
+  let auditLogs = Map.empty<Text, AuditLog>();
+  let highRiskCohorts = Map.empty<Text, HighRiskCohort>();
+  let screeningWorkflows = Map.empty<Text, ScreeningWorkflow>();
+  let p4iResults = Map.empty<Text, RatingEngineResult>();
+
+  type RatingEngineResult = {
+    id : Text;
+    providerId : Text;
+    quarter : Text;
+    indicatorRatings : [RatingEngineIndicatorItem];
+    domainScores : RatingEngineDomainScores;
+    overallScore : Float;
+    overallStars : Nat;
+    incentiveEligibility : RatingEngineIncentiveEligibility;
+    calculatedAt : Int;
+    previousOverallStars : Nat;
+    auditNotes : Text;
+  };
+
+  type IndicatorSubmissionRecord = {
+    indicatorCode : Text;
+    indicatorName : Text;
+    domain : Text;
+    rate : Float;
+    benchmark : Float;
+    quintile : Nat;
+    trend : Text;
+    screeningCompletion : Float;
+  };
+
+  type ProviderIndicatorSubmission = {
+    id : Text;
+    providerId : Text;
+    quarter : Text;
+    submittedAt : Int;
+    indicators : [IndicatorSubmissionRecord];
+    screeningBundleCompletion : Float;
+    previousSafetyScore : Float;
+  };
+
+  type RatingEngineIndicatorItem = {
+    indicatorCode : Text;
+    indicatorName : Text;
+    domain : Text;
+    starRating : Float;
+    trendAdjustment : Float;
+    rate : Float;
+    benchmark : Float;
+    quintile : Nat;
+    trend : Text;
+  };
+
+  type RatingEngineDomainScores = {
+    safety : Float;
+    preventive : Float;
+    quality : Float;
+    staffing : Float;
+    compliance : Float;
+    experience : Float;
+  };
+
+  type RatingEngineIncentiveEligibility = {
+    tier : Text;
+    eligible : Bool;
+    estimatedPayment : Float;
+    improvementScore : Float;
+    screeningCompletion : Float;
   };
 
   type IndicatorResult = {
@@ -189,9 +261,191 @@ actor {
     dataQualityScore : Float;
   };
 
-  let auditLogs = Map.empty<Text, AuditLog>();
-  let highRiskCohorts = Map.empty<Text, HighRiskCohort>();
-  let screeningWorkflows = Map.empty<Text, ScreeningWorkflow>();
+  func quintileToStars(quintile : Nat) : Float {
+    switch (quintile) {
+      case (1) { 5.0 };
+      case (2) { 4.0 };
+      case (3) { 3.0 };
+      case (4) { 2.0 };
+      case (5) { 1.0 };
+      case (_) { 3.0 };
+    };
+  };
+
+  func trendAdjustment(trend : Text) : Float {
+    if (Text.equal(trend, "improving")) { 0.2 } else if (Text.equal(trend, "declining")) { -0.2 } else {
+      0.0;
+    };
+  };
+
+  func clampRating(rating : Float) : Float {
+    if (rating < 1.0) { 1.0 } else if (rating > 5.0) { 5.0 } else { rating };
+  };
+
+  func calculateDomainScore(indicators : [Float]) : Float {
+    if (indicators.size() == 0) { 3.0 } else {
+      let sum = indicators.foldLeft(0.0, func(acc, rating) { acc + rating });
+      sum / indicators.size().toFloat();
+    };
+  };
+
+  func calculateOverallScore(scores : RatingEngineDomainScores) : Float {
+    (scores.safety * 0.30) +
+    (scores.preventive * 0.20) +
+    (scores.quality * 0.20) +
+    (scores.staffing * 0.15) +
+    (scores.compliance * 0.10) +
+    (scores.experience * 0.05);
+  };
+
+  func mapScoreToStars(score : Float) : Nat {
+    if (score >= 4.5) { 5 } else if (score >= 3.5) { 4 } else if (score >= 2.5) { 3 } else if (score >= 1.5) { 2 } else {
+      1;
+    };
+  };
+
+  func calculateIncentiveEligibility(
+    overallStars : Nat,
+    safetyImprovementPct : Float,
+    screeningCompletion : Float,
+  ) : RatingEngineIncentiveEligibility {
+    if (overallStars >= 4 and safetyImprovementPct >= 10.0 and screeningCompletion >= 85.0) {
+      {
+        tier = "Maximum Eligible";
+        eligible = true;
+        estimatedPayment = 180000.0;
+        improvementScore = (safetyImprovementPct * 0.5) + (screeningCompletion * 0.5);
+        screeningCompletion;
+      };
+    } else if (overallStars >= 4 and safetyImprovementPct >= 10.0) {
+      {
+        tier = "Bonus Eligible";
+        eligible = true;
+        estimatedPayment = 120000.0;
+        improvementScore = (safetyImprovementPct * 0.5) + (screeningCompletion * 0.5);
+        screeningCompletion;
+      };
+    } else if (overallStars >= 4) {
+      {
+        tier = "Base Eligible";
+        eligible = true;
+        estimatedPayment = 75000.0;
+        improvementScore = (safetyImprovementPct * 0.5) + (screeningCompletion * 0.5);
+        screeningCompletion;
+      };
+    } else {
+      {
+        tier = "Not Eligible";
+        eligible = false;
+        estimatedPayment = 0.0;
+        improvementScore = (safetyImprovementPct * 0.5) + (screeningCompletion * 0.5);
+        screeningCompletion;
+      };
+    };
+  };
+
+  public shared ({ caller }) func submitIndicatorData(
+    submission : ProviderIndicatorSubmission
+  ) : async RatingEngineResult {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can perform this action");
+    };
+
+    let indicatorsList = List.empty<RatingEngineIndicatorItem>();
+
+    let indicators = submission.indicators;
+    for (ind in indicators.values()) {
+      let stars = clampRating(quintileToStars(ind.quintile) + trendAdjustment(ind.trend));
+      let newItem : RatingEngineIndicatorItem = {
+        ind with
+        starRating = stars;
+        trendAdjustment = trendAdjustment(ind.trend);
+      };
+      indicatorsList.add(newItem);
+    };
+
+    let safetyScores = indicatorsList.values().filter(func(r) { Text.equal(r.domain, "Safety") }).map(func(r) { r.starRating }).toArray();
+    let preventiveScores = indicatorsList.values().filter(func(r) { Text.equal(r.domain, "Preventive") }).map(func(r) { r.starRating }).toArray();
+    let qualityScores = indicatorsList.values().filter(func(r) { Text.equal(r.domain, "Quality") }).map(func(r) { r.starRating }).toArray();
+    let staffingScores = indicatorsList.values().filter(func(r) { Text.equal(r.domain, "Staffing") }).map(func(r) { r.starRating }).toArray();
+    let complianceScores = indicatorsList.values().filter(func(r) { Text.equal(r.domain, "Compliance") }).map(func(r) { r.starRating }).toArray();
+    let experienceScores = indicatorsList.values().filter(func(r) { Text.equal(r.domain, "Experience") }).map(func(r) { r.starRating }).toArray();
+
+    let domainScores : RatingEngineDomainScores = {
+      safety = calculateDomainScore(safetyScores);
+      preventive = calculateDomainScore(preventiveScores);
+      quality = calculateDomainScore(qualityScores);
+      staffing = calculateDomainScore(staffingScores);
+      compliance = calculateDomainScore(complianceScores);
+      experience = calculateDomainScore(experienceScores);
+    };
+
+    let overallScore = calculateOverallScore(domainScores);
+    let overallStars = mapScoreToStars(overallScore);
+    let incentive = calculateIncentiveEligibility(overallStars, submission.previousSafetyScore, submission.screeningBundleCompletion);
+
+    let result : RatingEngineResult = {
+      id = submission.id;
+      providerId = submission.providerId;
+      quarter = submission.quarter;
+      indicatorRatings = indicatorsList.toArray();
+      domainScores;
+      overallScore;
+      overallStars;
+      incentiveEligibility = incentive;
+      calculatedAt = Time.now();
+      previousOverallStars = 0;
+      auditNotes = "";
+    };
+
+    p4iResults.add(submission.id, result);
+
+    let newLog : AuditLog = {
+      id = Time.now().toText();
+      userId = caller.toText();
+      userRole = "user";
+      action = "Submitted Indicator Data";
+      entityType = "RatingEngineResult";
+      timestamp = Time.now();
+      details = "Indicator data submitted for " # submission.id;
+    };
+
+    auditLogs.add(newLog.id, newLog);
+
+    result;
+  };
+
+  public query ({ caller }) func getRatingEngineResult(providerId : Text, quarter : Text) : async ?RatingEngineResult {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can perform this action");
+    };
+    let resultsArray = p4iResults.values().filter(
+      func(result) {
+        result.providerId == providerId and result.quarter == quarter
+      }
+    ).toArray();
+    if (resultsArray.size() > 0) { ?resultsArray[0] } else { null };
+  };
+
+  public query ({ caller }) func getAllRatingEngineResults(quarter : Text) : async [RatingEngineResult] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can perform this action");
+    };
+    let filtered = p4iResults.values().filter(func(result) { result.quarter == quarter }).toArray();
+    filtered;
+  };
+
+  public query ({ caller }) func getProviderScorecardV2(providerId : Text, quarter : Text) : async ?RatingEngineResult {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can perform this action");
+    };
+    let resultsArray = p4iResults.values().filter(
+      func(result) {
+        result.providerId == providerId and result.quarter == quarter
+      }
+    ).toArray();
+    if (resultsArray.size() > 0) { ?resultsArray[0] } else { null };
+  };
 
   public query ({ caller }) func getIndicatorResults(providerId : Text, quarter : Text) : async [IndicatorResult] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {

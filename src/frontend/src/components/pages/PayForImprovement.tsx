@@ -130,7 +130,36 @@ export default function PayForImprovement({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div
+              className="border p-3"
+              style={{
+                background: "oklch(0.95 0.04 145)",
+                borderColor: "oklch(0.62 0.18 145)",
+              }}
+              data-ocid="pfi.eligibility.maximum.card"
+            >
+              <div
+                className="text-xs font-bold uppercase tracking-wide mb-1"
+                style={{ color: "oklch(0.22 0.18 145)" }}
+              >
+                Maximum Eligible
+              </div>
+              <div
+                className="text-xs space-y-0.5"
+                style={{ color: "oklch(0.30 0.06 254)" }}
+              >
+                <p>Overall rating ≥ 4 stars</p>
+                <p>AND Safety improvement ≥ 10%</p>
+                <p>AND Screening ≥ 85%</p>
+              </div>
+              <div
+                className="mt-2 font-bold text-sm"
+                style={{ color: "oklch(var(--gov-gold-dark))" }}
+              >
+                Est. $180,000
+              </div>
+            </div>
             <div
               className="border p-3"
               style={{
@@ -143,14 +172,14 @@ export default function PayForImprovement({
                 className="text-xs font-bold uppercase tracking-wide mb-1"
                 style={{ color: "oklch(0.28 0.14 145)" }}
               >
-                Bonus Incentive
+                Bonus Eligible
               </div>
               <div
                 className="text-xs space-y-0.5"
                 style={{ color: "oklch(0.30 0.06 254)" }}
               >
                 <p>Overall rating ≥ 4 stars</p>
-                <p>AND Safety improvement ≥ 15%</p>
+                <p>AND Safety improvement ≥ 10%</p>
               </div>
               <div
                 className="mt-2 font-bold text-sm"
@@ -171,7 +200,7 @@ export default function PayForImprovement({
                 className="text-xs font-bold uppercase tracking-wide mb-1"
                 style={{ color: "oklch(0.43 0.14 72)" }}
               >
-                Base Incentive
+                Base Eligible
               </div>
               <div
                 className="text-xs space-y-0.5"

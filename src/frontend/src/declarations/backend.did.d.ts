@@ -40,6 +40,16 @@ export interface IndicatorResult {
   'providerId' : string,
   'quintileRank' : bigint,
 }
+export interface IndicatorSubmissionRecord {
+  'trend' : string,
+  'domain' : string,
+  'rate' : number,
+  'indicatorCode' : string,
+  'indicatorName' : string,
+  'screeningCompletion' : number,
+  'quintile' : bigint,
+  'benchmark' : number,
+}
 export interface NationalOverviewStats {
   'dataQualityScore' : number,
   'screeningComplianceRate' : number,
@@ -48,6 +58,15 @@ export interface NationalOverviewStats {
   'avgPreventiveScore' : number,
   'totalResidents' : bigint,
   'avgSafetyScore' : number,
+}
+export interface ProviderIndicatorSubmission {
+  'id' : string,
+  'quarter' : string,
+  'previousSafetyScore' : number,
+  'submittedAt' : bigint,
+  'indicators' : Array<IndicatorSubmissionRecord>,
+  'screeningBundleCompletion' : number,
+  'providerId' : string,
 }
 export interface ProviderScorecard {
   'id' : string,
@@ -59,6 +78,45 @@ export interface ProviderScorecard {
   'providerId' : string,
   'equityScore' : number,
   'quintileRank' : bigint,
+}
+export interface RatingEngineDomainScores {
+  'safety' : number,
+  'compliance' : number,
+  'quality' : number,
+  'staffing' : number,
+  'experience' : number,
+  'preventive' : number,
+}
+export interface RatingEngineIncentiveEligibility {
+  'tier' : string,
+  'screeningCompletion' : number,
+  'estimatedPayment' : number,
+  'eligible' : boolean,
+  'improvementScore' : number,
+}
+export interface RatingEngineIndicatorItem {
+  'trend' : string,
+  'starRating' : number,
+  'domain' : string,
+  'trendAdjustment' : number,
+  'rate' : number,
+  'indicatorCode' : string,
+  'indicatorName' : string,
+  'quintile' : bigint,
+  'benchmark' : number,
+}
+export interface RatingEngineResult {
+  'id' : string,
+  'overallScore' : number,
+  'domainScores' : RatingEngineDomainScores,
+  'overallStars' : bigint,
+  'previousOverallStars' : bigint,
+  'auditNotes' : string,
+  'quarter' : string,
+  'incentiveEligibility' : RatingEngineIncentiveEligibility,
+  'calculatedAt' : bigint,
+  'providerId' : string,
+  'indicatorRatings' : Array<RatingEngineIndicatorItem>,
 }
 export interface ScreeningWorkflow {
   'id' : string,
@@ -80,6 +138,10 @@ export interface _SERVICE {
   >,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'getAllHighRiskCohorts' : ActorMethod<[], Array<HighRiskCohort>>,
+  'getAllRatingEngineResults' : ActorMethod<
+    [string],
+    Array<RatingEngineResult>
+  >,
   'getAllScreeningWorkflows' : ActorMethod<[], Array<ScreeningWorkflow>>,
   'getAuditLogs' : ActorMethod<[], Array<AuditLog>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
@@ -87,11 +149,23 @@ export interface _SERVICE {
   'getHighRiskCohorts' : ActorMethod<[string], Array<HighRiskCohort>>,
   'getIndicatorResults' : ActorMethod<[string, string], Array<IndicatorResult>>,
   'getNationalOverviewStats' : ActorMethod<[string], NationalOverviewStats>,
+  'getProviderScorecardV2' : ActorMethod<
+    [string, string],
+    [] | [RatingEngineResult]
+  >,
+  'getRatingEngineResult' : ActorMethod<
+    [string, string],
+    [] | [RatingEngineResult]
+  >,
   'getScorecardsByProvider' : ActorMethod<[string], Array<ProviderScorecard>>,
   'getScreeningWorkflows' : ActorMethod<[string], Array<ScreeningWorkflow>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'submitIndicatorData' : ActorMethod<
+    [ProviderIndicatorSubmission],
+    RatingEngineResult
+  >,
   'updateScreeningStatus' : ActorMethod<[string, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;

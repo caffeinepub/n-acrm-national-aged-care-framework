@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   BarChart2,
   Building2,
+  Calculator,
   ClipboardCheck,
   Database,
   FileText,
@@ -92,6 +93,13 @@ const navItems: NavItem[] = [
     icon: FileText,
     roles: ["Regulator"],
     ocid: "nav.audit_governance.link",
+  },
+  {
+    id: "rating_engine",
+    label: "Rating Engine",
+    icon: Calculator,
+    roles: ["Regulator", "Provider"],
+    ocid: "nav.rating_engine.link",
   },
 ];
 

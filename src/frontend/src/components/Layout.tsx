@@ -10,6 +10,7 @@ import PolicyAnalytics from "./pages/PolicyAnalytics";
 import ProviderDashboard from "./pages/ProviderDashboard";
 import ProviderPerformance from "./pages/ProviderPerformance";
 import PublicView from "./pages/PublicView";
+import RatingEngine from "./pages/RatingEngine";
 import RegionalProviderDrillDown from "./pages/RegionalProviderDrillDown";
 import ScreeningTracking from "./pages/ScreeningTracking";
 import StateHeatmaps from "./pages/StateHeatmaps";
@@ -68,6 +69,8 @@ export default function Layout({
         return <RegionalProviderDrillDown />;
       case "policy_analytics":
         return <PolicyAnalytics />;
+      case "rating_engine":
+        return <RatingEngine currentQuarter={currentQuarter} />;
       default:
         return (
           <NationalOverview

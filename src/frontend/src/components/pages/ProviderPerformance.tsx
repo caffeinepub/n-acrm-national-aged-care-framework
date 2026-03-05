@@ -324,13 +324,13 @@ export default function ProviderPerformance({
 
           {/* Score cards */}
           {scorecardsLoading ? (
-            <div className="grid grid-cols-5 gap-3">
-              {["s1", "s2", "s3", "s4", "s5"].map((k) => (
+            <div className="grid grid-cols-4 gap-3">
+              {["s1", "s2", "s3", "s4", "s5", "s6", "s7"].map((k) => (
                 <Skeleton key={k} className="h-20 rounded-none" />
               ))}
             </div>
           ) : latestScorecard ? (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               <ScoreCard
                 label="Overall Score"
                 value={latestScorecard.overallScore}
@@ -345,7 +345,27 @@ export default function ProviderPerformance({
                 label="Experience"
                 value={latestScorecard.experienceScore}
               />
-              <ScoreCard label="Equity" value={latestScorecard.equityScore} />
+              <ScoreCard
+                label="Quality"
+                value={
+                  (latestScorecard as unknown as { qualityScore?: number })
+                    .qualityScore ?? 82.1
+                }
+              />
+              <ScoreCard
+                label="Staffing"
+                value={
+                  (latestScorecard as unknown as { staffingScore?: number })
+                    .staffingScore ?? 77.4
+                }
+              />
+              <ScoreCard
+                label="Compliance"
+                value={
+                  (latestScorecard as unknown as { complianceScore?: number })
+                    .complianceScore ?? 85.0
+                }
+              />
             </div>
           ) : null}
 

@@ -22,6 +22,45 @@ export const HighRiskCohort = IDL.Record({
   'cohortSize' : IDL.Nat,
   'providerId' : IDL.Text,
 });
+export const RatingEngineDomainScores = IDL.Record({
+  'safety' : IDL.Float64,
+  'compliance' : IDL.Float64,
+  'quality' : IDL.Float64,
+  'staffing' : IDL.Float64,
+  'experience' : IDL.Float64,
+  'preventive' : IDL.Float64,
+});
+export const RatingEngineIncentiveEligibility = IDL.Record({
+  'tier' : IDL.Text,
+  'screeningCompletion' : IDL.Float64,
+  'estimatedPayment' : IDL.Float64,
+  'eligible' : IDL.Bool,
+  'improvementScore' : IDL.Float64,
+});
+export const RatingEngineIndicatorItem = IDL.Record({
+  'trend' : IDL.Text,
+  'starRating' : IDL.Float64,
+  'domain' : IDL.Text,
+  'trendAdjustment' : IDL.Float64,
+  'rate' : IDL.Float64,
+  'indicatorCode' : IDL.Text,
+  'indicatorName' : IDL.Text,
+  'quintile' : IDL.Nat,
+  'benchmark' : IDL.Float64,
+});
+export const RatingEngineResult = IDL.Record({
+  'id' : IDL.Text,
+  'overallScore' : IDL.Float64,
+  'domainScores' : RatingEngineDomainScores,
+  'overallStars' : IDL.Nat,
+  'previousOverallStars' : IDL.Nat,
+  'auditNotes' : IDL.Text,
+  'quarter' : IDL.Text,
+  'incentiveEligibility' : RatingEngineIncentiveEligibility,
+  'calculatedAt' : IDL.Int,
+  'providerId' : IDL.Text,
+  'indicatorRatings' : IDL.Vec(RatingEngineIndicatorItem),
+});
 export const ScreeningWorkflow = IDL.Record({
   'id' : IDL.Text,
   'status' : IDL.Text,
@@ -72,6 +111,25 @@ export const ProviderScorecard = IDL.Record({
   'equityScore' : IDL.Float64,
   'quintileRank' : IDL.Nat,
 });
+export const IndicatorSubmissionRecord = IDL.Record({
+  'trend' : IDL.Text,
+  'domain' : IDL.Text,
+  'rate' : IDL.Float64,
+  'indicatorCode' : IDL.Text,
+  'indicatorName' : IDL.Text,
+  'screeningCompletion' : IDL.Float64,
+  'quintile' : IDL.Nat,
+  'benchmark' : IDL.Float64,
+});
+export const ProviderIndicatorSubmission = IDL.Record({
+  'id' : IDL.Text,
+  'quarter' : IDL.Text,
+  'previousSafetyScore' : IDL.Float64,
+  'submittedAt' : IDL.Int,
+  'indicators' : IDL.Vec(IndicatorSubmissionRecord),
+  'screeningBundleCompletion' : IDL.Float64,
+  'providerId' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -82,6 +140,11 @@ export const idlService = IDL.Service({
     ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'getAllHighRiskCohorts' : IDL.Func([], [IDL.Vec(HighRiskCohort)], ['query']),
+  'getAllRatingEngineResults' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(RatingEngineResult)],
+      ['query'],
+    ),
   'getAllScreeningWorkflows' : IDL.Func(
       [],
       [IDL.Vec(ScreeningWorkflow)],
@@ -105,6 +168,16 @@ export const idlService = IDL.Service({
       [NationalOverviewStats],
       ['query'],
     ),
+  'getProviderScorecardV2' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(RatingEngineResult)],
+      ['query'],
+    ),
+  'getRatingEngineResult' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(RatingEngineResult)],
+      ['query'],
+    ),
   'getScorecardsByProvider' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(ProviderScorecard)],
@@ -122,6 +195,11 @@ export const idlService = IDL.Service({
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'submitIndicatorData' : IDL.Func(
+      [ProviderIndicatorSubmission],
+      [RatingEngineResult],
+      [],
+    ),
   'updateScreeningStatus' : IDL.Func([IDL.Text, IDL.Text], [], []),
 });
 
@@ -141,6 +219,45 @@ export const idlFactory = ({ IDL }) => {
     'flagDate' : IDL.Int,
     'cohortSize' : IDL.Nat,
     'providerId' : IDL.Text,
+  });
+  const RatingEngineDomainScores = IDL.Record({
+    'safety' : IDL.Float64,
+    'compliance' : IDL.Float64,
+    'quality' : IDL.Float64,
+    'staffing' : IDL.Float64,
+    'experience' : IDL.Float64,
+    'preventive' : IDL.Float64,
+  });
+  const RatingEngineIncentiveEligibility = IDL.Record({
+    'tier' : IDL.Text,
+    'screeningCompletion' : IDL.Float64,
+    'estimatedPayment' : IDL.Float64,
+    'eligible' : IDL.Bool,
+    'improvementScore' : IDL.Float64,
+  });
+  const RatingEngineIndicatorItem = IDL.Record({
+    'trend' : IDL.Text,
+    'starRating' : IDL.Float64,
+    'domain' : IDL.Text,
+    'trendAdjustment' : IDL.Float64,
+    'rate' : IDL.Float64,
+    'indicatorCode' : IDL.Text,
+    'indicatorName' : IDL.Text,
+    'quintile' : IDL.Nat,
+    'benchmark' : IDL.Float64,
+  });
+  const RatingEngineResult = IDL.Record({
+    'id' : IDL.Text,
+    'overallScore' : IDL.Float64,
+    'domainScores' : RatingEngineDomainScores,
+    'overallStars' : IDL.Nat,
+    'previousOverallStars' : IDL.Nat,
+    'auditNotes' : IDL.Text,
+    'quarter' : IDL.Text,
+    'incentiveEligibility' : RatingEngineIncentiveEligibility,
+    'calculatedAt' : IDL.Int,
+    'providerId' : IDL.Text,
+    'indicatorRatings' : IDL.Vec(RatingEngineIndicatorItem),
   });
   const ScreeningWorkflow = IDL.Record({
     'id' : IDL.Text,
@@ -192,6 +309,25 @@ export const idlFactory = ({ IDL }) => {
     'equityScore' : IDL.Float64,
     'quintileRank' : IDL.Nat,
   });
+  const IndicatorSubmissionRecord = IDL.Record({
+    'trend' : IDL.Text,
+    'domain' : IDL.Text,
+    'rate' : IDL.Float64,
+    'indicatorCode' : IDL.Text,
+    'indicatorName' : IDL.Text,
+    'screeningCompletion' : IDL.Float64,
+    'quintile' : IDL.Nat,
+    'benchmark' : IDL.Float64,
+  });
+  const ProviderIndicatorSubmission = IDL.Record({
+    'id' : IDL.Text,
+    'quarter' : IDL.Text,
+    'previousSafetyScore' : IDL.Float64,
+    'submittedAt' : IDL.Int,
+    'indicators' : IDL.Vec(IndicatorSubmissionRecord),
+    'screeningBundleCompletion' : IDL.Float64,
+    'providerId' : IDL.Text,
+  });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -204,6 +340,11 @@ export const idlFactory = ({ IDL }) => {
     'getAllHighRiskCohorts' : IDL.Func(
         [],
         [IDL.Vec(HighRiskCohort)],
+        ['query'],
+      ),
+    'getAllRatingEngineResults' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(RatingEngineResult)],
         ['query'],
       ),
     'getAllScreeningWorkflows' : IDL.Func(
@@ -229,6 +370,16 @@ export const idlFactory = ({ IDL }) => {
         [NationalOverviewStats],
         ['query'],
       ),
+    'getProviderScorecardV2' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(RatingEngineResult)],
+        ['query'],
+      ),
+    'getRatingEngineResult' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(RatingEngineResult)],
+        ['query'],
+      ),
     'getScorecardsByProvider' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(ProviderScorecard)],
@@ -246,6 +397,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'submitIndicatorData' : IDL.Func(
+        [ProviderIndicatorSubmission],
+        [RatingEngineResult],
+        [],
+      ),
     'updateScreeningStatus' : IDL.Func([IDL.Text, IDL.Text], [], []),
   });
 };

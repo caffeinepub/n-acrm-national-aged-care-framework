@@ -4,7 +4,9 @@ import type {
   HighRiskCohort,
   IndicatorResult,
   NationalOverviewStats,
+  ProviderIndicatorSubmission,
   ProviderScorecard,
+  RatingEngineResult,
   ScreeningWorkflow,
 } from "../backend.d";
 import { useActor } from "./useActor";
@@ -97,6 +99,57 @@ export function useUpdateScreeningStatus() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["allScreeningWorkflows"] });
+    },
+  });
+}
+
+export function useRatingEngineResult(providerId: string, quarter: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<RatingEngineResult | null>({
+    queryKey: ["ratingEngineResult", providerId, quarter],
+    queryFn: async () => {
+      if (!actor || !providerId) return null;
+      return actor.getRatingEngineResult(providerId, quarter);
+    },
+    enabled: !!actor && !isFetching && !!providerId,
+  });
+}
+
+export function useAllRatingEngineResults(quarter: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<RatingEngineResult[]>({
+    queryKey: ["ratingEngineResults", quarter],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllRatingEngineResults(quarter);
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useProviderScorecardV2(providerId: string, quarter: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<RatingEngineResult | null>({
+    queryKey: ["providerScorecardV2", providerId, quarter],
+    queryFn: async () => {
+      if (!actor || !providerId) return null;
+      return actor.getProviderScorecardV2(providerId, quarter);
+    },
+    enabled: !!actor && !isFetching && !!providerId,
+  });
+}
+
+export function useSubmitIndicatorData() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (submission: ProviderIndicatorSubmission) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.submitIndicatorData(submission);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ratingEngineResults"] });
+      queryClient.invalidateQueries({ queryKey: ["providerScorecardV2"] });
     },
   });
 }

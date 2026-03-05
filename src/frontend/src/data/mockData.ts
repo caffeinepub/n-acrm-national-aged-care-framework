@@ -622,6 +622,9 @@ export const MOCK_SCORECARDS = (providerId: string) =>
       preventiveScore: 70.1,
       experienceScore: 75.8,
       equityScore: 68.2,
+      qualityScore: 78.4,
+      staffingScore: 71.2,
+      complianceScore: 80.6,
       quintileRank: 3,
     },
     {
@@ -631,6 +634,9 @@ export const MOCK_SCORECARDS = (providerId: string) =>
       preventiveScore: 72.8,
       experienceScore: 77.1,
       equityScore: 70.4,
+      qualityScore: 80.1,
+      staffingScore: 73.8,
+      complianceScore: 82.4,
       quintileRank: 2,
     },
     {
@@ -640,6 +646,9 @@ export const MOCK_SCORECARDS = (providerId: string) =>
       preventiveScore: 74.4,
       experienceScore: 78.4,
       equityScore: 72.8,
+      qualityScore: 81.8,
+      staffingScore: 75.9,
+      complianceScore: 83.8,
       quintileRank: 2,
     },
     {
@@ -649,6 +658,9 @@ export const MOCK_SCORECARDS = (providerId: string) =>
       preventiveScore: 76.8,
       experienceScore: 80.1,
       equityScore: 74.2,
+      qualityScore: 82.1,
+      staffingScore: 77.4,
+      complianceScore: 85.0,
       quintileRank: 2,
     },
   ].map((s, i) => ({ ...s, id: `SC-${providerId}-${i}`, providerId }));
