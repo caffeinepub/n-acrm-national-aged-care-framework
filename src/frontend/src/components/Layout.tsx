@@ -7,6 +7,7 @@ import HighRiskCohorts from "./pages/HighRiskCohorts";
 import NationalOverview from "./pages/NationalOverview";
 import PayForImprovement from "./pages/PayForImprovement";
 import ProviderPerformance from "./pages/ProviderPerformance";
+import RegionalProviderDrillDown from "./pages/RegionalProviderDrillDown";
 import ScreeningTracking from "./pages/ScreeningTracking";
 import StateHeatmaps from "./pages/StateHeatmaps";
 
@@ -35,7 +36,12 @@ export default function Layout({
 
     switch (activePage) {
       case "national_overview":
-        return <NationalOverview currentQuarter={currentQuarter} />;
+        return (
+          <NationalOverview
+            currentQuarter={currentQuarter}
+            setActivePage={setActivePage}
+          />
+        );
       case "state_heatmaps":
         return <StateHeatmaps />;
       case "provider_performance":
@@ -50,8 +56,15 @@ export default function Layout({
         return <DataQuality />;
       case "audit_governance":
         return <AuditGovernance />;
+      case "regional_provider":
+        return <RegionalProviderDrillDown />;
       default:
-        return <NationalOverview currentQuarter={currentQuarter} />;
+        return (
+          <NationalOverview
+            currentQuarter={currentQuarter}
+            setActivePage={setActivePage}
+          />
+        );
     }
   };
 

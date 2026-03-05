@@ -5,9 +5,10 @@ import {
   ClipboardCheck,
   Database,
   FileText,
+  MapPin,
+  Search,
   TrendingUp,
 } from "lucide-react";
-import { MapPin } from "lucide-react";
 import type { ActivePage, AppRole } from "../App";
 
 interface NavItem {
@@ -25,6 +26,13 @@ const navItems: NavItem[] = [
     icon: BarChart2,
     roles: ["Regulator", "Provider", "Policy Analyst", "Public"],
     ocid: "nav.national_overview.link",
+  },
+  {
+    id: "regional_provider",
+    label: "Regional Provider Lookup",
+    icon: Search,
+    roles: ["Regulator", "Provider", "Policy Analyst"],
+    ocid: "nav.regional_provider.link",
   },
   {
     id: "state_heatmaps",

@@ -1,11 +1,14 @@
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Building2,
   CheckCircle,
   Database,
+  MapPin,
   Shield,
   TrendingDown,
   TrendingUp,
@@ -23,6 +26,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { ActivePage } from "../../App";
 import {
   NATIONAL_TRENDS,
   RECENT_SUBMISSIONS,
@@ -32,6 +36,7 @@ import { useNationalOverviewStats } from "../../hooks/useQueries";
 
 interface NationalOverviewProps {
   currentQuarter: string;
+  setActivePage?: (page: ActivePage) => void;
 }
 
 interface StatCardProps {
@@ -122,6 +127,7 @@ function StatCard({
 
 export default function NationalOverview({
   currentQuarter,
+  setActivePage,
 }: NationalOverviewProps) {
   const { data: stats, isLoading } = useNationalOverviewStats(currentQuarter);
 
@@ -234,6 +240,60 @@ export default function NationalOverview({
             <StatCard key={card.label} {...card} />
           ))}
         </div>
+      )}
+
+      {/* Regional Provider Lookup CTA */}
+      {setActivePage && (
+        <Card
+          className="rounded-none border"
+          style={{
+            background: "oklch(0.95 0.012 254)",
+            borderColor: "oklch(0.82 0.05 254)",
+          }}
+          data-ocid="national_overview.regional_lookup.card"
+        >
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex items-start gap-3 flex-1">
+                <div
+                  className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
+                  style={{ background: "oklch(var(--gov-navy))" }}
+                >
+                  <MapPin
+                    className="w-4 h-4"
+                    style={{ color: "oklch(0.92 0.01 240)" }}
+                  />
+                </div>
+                <div>
+                  <div
+                    className="font-bold text-sm"
+                    style={{ color: "oklch(var(--gov-navy))" }}
+                  >
+                    Regional Provider Lookup
+                  </div>
+                  <div
+                    className="text-xs mt-0.5"
+                    style={{ color: "oklch(0.48 0.025 250)" }}
+                  >
+                    Search providers by city and view detailed star-rated
+                    quality scorecards for Residents, Staffing, Compliance,
+                    Safety, Preventive Care, and more.
+                  </div>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="rounded-none flex-shrink-0 flex items-center gap-1.5 font-semibold"
+                style={{ background: "oklch(var(--gov-navy))", color: "#fff" }}
+                data-ocid="national_overview.regional_lookup.primary_button"
+                onClick={() => setActivePage("regional_provider")}
+              >
+                Open Regional Lookup
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Charts */}

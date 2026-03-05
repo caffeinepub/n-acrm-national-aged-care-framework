@@ -11,7 +11,8 @@ export type ActivePage =
   | "screening_tracking"
   | "pay_for_improvement"
   | "data_quality"
-  | "audit_governance";
+  | "audit_governance"
+  | "regional_provider";
 
 function App() {
   const [currentRole, setCurrentRole] = useState<AppRole>("Regulator");

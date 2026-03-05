@@ -1340,6 +1340,828 @@ export const MOCK_AUDIT_LOGS = [
   },
 ];
 
+// ── Regional Provider Drill-Down ──────────────────────────────────────────────
+
+export interface CityProvider {
+  id: string;
+  name: string;
+  city: string;
+  type: string; // "Residential" | "Home Care" | "Day Care"
+  beds?: number;
+  established: number;
+  indicators: {
+    residents: number;
+    staffing: number;
+    qualityMeasures: number;
+    compliance: number;
+    safetyClinical: number;
+    preventiveCare: number;
+    experience: number;
+    equity: number;
+  };
+  indicatorMeta?: {
+    [key: string]: {
+      trend: "improving" | "declining" | "stable";
+      insight: string;
+    };
+  };
+}
+
+export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
+  Hyderabad: [
+    {
+      id: "HYD-001",
+      name: "Green Valley Aged Care",
+      city: "Hyderabad",
+      type: "Residential",
+      beds: 95,
+      established: 2008,
+      indicators: {
+        residents: 4.2,
+        staffing: 4.5,
+        qualityMeasures: 4.0,
+        compliance: 4.8,
+        safetyClinical: 4.3,
+        preventiveCare: 4.1,
+        experience: 4.6,
+        equity: 3.9,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ This provider demonstrates strong performance in Resident Experience, above regional benchmark.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing levels are consistent and above acceptable threshold. Coverage ratios meet national standards.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are trending positively with measurable improvement over the last two quarters.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance score is excellent. All mandatory standards met with no outstanding notices.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ This provider demonstrates strong performance in this area, above regional benchmark.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Performance is within acceptable range. Minor improvement opportunities identified in cognitive assessment completion.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Resident satisfaction surveys indicate consistently high experience scores across all care domains.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity access indicators are within range. CALD access gap is being monitored.",
+        },
+      },
+    },
+    {
+      id: "HYD-002",
+      name: "Sunrise Elder Support",
+      city: "Hyderabad",
+      type: "Home Care",
+      established: 2014,
+      indicators: {
+        residents: 3.4,
+        staffing: 2.5,
+        qualityMeasures: 3.2,
+        compliance: 3.6,
+        safetyClinical: 1.8,
+        preventiveCare: 2.1,
+        experience: 3.3,
+        equity: 3.0,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "declining",
+          insight:
+            "ℹ Resident Experience is below average. Complaint resolution times have increased in recent quarters.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing levels are below minimum thresholds. High turnover and unfilled positions are impacting care delivery.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are marginally acceptable but trending toward concern. Improvement plan recommended.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance is within acceptable range but below regional peers. One open notice requires resolution.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ This provider shows poor performance in Falls Risk Safety indicator due to higher incident rate compared to regional benchmark. Immediate review is recommended.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ This provider has low Preventive Screening completion compared with national average. Falls risk and depression screening completion rates are critically low.",
+        },
+        experience: {
+          trend: "declining",
+          insight:
+            "⚠ Resident experience scores are below acceptable range. Complaint rates are elevated compared to city average.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity access performance is marginally acceptable. Referral-to-placement times require attention.",
+        },
+      },
+    },
+    {
+      id: "HYD-003",
+      name: "Harmony Care Centre",
+      city: "Hyderabad",
+      type: "Residential",
+      beds: 120,
+      established: 2005,
+      indicators: {
+        residents: 4.5,
+        staffing: 4.8,
+        qualityMeasures: 4.4,
+        compliance: 4.9,
+        safetyClinical: 4.6,
+        preventiveCare: 4.3,
+        experience: 4.7,
+        equity: 4.2,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is consistently excellent. Satisfaction survey results place this provider in the top quintile nationally.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ This provider demonstrates excellent performance in Staffing Coverage and Resident Experience.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are excellent, reflecting a culture of continuous improvement across all care domains.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance maintained. No outstanding notices. This provider is a model for regional peers.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Safety and Clinical indicators are exemplary. Falls harm rate is significantly below regional benchmark.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive Care screening completion rates are among the highest in the region. All mandatory bundles are on track.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Resident satisfaction is outstanding with very low complaint rates and strong social engagement metrics.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access performance is strong. CALD community access gaps are well-managed.",
+        },
+      },
+    },
+  ],
+  Kolkata: [
+    {
+      id: "KOL-001",
+      name: "Eastern Life Care",
+      city: "Kolkata",
+      type: "Residential",
+      beds: 80,
+      established: 2001,
+      indicators: {
+        residents: 3.5,
+        staffing: 3.2,
+        qualityMeasures: 3.4,
+        compliance: 3.8,
+        safetyClinical: 3.3,
+        preventiveCare: 1.6,
+        experience: 3.6,
+        equity: 3.1,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is marginally acceptable. Survey completion rates are low, limiting data reliability.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing ratios are below regional average. Vacancy rates are elevated across clinical and support roles.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures performance is borderline. Structured improvement planning is recommended.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance is within minimum thresholds. One outstanding action item from last audit cycle.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Medication-related risk indicators are above acceptable threshold for this provider. Pharmacist review is overdue.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ This provider has critically low Preventive Screening completion compared with national average. Malnutrition and cognitive assessments are significantly overdue.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience indicators are below average. Complaint resolution time exceeds the national benchmark.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity access is marginally adequate. CALD community representation gaps have been identified.",
+        },
+      },
+    },
+    {
+      id: "KOL-002",
+      name: "Bengal Senior Living",
+      city: "Kolkata",
+      type: "Residential",
+      beds: 60,
+      established: 1998,
+      indicators: {
+        residents: 4.1,
+        staffing: 4.9,
+        qualityMeasures: 4.0,
+        compliance: 4.3,
+        safetyClinical: 3.9,
+        preventiveCare: 3.8,
+        experience: 4.2,
+        equity: 3.7,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "✅ Resident Experience is strong, reflecting consistent quality care delivery and responsive management.",
+        },
+        staffing: {
+          trend: "improving",
+          insight:
+            "✅ This provider demonstrates excellent performance in Staffing Coverage. Staff retention rates are the highest in the region and serve as a benchmark.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "✅ Quality Measures are performing well with consistent results over the last four quarters.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance standards are well met. All mandatory reporting is submitted on time.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "ℹ Safety and Clinical performance is within acceptable range. Falls prevention protocols are in place.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "ℹ Preventive Care completion is improving. Screening bundles are being progressively completed.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "✅ Experience indicators are above regional average. Resident feedback is consistently positive.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is ongoing.",
+        },
+      },
+    },
+  ],
+  Delhi: [
+    {
+      id: "DEL-001",
+      name: "Capital Elder Home",
+      city: "Delhi",
+      type: "Residential",
+      beds: 150,
+      established: 2006,
+      indicators: {
+        residents: 4.5,
+        staffing: 4.6,
+        qualityMeasures: 4.4,
+        compliance: 4.7,
+        safetyClinical: 4.5,
+        preventiveCare: 4.4,
+        experience: 4.6,
+        equity: 4.3,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is consistently excellent, placing this provider in the top quintile nationally. Satisfaction scores have improved for three consecutive quarters.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing performance is outstanding. All positions are filled with qualified staff and retention is above 90%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures demonstrate a strong continuous improvement culture. Peer review outcomes are consistently positive.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance with all ACQSC standards. No outstanding notices or conditions. A model for regional peers.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Safety and Clinical performance is excellent. Falls harm rate and medication-related incidents are well below national average.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "✅ Preventive Care completion rates are high across all mandatory screening bundles. Post-discharge protocols are consistently met.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Experience indicators are outstanding. Complaint rates are the lowest in the region with rapid resolution times.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access performance is strong. CALD community access gaps are minimal and monitored proactively.",
+        },
+      },
+    },
+    {
+      id: "DEL-002",
+      name: "Silver Years Residency",
+      city: "Delhi",
+      type: "Residential",
+      beds: 90,
+      established: 2011,
+      indicators: {
+        residents: 3.6,
+        staffing: 3.8,
+        qualityMeasures: 3.5,
+        compliance: 3.7,
+        safetyClinical: 2.2,
+        preventiveCare: 2.8,
+        experience: 3.6,
+        equity: 3.3,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is within acceptable range but below city average. Structured improvement planning is in progress.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "ℹ Staffing is marginally acceptable. Agency staff usage is elevated which may impact care continuity.",
+        },
+        qualityMeasures: {
+          trend: "declining",
+          insight:
+            "ℹ Quality Measures are borderline. Incident trend analysis shows scope for improvement in clinical governance.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets minimum requirements. One condition from the last assessment cycle remains open.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ This provider shows poor performance in Falls Risk Safety indicator due to higher incident rate compared to regional benchmark. A targeted safety improvement plan is required.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive Screening completion is significantly below national average. Falls risk and oral health screening completion are critically low.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience scores are below average. Complaint resolution time has increased and requires management attention.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity access performance is acceptable. Referral-to-placement time is within range but above the regional average.",
+        },
+      },
+    },
+  ],
+  Mumbai: [
+    {
+      id: "MUM-001",
+      name: "Maitri Senior Care",
+      city: "Mumbai",
+      type: "Residential",
+      beds: 110,
+      established: 2009,
+      indicators: {
+        residents: 4.3,
+        staffing: 4.6,
+        qualityMeasures: 4.2,
+        compliance: 4.7,
+        safetyClinical: 4.4,
+        preventiveCare: 4.1,
+        experience: 4.5,
+        equity: 4.0,
+      },
+    },
+    {
+      id: "MUM-002",
+      name: "Vanaprastha Mumbai",
+      city: "Mumbai",
+      type: "Residential",
+      beds: 85,
+      established: 2013,
+      indicators: {
+        residents: 3.8,
+        staffing: 4.1,
+        qualityMeasures: 3.9,
+        compliance: 4.4,
+        safetyClinical: 4.0,
+        preventiveCare: 3.7,
+        experience: 4.2,
+        equity: 3.6,
+      },
+    },
+    {
+      id: "MUM-003",
+      name: "SilverBay Care",
+      city: "Mumbai",
+      type: "Home Care",
+      established: 2016,
+      indicators: {
+        residents: 4.5,
+        staffing: 4.7,
+        qualityMeasures: 4.4,
+        compliance: 4.9,
+        safetyClinical: 4.6,
+        preventiveCare: 4.3,
+        experience: 4.7,
+        equity: 4.2,
+      },
+    },
+    {
+      id: "MUM-004",
+      name: "Anand Ashram Mumbai",
+      city: "Mumbai",
+      type: "Residential",
+      beds: 68,
+      established: 2010,
+      indicators: {
+        residents: 4.0,
+        staffing: 4.3,
+        qualityMeasures: 4.1,
+        compliance: 4.6,
+        safetyClinical: 4.2,
+        preventiveCare: 3.9,
+        experience: 4.3,
+        equity: 3.8,
+      },
+    },
+  ],
+  Chennai: [
+    {
+      id: "CHE-001",
+      name: "VelaCare Senior Services",
+      city: "Chennai",
+      type: "Residential",
+      beds: 100,
+      established: 2007,
+      indicators: {
+        residents: 4.2,
+        staffing: 4.5,
+        qualityMeasures: 4.0,
+        compliance: 4.8,
+        safetyClinical: 4.3,
+        preventiveCare: 4.1,
+        experience: 4.6,
+        equity: 3.9,
+      },
+    },
+    {
+      id: "CHE-002",
+      name: "Thanga Thozhil Home",
+      city: "Chennai",
+      type: "Residential",
+      beds: 75,
+      established: 2004,
+      indicators: {
+        residents: 3.9,
+        staffing: 4.2,
+        qualityMeasures: 3.8,
+        compliance: 4.5,
+        safetyClinical: 4.0,
+        preventiveCare: 3.8,
+        experience: 4.3,
+        equity: 3.6,
+      },
+    },
+    {
+      id: "CHE-003",
+      name: "Karunalaya Elder Care",
+      city: "Chennai",
+      type: "Home Care",
+      established: 2018,
+      indicators: {
+        residents: 4.4,
+        staffing: 4.7,
+        qualityMeasures: 4.3,
+        compliance: 4.8,
+        safetyClinical: 4.5,
+        preventiveCare: 4.2,
+        experience: 4.6,
+        equity: 4.1,
+      },
+    },
+    {
+      id: "CHE-004",
+      name: "Aarokya Seniors",
+      city: "Chennai",
+      type: "Day Care",
+      established: 2021,
+      indicators: {
+        residents: 3.6,
+        staffing: 3.9,
+        qualityMeasures: 3.7,
+        compliance: 4.2,
+        safetyClinical: 3.8,
+        preventiveCare: 3.5,
+        experience: 4.0,
+        equity: 3.3,
+      },
+    },
+  ],
+  Bengaluru: [
+    {
+      id: "BLR-001",
+      name: "Nandanam Senior Living",
+      city: "Bengaluru",
+      type: "Residential",
+      beds: 130,
+      established: 2006,
+      indicators: {
+        residents: 4.5,
+        staffing: 4.8,
+        qualityMeasures: 4.4,
+        compliance: 4.9,
+        safetyClinical: 4.6,
+        preventiveCare: 4.3,
+        experience: 4.7,
+        equity: 4.2,
+      },
+    },
+    {
+      id: "BLR-002",
+      name: "Sparsh Care Bengaluru",
+      city: "Bengaluru",
+      type: "Home Care",
+      established: 2017,
+      indicators: {
+        residents: 4.1,
+        staffing: 4.4,
+        qualityMeasures: 4.0,
+        compliance: 4.6,
+        safetyClinical: 4.2,
+        preventiveCare: 3.9,
+        experience: 4.3,
+        equity: 3.8,
+      },
+    },
+    {
+      id: "BLR-003",
+      name: "Vatsalya Elder Home",
+      city: "Bengaluru",
+      type: "Residential",
+      beds: 88,
+      established: 2012,
+      indicators: {
+        residents: 3.8,
+        staffing: 4.1,
+        qualityMeasures: 3.9,
+        compliance: 4.4,
+        safetyClinical: 4.0,
+        preventiveCare: 3.7,
+        experience: 4.2,
+        equity: 3.6,
+      },
+    },
+    {
+      id: "BLR-004",
+      name: "Sukhayam Senior Care",
+      city: "Bengaluru",
+      type: "Residential",
+      beds: 105,
+      established: 2009,
+      indicators: {
+        residents: 4.3,
+        staffing: 4.6,
+        qualityMeasures: 4.2,
+        compliance: 4.7,
+        safetyClinical: 4.4,
+        preventiveCare: 4.1,
+        experience: 4.5,
+        equity: 4.0,
+      },
+    },
+  ],
+  Pune: [
+    {
+      id: "PUN-001",
+      name: "Shantivan Senior Care",
+      city: "Pune",
+      type: "Residential",
+      beds: 92,
+      established: 2010,
+      indicators: {
+        residents: 4.0,
+        staffing: 4.3,
+        qualityMeasures: 4.1,
+        compliance: 4.6,
+        safetyClinical: 4.2,
+        preventiveCare: 4.0,
+        experience: 4.4,
+        equity: 3.8,
+      },
+    },
+    {
+      id: "PUN-002",
+      name: "Prayag Elder Services",
+      city: "Pune",
+      type: "Home Care",
+      established: 2019,
+      indicators: {
+        residents: 3.7,
+        staffing: 4.0,
+        qualityMeasures: 3.8,
+        compliance: 4.3,
+        safetyClinical: 3.9,
+        preventiveCare: 3.6,
+        experience: 4.1,
+        equity: 3.4,
+      },
+    },
+    {
+      id: "PUN-003",
+      name: "Arjuna Senior Living",
+      city: "Pune",
+      type: "Residential",
+      beds: 115,
+      established: 2007,
+      indicators: {
+        residents: 4.4,
+        staffing: 4.7,
+        qualityMeasures: 4.3,
+        compliance: 4.8,
+        safetyClinical: 4.5,
+        preventiveCare: 4.2,
+        experience: 4.6,
+        equity: 4.1,
+      },
+    },
+    {
+      id: "PUN-004",
+      name: "Sahyadri Care Home",
+      city: "Pune",
+      type: "Residential",
+      beds: 70,
+      established: 2015,
+      indicators: {
+        residents: 3.5,
+        staffing: 3.8,
+        qualityMeasures: 3.6,
+        compliance: 4.0,
+        safetyClinical: 3.7,
+        preventiveCare: 3.4,
+        experience: 3.9,
+        equity: 3.2,
+      },
+    },
+  ],
+  Ahmedabad: [
+    {
+      id: "AMD-001",
+      name: "Shree Senior Seva",
+      city: "Ahmedabad",
+      type: "Residential",
+      beds: 82,
+      established: 2008,
+      indicators: {
+        residents: 4.2,
+        staffing: 4.5,
+        qualityMeasures: 4.0,
+        compliance: 4.8,
+        safetyClinical: 4.3,
+        preventiveCare: 4.1,
+        experience: 4.6,
+        equity: 3.9,
+      },
+    },
+    {
+      id: "AMD-002",
+      name: "Amrut Varsham",
+      city: "Ahmedabad",
+      type: "Residential",
+      beds: 65,
+      established: 2003,
+      indicators: {
+        residents: 3.9,
+        staffing: 4.2,
+        qualityMeasures: 3.8,
+        compliance: 4.5,
+        safetyClinical: 4.0,
+        preventiveCare: 3.7,
+        experience: 4.2,
+        equity: 3.5,
+      },
+    },
+    {
+      id: "AMD-003",
+      name: "Vridh Aashray",
+      city: "Ahmedabad",
+      type: "Home Care",
+      established: 2016,
+      indicators: {
+        residents: 4.4,
+        staffing: 4.7,
+        qualityMeasures: 4.3,
+        compliance: 4.8,
+        safetyClinical: 4.5,
+        preventiveCare: 4.2,
+        experience: 4.6,
+        equity: 4.1,
+      },
+    },
+    {
+      id: "AMD-004",
+      name: "Kalyaan Senior Care",
+      city: "Ahmedabad",
+      type: "Day Care",
+      established: 2020,
+      indicators: {
+        residents: 3.6,
+        staffing: 3.9,
+        qualityMeasures: 3.7,
+        compliance: 4.2,
+        safetyClinical: 3.8,
+        preventiveCare: 3.5,
+        experience: 4.0,
+        equity: 3.3,
+      },
+    },
+  ],
+};
+
+export const CITY_LIST = Object.keys(CITY_PROVIDERS);
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 export const RISK_CRITERIA_LABELS: Record<string, string> = {
   recent_hospital_discharge: "Recent Hospital Discharge",
   polypharmacy_80plus: "Age ≥80 + Polypharmacy",
