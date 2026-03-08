@@ -613,240 +613,610 @@ export const REGIONAL_DATA: Record<
   },
 };
 
-export const MOCK_SCORECARDS = (providerId: string) =>
-  [
-    {
-      quarter: "Q1-2025",
-      overallScore: 72.4,
-      safetyScore: 74.2,
-      preventiveScore: 70.1,
-      experienceScore: 75.8,
-      equityScore: 68.2,
-      qualityScore: 78.4,
-      staffingScore: 71.2,
-      complianceScore: 80.6,
-      quintileRank: 3,
-    },
-    {
-      quarter: "Q2-2025",
-      overallScore: 74.8,
-      safetyScore: 76.4,
-      preventiveScore: 72.8,
-      experienceScore: 77.1,
-      equityScore: 70.4,
-      qualityScore: 80.1,
-      staffingScore: 73.8,
-      complianceScore: 82.4,
-      quintileRank: 2,
-    },
-    {
-      quarter: "Q3-2025",
-      overallScore: 76.2,
-      safetyScore: 78.1,
-      preventiveScore: 74.4,
-      experienceScore: 78.4,
-      equityScore: 72.8,
-      qualityScore: 81.8,
-      staffingScore: 75.9,
-      complianceScore: 83.8,
-      quintileRank: 2,
-    },
-    {
-      quarter: "Q4-2025",
-      overallScore: 78.1,
-      safetyScore: 80.2,
-      preventiveScore: 76.8,
-      experienceScore: 80.1,
-      equityScore: 74.2,
-      qualityScore: 82.1,
-      staffingScore: 77.4,
-      complianceScore: 85.0,
-      quintileRank: 2,
-    },
-  ].map((s, i) => ({ ...s, id: `SC-${providerId}-${i}`, providerId }));
+export const MOCK_SCORECARDS = (providerId: string) => {
+  const d = getProviderDomainStarScores(providerId);
+  const latestOverall = domainScoresToOverallPercent(d);
+  const q = overallStarsToQuintile(latestOverall);
 
-export const MOCK_INDICATORS = (providerId: string) => [
-  {
-    id: `IND-${providerId}-1`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Safety",
-    indicatorCode: "SAF-001",
-    indicatorName: "Falls with Harm Rate",
-    rate: 4.2,
-    nationalBenchmark: 5.1,
-    quintileRank: 2,
-    trend: "improving",
+  // Build 4 quarters with a slight regression for earlier quarters (each step back ~3pts)
+  const quarters = ["Q1-2025", "Q2-2025", "Q3-2025", "Q4-2025"];
+  return quarters.map((quarter, i) => {
+    const step = (3 - i) * 3; // Q4 = 0, Q3 = 3, Q2 = 6, Q1 = 9 pts lower
+    const clamp = (v: number) =>
+      Math.min(95, Math.max(10, Math.round(v - step)));
+    const safety = clamp(starsToPercent(d.safety));
+    const preventive = clamp(starsToPercent(d.preventive));
+    const quality = clamp(starsToPercent(d.quality));
+    const staffing = clamp(starsToPercent(d.staffing));
+    const compliance = clamp(starsToPercent(d.compliance));
+    const experience = clamp(starsToPercent(d.experience));
+    const equity = clamp(starsToPercent(d.safety)); // proxy equity from safety domain
+    const overallScore = clamp(latestOverall);
+    // Quintile improves toward Q4 for most providers
+    const quintileRank = Math.min(5, Math.max(1, q + (3 - i)));
+    return {
+      quarter,
+      overallScore,
+      safetyScore: safety,
+      preventiveScore: preventive,
+      experienceScore: experience,
+      equityScore: equity,
+      qualityScore: quality,
+      staffingScore: staffing,
+      complianceScore: compliance,
+      quintileRank,
+      id: `SC-${providerId}-${i}`,
+      providerId,
+    };
+  });
+};
+
+// Per-provider indicator profiles keyed by numeric seed (provider suffix)
+type ProviderProfile = {
+  safetyQ: number;
+  safetyTrend: "improving" | "stable" | "declining";
+  preventiveQ: number;
+  preventiveTrend: "improving" | "stable" | "declining";
+  experienceQ: number;
+  experienceTrend: "improving" | "stable" | "declining";
+  equityQ: number;
+  equityTrend: "improving" | "stable" | "declining";
+  qualityQ: number;
+  qualityTrend: "improving" | "stable" | "declining";
+  staffingQ: number;
+  staffingTrend: "improving" | "stable" | "declining";
+  complianceQ: number;
+  complianceTrend: "improving" | "stable" | "declining";
+};
+
+const PROVIDER_PROFILES: Record<number, ProviderProfile> = {
+  // PROV-001 Sunridge: Strong safety, weak preventive
+  1: {
+    safetyQ: 2,
+    safetyTrend: "improving",
+    preventiveQ: 4,
+    preventiveTrend: "stable",
+    experienceQ: 2,
+    experienceTrend: "stable",
+    equityQ: 2,
+    equityTrend: "improving",
+    qualityQ: 3,
+    qualityTrend: "stable",
+    staffingQ: 2,
+    staffingTrend: "stable",
+    complianceQ: 2,
+    complianceTrend: "improving",
   },
-  {
-    id: `IND-${providerId}-2`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Safety",
-    indicatorCode: "SAF-002",
-    indicatorName: "Medication-Related Harm",
-    rate: 2.8,
-    nationalBenchmark: 3.2,
-    quintileRank: 2,
-    trend: "stable",
+  // PROV-002 Bayside: Weak safety, excellent staffing
+  2: {
+    safetyQ: 4,
+    safetyTrend: "declining",
+    preventiveQ: 3,
+    preventiveTrend: "stable",
+    experienceQ: 3,
+    experienceTrend: "stable",
+    equityQ: 3,
+    equityTrend: "stable",
+    qualityQ: 3,
+    qualityTrend: "stable",
+    staffingQ: 1,
+    staffingTrend: "improving",
+    complianceQ: 2,
+    complianceTrend: "stable",
   },
-  {
-    id: `IND-${providerId}-3`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Safety",
-    indicatorCode: "SAF-003",
-    indicatorName: "High-Risk Medication Prevalence",
-    rate: 18.4,
-    nationalBenchmark: 21.2,
-    quintileRank: 2,
-    trend: "improving",
+  // PROV-003 Central QLD: Poor performer across the board
+  3: {
+    safetyQ: 4,
+    safetyTrend: "declining",
+    preventiveQ: 5,
+    preventiveTrend: "declining",
+    experienceQ: 4,
+    experienceTrend: "declining",
+    equityQ: 4,
+    equityTrend: "stable",
+    qualityQ: 4,
+    qualityTrend: "declining",
+    staffingQ: 4,
+    staffingTrend: "declining",
+    complianceQ: 5,
+    complianceTrend: "declining",
   },
-  {
-    id: `IND-${providerId}-4`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Safety",
-    indicatorCode: "SAF-004",
-    indicatorName: "Polypharmacy ≥10 Medications",
-    rate: 12.1,
-    nationalBenchmark: 14.8,
-    quintileRank: 2,
-    trend: "stable",
+  // PROV-004 Adelaide: Balanced average performer
+  4: {
+    safetyQ: 3,
+    safetyTrend: "stable",
+    preventiveQ: 3,
+    preventiveTrend: "stable",
+    experienceQ: 2,
+    experienceTrend: "stable",
+    equityQ: 3,
+    equityTrend: "improving",
+    qualityQ: 3,
+    qualityTrend: "stable",
+    staffingQ: 3,
+    staffingTrend: "stable",
+    complianceQ: 2,
+    complianceTrend: "improving",
   },
-  {
-    id: `IND-${providerId}-5`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Safety",
-    indicatorCode: "SAF-005",
-    indicatorName: "Pressure Injuries Stage 2–4",
-    rate: 1.8,
-    nationalBenchmark: 2.4,
-    quintileRank: 2,
-    trend: "improving",
+  // PROV-005 Perth Metro: Excellent top performer
+  5: {
+    safetyQ: 1,
+    safetyTrend: "improving",
+    preventiveQ: 1,
+    preventiveTrend: "improving",
+    experienceQ: 1,
+    experienceTrend: "improving",
+    equityQ: 2,
+    equityTrend: "improving",
+    qualityQ: 1,
+    qualityTrend: "improving",
+    staffingQ: 1,
+    staffingTrend: "improving",
+    complianceQ: 1,
+    complianceTrend: "improving",
   },
-  {
-    id: `IND-${providerId}-6`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Safety",
-    indicatorCode: "SAF-006",
-    indicatorName: "ED Presentations (30-day)",
-    rate: 8.4,
-    nationalBenchmark: 10.2,
-    quintileRank: 2,
-    trend: "improving",
+  // PROV-006 Hobart: Good safety + strong compliance
+  6: {
+    safetyQ: 2,
+    safetyTrend: "stable",
+    preventiveQ: 3,
+    preventiveTrend: "stable",
+    experienceQ: 3,
+    experienceTrend: "stable",
+    equityQ: 3,
+    equityTrend: "stable",
+    qualityQ: 2,
+    qualityTrend: "stable",
+    staffingQ: 3,
+    staffingTrend: "stable",
+    complianceQ: 1,
+    complianceTrend: "stable",
   },
-  {
-    id: `IND-${providerId}-7`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Preventive",
-    indicatorCode: "PRV-001",
-    indicatorName: "Falls Risk Screening Completion",
-    rate: 94.2,
-    nationalBenchmark: 88.4,
-    quintileRank: 1,
-    trend: "improving",
+  // PROV-007 Darwin: Worst performer, all declining
+  7: {
+    safetyQ: 5,
+    safetyTrend: "declining",
+    preventiveQ: 5,
+    preventiveTrend: "declining",
+    experienceQ: 5,
+    experienceTrend: "declining",
+    equityQ: 5,
+    equityTrend: "declining",
+    qualityQ: 5,
+    qualityTrend: "declining",
+    staffingQ: 5,
+    staffingTrend: "declining",
+    complianceQ: 5,
+    complianceTrend: "declining",
   },
-  {
-    id: `IND-${providerId}-8`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Preventive",
-    indicatorCode: "PRV-002",
-    indicatorName: "Depression Screening (GDS/PHQ-9)",
-    rate: 88.4,
-    nationalBenchmark: 82.1,
-    quintileRank: 1,
-    trend: "improving",
+  // PROV-008 ACT: Solid performer, mostly Q2
+  8: {
+    safetyQ: 2,
+    safetyTrend: "improving",
+    preventiveQ: 2,
+    preventiveTrend: "improving",
+    experienceQ: 2,
+    experienceTrend: "improving",
+    equityQ: 2,
+    equityTrend: "stable",
+    qualityQ: 2,
+    qualityTrend: "improving",
+    staffingQ: 2,
+    staffingTrend: "stable",
+    complianceQ: 2,
+    complianceTrend: "improving",
   },
-  {
-    id: `IND-${providerId}-9`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Preventive",
-    indicatorCode: "PRV-003",
-    indicatorName: "Malnutrition Screening",
-    rate: 91.2,
-    nationalBenchmark: 85.8,
-    quintileRank: 1,
-    trend: "stable",
+  // PROV-009 Hunter Valley: Weak safety + preventive, clinical issues
+  9: {
+    safetyQ: 4,
+    safetyTrend: "stable",
+    preventiveQ: 4,
+    preventiveTrend: "declining",
+    experienceQ: 3,
+    experienceTrend: "stable",
+    equityQ: 3,
+    equityTrend: "stable",
+    qualityQ: 4,
+    qualityTrend: "stable",
+    staffingQ: 3,
+    staffingTrend: "stable",
+    complianceQ: 4,
+    complianceTrend: "declining",
   },
-  {
-    id: `IND-${providerId}-10`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Preventive",
-    indicatorCode: "PRV-004",
-    indicatorName: "Oral Health Assessment",
-    rate: 82.4,
-    nationalBenchmark: 78.4,
-    quintileRank: 2,
-    trend: "improving",
+  // PROV-010 Geelong: Moderate balanced
+  10: {
+    safetyQ: 2,
+    safetyTrend: "stable",
+    preventiveQ: 3,
+    preventiveTrend: "stable",
+    experienceQ: 2,
+    experienceTrend: "improving",
+    equityQ: 2,
+    equityTrend: "stable",
+    qualityQ: 3,
+    qualityTrend: "stable",
+    staffingQ: 2,
+    staffingTrend: "improving",
+    complianceQ: 2,
+    complianceTrend: "stable",
   },
-  {
-    id: `IND-${providerId}-11`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Experience",
-    indicatorCode: "EXP-001",
-    indicatorName: "Complaint Rate",
-    rate: 3.2,
-    nationalBenchmark: 4.8,
-    quintileRank: 1,
-    trend: "improving",
-  },
-  {
-    id: `IND-${providerId}-12`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Experience",
-    indicatorCode: "EXP-002",
-    indicatorName: "Satisfaction Survey Score",
-    rate: 84.8,
-    nationalBenchmark: 80.2,
-    quintileRank: 1,
-    trend: "stable",
-  },
-  {
-    id: `IND-${providerId}-13`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Experience",
-    indicatorCode: "EXP-003",
-    indicatorName: "Social Engagement Rate",
-    rate: 72.4,
-    nationalBenchmark: 68.8,
-    quintileRank: 2,
-    trend: "improving",
-  },
-  {
-    id: `IND-${providerId}-14`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Equity",
-    indicatorCode: "EQT-001",
-    indicatorName: "Referral-to-Placement Time (days)",
-    rate: 18.4,
-    nationalBenchmark: 22.8,
-    quintileRank: 2,
-    trend: "improving",
-  },
-  {
-    id: `IND-${providerId}-15`,
-    providerId,
-    quarter: "Q4-2025",
-    dimension: "Equity",
-    indicatorCode: "EQT-002",
-    indicatorName: "CALD Access Gap",
-    rate: 8.4,
-    nationalBenchmark: 12.2,
-    quintileRank: 2,
-    trend: "stable",
-  },
-];
+};
+
+const DEFAULT_PROFILE: ProviderProfile = {
+  safetyQ: 3,
+  safetyTrend: "stable",
+  preventiveQ: 3,
+  preventiveTrend: "stable",
+  experienceQ: 3,
+  experienceTrend: "stable",
+  equityQ: 3,
+  equityTrend: "stable",
+  qualityQ: 3,
+  qualityTrend: "stable",
+  staffingQ: 3,
+  staffingTrend: "stable",
+  complianceQ: 3,
+  complianceTrend: "stable",
+};
+
+// Inline quintile-to-star converter (avoids circular dep with ratingEngine)
+function qToStars(q: number, trend: string): number {
+  const base = [5, 4, 3, 2, 1][q - 1] ?? 3;
+  const adj = trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
+  return Math.min(5, Math.max(1, base + adj));
+}
+
+// Returns all 6 domain star scores for a given provider
+export function getProviderDomainStarScores(providerId: string): {
+  safety: number;
+  preventive: number;
+  quality: number;
+  staffing: number;
+  compliance: number;
+  experience: number;
+} {
+  const match = providerId.match(/(\d+)$/);
+  const seed = match ? Number.parseInt(match[1], 10) : 0;
+  const p = PROVIDER_PROFILES[seed] ?? DEFAULT_PROFILE;
+  return {
+    safety: qToStars(p.safetyQ, p.safetyTrend),
+    preventive: qToStars(p.preventiveQ, p.preventiveTrend),
+    quality: qToStars(p.qualityQ, p.qualityTrend),
+    staffing: qToStars(p.staffingQ, p.staffingTrend),
+    compliance: qToStars(p.complianceQ, p.complianceTrend),
+    experience: qToStars(p.experienceQ, p.experienceTrend),
+  };
+}
+
+// Convert star score (1-5) to a percentage display value
+function starsToPercent(stars: number): number {
+  return Math.round(stars * 16 + 2);
+}
+
+// Weighted overall score → percentage
+function domainScoresToOverallPercent(domains: {
+  safety: number;
+  preventive: number;
+  quality: number;
+  staffing: number;
+  compliance: number;
+  experience: number;
+}): number {
+  const weighted =
+    domains.safety * 0.3 +
+    domains.preventive * 0.2 +
+    domains.quality * 0.2 +
+    domains.staffing * 0.15 +
+    domains.compliance * 0.1 +
+    domains.experience * 0.05;
+  return Math.round(weighted * 16 + 2);
+}
+
+// Quintile rank from overall star score
+function overallStarsToQuintile(overallPct: number): number {
+  if (overallPct >= 74) return 1;
+  if (overallPct >= 62) return 2;
+  if (overallPct >= 50) return 3;
+  if (overallPct >= 38) return 4;
+  return 5;
+}
+
+// Rate values scaled by quintile: worse quintile → higher adverse rates / lower completion rates
+function safetyRate(
+  base: number,
+  q: number,
+  scale: "lower_is_better" | "higher_is_better",
+): number {
+  const qFactor: Record<number, number> = {
+    1: 0.65,
+    2: 0.82,
+    3: 1.0,
+    4: 1.22,
+    5: 1.55,
+  };
+  const f = qFactor[q] ?? 1.0;
+  return scale === "lower_is_better"
+    ? Number.parseFloat((base * f).toFixed(1))
+    : Number.parseFloat((base / f).toFixed(1));
+}
+
+export const MOCK_INDICATORS = (providerId: string) => {
+  const match = providerId.match(/(\d+)$/);
+  const seed = match ? Number.parseInt(match[1], 10) : 0;
+  const profile = PROVIDER_PROFILES[seed] ?? DEFAULT_PROFILE;
+
+  const {
+    safetyQ,
+    safetyTrend,
+    preventiveQ,
+    preventiveTrend,
+    experienceQ,
+    experienceTrend,
+    equityQ,
+    equityTrend,
+    qualityQ,
+    qualityTrend,
+    staffingQ,
+    staffingTrend,
+    complianceQ,
+    complianceTrend,
+  } = profile;
+
+  return [
+    {
+      id: `IND-${providerId}-1`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-001",
+      indicatorName: "Falls with Harm Rate",
+      rate: safetyRate(4.2, safetyQ, "lower_is_better"),
+      nationalBenchmark: 5.1,
+      quintileRank: safetyQ,
+      trend: safetyTrend,
+    },
+    {
+      id: `IND-${providerId}-2`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-002",
+      indicatorName: "Medication-Related Harm",
+      rate: safetyRate(2.8, safetyQ, "lower_is_better"),
+      nationalBenchmark: 3.2,
+      quintileRank: safetyQ,
+      trend: safetyTrend,
+    },
+    {
+      id: `IND-${providerId}-3`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-003",
+      indicatorName: "High-Risk Medication Prevalence",
+      rate: safetyRate(18.4, safetyQ, "lower_is_better"),
+      nationalBenchmark: 21.2,
+      quintileRank: safetyQ,
+      trend: safetyTrend,
+    },
+    {
+      id: `IND-${providerId}-4`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-004",
+      indicatorName: "Polypharmacy ≥10 Medications",
+      rate: safetyRate(12.1, safetyQ, "lower_is_better"),
+      nationalBenchmark: 14.8,
+      quintileRank: safetyQ,
+      trend: safetyTrend,
+    },
+    {
+      id: `IND-${providerId}-5`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-005",
+      indicatorName: "Pressure Injuries Stage 2–4",
+      rate: safetyRate(1.8, safetyQ, "lower_is_better"),
+      nationalBenchmark: 2.4,
+      quintileRank: safetyQ,
+      trend: safetyTrend,
+    },
+    {
+      id: `IND-${providerId}-6`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-006",
+      indicatorName: "ED Presentations (30-day)",
+      rate: safetyRate(8.4, safetyQ, "lower_is_better"),
+      nationalBenchmark: 10.2,
+      quintileRank: safetyQ,
+      trend: safetyTrend,
+    },
+    {
+      id: `IND-${providerId}-7`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-001",
+      indicatorName: "Falls Risk Screening Completion",
+      rate: safetyRate(94.2, preventiveQ, "higher_is_better"),
+      nationalBenchmark: 88.4,
+      quintileRank: preventiveQ,
+      trend: preventiveTrend,
+    },
+    {
+      id: `IND-${providerId}-8`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-002",
+      indicatorName: "Depression Screening (GDS/PHQ-9)",
+      rate: safetyRate(88.4, preventiveQ, "higher_is_better"),
+      nationalBenchmark: 82.1,
+      quintileRank: preventiveQ,
+      trend: preventiveTrend,
+    },
+    {
+      id: `IND-${providerId}-9`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-003",
+      indicatorName: "Malnutrition Screening",
+      rate: safetyRate(91.2, preventiveQ, "higher_is_better"),
+      nationalBenchmark: 85.8,
+      quintileRank: preventiveQ,
+      trend: preventiveTrend,
+    },
+    {
+      id: `IND-${providerId}-10`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-004",
+      indicatorName: "Oral Health Assessment",
+      rate: safetyRate(82.4, preventiveQ, "higher_is_better"),
+      nationalBenchmark: 78.4,
+      quintileRank: preventiveQ,
+      trend: preventiveTrend,
+    },
+    {
+      id: `IND-${providerId}-11`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Experience",
+      indicatorCode: "EXP-001",
+      indicatorName: "Complaint Rate",
+      rate: safetyRate(3.2, experienceQ, "lower_is_better"),
+      nationalBenchmark: 4.8,
+      quintileRank: experienceQ,
+      trend: experienceTrend,
+    },
+    {
+      id: `IND-${providerId}-12`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Experience",
+      indicatorCode: "EXP-002",
+      indicatorName: "Satisfaction Survey Score",
+      rate: safetyRate(84.8, experienceQ, "higher_is_better"),
+      nationalBenchmark: 80.2,
+      quintileRank: experienceQ,
+      trend: experienceTrend,
+    },
+    {
+      id: `IND-${providerId}-13`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Experience",
+      indicatorCode: "EXP-003",
+      indicatorName: "Social Engagement Rate",
+      rate: safetyRate(72.4, experienceQ, "higher_is_better"),
+      nationalBenchmark: 68.8,
+      quintileRank: experienceQ,
+      trend: experienceTrend,
+    },
+    {
+      id: `IND-${providerId}-14`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Equity",
+      indicatorCode: "EQT-001",
+      indicatorName: "Referral-to-Placement Time (days)",
+      rate: safetyRate(18.4, equityQ, "lower_is_better"),
+      nationalBenchmark: 22.8,
+      quintileRank: equityQ,
+      trend: equityTrend,
+    },
+    {
+      id: `IND-${providerId}-15`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Equity",
+      indicatorCode: "EQT-002",
+      indicatorName: "CALD Access Gap",
+      rate: safetyRate(8.4, equityQ, "lower_is_better"),
+      nationalBenchmark: 12.2,
+      quintileRank: equityQ,
+      trend: equityTrend,
+    },
+    {
+      id: `IND-${providerId}-16`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Quality",
+      indicatorCode: "QM-001",
+      indicatorName: "Satisfaction Survey Score",
+      rate: safetyRate(84.8, qualityQ, "higher_is_better"),
+      nationalBenchmark: 80.2,
+      quintileRank: qualityQ,
+      trend: qualityTrend,
+    },
+    {
+      id: `IND-${providerId}-17`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Quality",
+      indicatorCode: "QM-002",
+      indicatorName: "Clinical Outcome Score",
+      rate: safetyRate(76.4, qualityQ, "higher_is_better"),
+      nationalBenchmark: 74.2,
+      quintileRank: qualityQ,
+      trend: qualityTrend,
+    },
+    {
+      id: `IND-${providerId}-18`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Staffing",
+      indicatorCode: "STAFF-001",
+      indicatorName: "Registered Nurse Hours per Resident",
+      rate: safetyRate(4.8, staffingQ, "higher_is_better"),
+      nationalBenchmark: 4.1,
+      quintileRank: staffingQ,
+      trend: staffingTrend,
+    },
+    {
+      id: `IND-${providerId}-19`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Staffing",
+      indicatorCode: "STAFF-002",
+      indicatorName: "Staff Retention Rate",
+      rate: safetyRate(88.2, staffingQ, "higher_is_better"),
+      nationalBenchmark: 82.4,
+      quintileRank: staffingQ,
+      trend: staffingTrend,
+    },
+    {
+      id: `IND-${providerId}-20`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Compliance",
+      indicatorCode: "COMP-001",
+      indicatorName: "Accreditation Compliance Score",
+      rate: safetyRate(92.4, complianceQ, "higher_is_better"),
+      nationalBenchmark: 88.0,
+      quintileRank: complianceQ,
+      trend: complianceTrend,
+    },
+    {
+      id: `IND-${providerId}-21`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Compliance",
+      indicatorCode: "COMP-002",
+      indicatorName: "Mandatory Reporting Completeness",
+      rate: safetyRate(96.8, complianceQ, "higher_is_better"),
+      nationalBenchmark: 92.0,
+      quintileRank: complianceQ,
+      trend: complianceTrend,
+    },
+  ];
+};
 
 export const PAY_FOR_IMPROVEMENT_DATA = [
   {
@@ -1380,142 +1750,25 @@ export interface CityProvider {
 }
 
 export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
-  Hyderabad: [
+  // ── Sydney: 3 providers — HIGH / LOW / HIGH (5★, 1★, 5★) ──────────────────
+  Sydney: [
     {
-      id: "HYD-001",
-      name: "Green Valley Aged Care",
-      city: "Hyderabad",
+      // HIGH performer: strong across all domains — Overall ~5★
+      id: "SYD-001",
+      name: "Bondi Aged Care",
+      city: "Sydney",
       type: "Residential",
       beds: 95,
       established: 2008,
       indicators: {
-        residents: 4.2,
-        staffing: 4.5,
-        qualityMeasures: 4.0,
-        compliance: 4.8,
-        safetyClinical: 4.3,
-        preventiveCare: 4.1,
-        experience: 4.6,
-        equity: 3.9,
-      },
-      indicatorMeta: {
-        residents: {
-          trend: "improving",
-          insight:
-            "✅ This provider demonstrates strong performance in Resident Experience, above regional benchmark.",
-        },
-        staffing: {
-          trend: "stable",
-          insight:
-            "✅ Staffing levels are consistent and above acceptable threshold. Coverage ratios meet national standards.",
-        },
-        qualityMeasures: {
-          trend: "improving",
-          insight:
-            "✅ Quality Measures are trending positively with measurable improvement over the last two quarters.",
-        },
-        compliance: {
-          trend: "stable",
-          insight:
-            "✅ Compliance score is excellent. All mandatory standards met with no outstanding notices.",
-        },
-        safetyClinical: {
-          trend: "improving",
-          insight:
-            "✅ This provider demonstrates strong performance in this area, above regional benchmark.",
-        },
-        preventiveCare: {
-          trend: "stable",
-          insight:
-            "ℹ Performance is within acceptable range. Minor improvement opportunities identified in cognitive assessment completion.",
-        },
-        experience: {
-          trend: "improving",
-          insight:
-            "✅ Resident satisfaction surveys indicate consistently high experience scores across all care domains.",
-        },
-        equity: {
-          trend: "stable",
-          insight:
-            "ℹ Equity access indicators are within range. CALD access gap is being monitored.",
-        },
-      },
-    },
-    {
-      id: "HYD-002",
-      name: "Sunrise Elder Support",
-      city: "Hyderabad",
-      type: "Home Care",
-      established: 2014,
-      indicators: {
-        residents: 3.4,
-        staffing: 2.5,
-        qualityMeasures: 3.2,
-        compliance: 3.6,
-        safetyClinical: 1.8,
-        preventiveCare: 2.1,
-        experience: 3.3,
-        equity: 3.0,
-      },
-      indicatorMeta: {
-        residents: {
-          trend: "declining",
-          insight:
-            "ℹ Resident Experience is below average. Complaint resolution times have increased in recent quarters.",
-        },
-        staffing: {
-          trend: "declining",
-          insight:
-            "⚠ Staffing levels are below minimum thresholds. High turnover and unfilled positions are impacting care delivery.",
-        },
-        qualityMeasures: {
-          trend: "stable",
-          insight:
-            "ℹ Quality Measures are marginally acceptable but trending toward concern. Improvement plan recommended.",
-        },
-        compliance: {
-          trend: "stable",
-          insight:
-            "ℹ Compliance is within acceptable range but below regional peers. One open notice requires resolution.",
-        },
-        safetyClinical: {
-          trend: "declining",
-          insight:
-            "⚠ This provider shows poor performance in Falls Risk Safety indicator due to higher incident rate compared to regional benchmark. Immediate review is recommended.",
-        },
-        preventiveCare: {
-          trend: "declining",
-          insight:
-            "⚠ This provider has low Preventive Screening completion compared with national average. Falls risk and depression screening completion rates are critically low.",
-        },
-        experience: {
-          trend: "declining",
-          insight:
-            "⚠ Resident experience scores are below acceptable range. Complaint rates are elevated compared to city average.",
-        },
-        equity: {
-          trend: "stable",
-          insight:
-            "ℹ Equity access performance is marginally acceptable. Referral-to-placement times require attention.",
-        },
-      },
-    },
-    {
-      id: "HYD-003",
-      name: "Harmony Care Centre",
-      city: "Hyderabad",
-      type: "Residential",
-      beds: 120,
-      established: 2005,
-      indicators: {
-        residents: 4.5,
-        staffing: 4.8,
-        qualityMeasures: 4.4,
+        residents: 4.7,
+        staffing: 4.6,
+        qualityMeasures: 4.8,
         compliance: 4.9,
-        safetyClinical: 4.6,
-        preventiveCare: 4.3,
-        experience: 4.7,
-        equity: 4.2,
+        safetyClinical: 4.8,
+        preventiveCare: 4.7,
+        experience: 4.8,
+        equity: 4.5,
       },
       indicatorMeta: {
         residents: {
@@ -1526,64 +1779,188 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
         staffing: {
           trend: "stable",
           insight:
-            "✅ This provider demonstrates excellent performance in Staffing Coverage and Resident Experience.",
+            "✅ Staffing levels are outstanding. All positions are filled with qualified staff and retention is above 92%.",
         },
         qualityMeasures: {
           trend: "improving",
           insight:
-            "✅ Quality Measures are excellent, reflecting a culture of continuous improvement across all care domains.",
+            "✅ Quality Measures are exemplary, reflecting a culture of continuous improvement across all care domains.",
         },
         compliance: {
           trend: "stable",
           insight:
-            "✅ Full compliance maintained. No outstanding notices. This provider is a model for regional peers.",
+            "✅ Full compliance with all ACQSC standards. No outstanding notices or conditions.",
         },
         safetyClinical: {
           trend: "improving",
           insight:
-            "✅ Safety and Clinical indicators are exemplary. Falls harm rate is significantly below regional benchmark.",
+            "✅ Falls harm rate is significantly below regional benchmark. Medication incidents are rare.",
         },
         preventiveCare: {
           trend: "improving",
           insight:
-            "✅ Preventive Care screening completion rates are among the highest in the region. All mandatory bundles are on track.",
+            "✅ Preventive screening completion rates are among the highest in the region. All mandatory bundles are on track.",
         },
         experience: {
           trend: "improving",
           insight:
-            "✅ Resident satisfaction is outstanding with very low complaint rates and strong social engagement metrics.",
+            "✅ Resident satisfaction is outstanding with very low complaint rates and strong social engagement.",
         },
         equity: {
           trend: "stable",
           insight:
-            "✅ Equity access performance is strong. CALD community access gaps are well-managed.",
+            "✅ Equity access performance is strong. First Nations and CALD community access gaps are well-managed.",
+        },
+      },
+    },
+    {
+      // LOW performer: critically weak safety, poor staffing, poor preventive — Overall ~1★
+      id: "SYD-002",
+      name: "Northern Beaches Elder Support",
+      city: "Sydney",
+      type: "Home Care",
+      established: 2014,
+      indicators: {
+        residents: 1.8,
+        staffing: 1.4,
+        qualityMeasures: 1.6,
+        compliance: 2.0,
+        safetyClinical: 1.2,
+        preventiveCare: 1.3,
+        experience: 1.7,
+        equity: 2.1,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "declining",
+          insight:
+            "⚠ Resident Experience is critically below standard. High complaint volumes and unresolved grievances are ongoing.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing levels are critically below minimum thresholds. High turnover and unfilled clinical positions are severely impacting care delivery.",
+        },
+        qualityMeasures: {
+          trend: "declining",
+          insight:
+            "⚠ Quality Measures are significantly below acceptable range. Immediate improvement plan is required.",
+        },
+        compliance: {
+          trend: "declining",
+          insight:
+            "⚠ Multiple compliance notices outstanding. Provider is subject to enhanced monitoring by the regulator.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Falls with harm rate is 3× the national benchmark. Medication-related incidents are critically above threshold. Urgent intervention required.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive screening completion is critically low at under 35% nationally. Falls risk, depression, and malnutrition screenings are all overdue.",
+        },
+        experience: {
+          trend: "declining",
+          insight:
+            "⚠ Resident experience scores are in the bottom quintile nationally. Complaint rates are 4× the regional average.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "⚠ Equity access performance is poor. Referral-to-placement time significantly exceeds the national benchmark.",
+        },
+      },
+    },
+    {
+      // HIGH performer: 5★ — strong safety, excellent compliance — Overall ~5★
+      id: "SYD-003",
+      name: "Harbour View Care Centre",
+      city: "Sydney",
+      type: "Residential",
+      beds: 120,
+      established: 2005,
+      indicators: {
+        residents: 4.8,
+        staffing: 4.9,
+        qualityMeasures: 4.7,
+        compliance: 5.0,
+        safetyClinical: 4.9,
+        preventiveCare: 4.6,
+        experience: 4.8,
+        equity: 4.4,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is exceptional. Satisfaction surveys show 96% positive ratings across all care domains.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing coverage is outstanding. All clinical positions filled; staff retention at 95%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are at the highest level. Continuous improvement processes are embedded in daily care.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance across all ACQSC standards. This provider is a national benchmark for regulatory compliance.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Safety indicators are exemplary. Falls harm rate is the lowest in the region. Zero medication-related serious incidents reported.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive screening completion at 97%. All mandatory bundles completed ahead of schedule.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Resident satisfaction is outstanding. Complaint rate is negligible and all resolved within 24 hours.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access performance is strong. No measurable CALD access gap. Interpreter services fully embedded.",
         },
       },
     },
   ],
-  Kolkata: [
+
+  // ── Melbourne: 2 providers — AVERAGE / HIGH (3★, 4★) ───────────────────────
+  Melbourne: [
     {
-      id: "KOL-001",
-      name: "Eastern Life Care",
-      city: "Kolkata",
+      // AVERAGE performer: mixed — weak preventive, adequate safety — Overall ~3★
+      id: "MEL-001",
+      name: "Yarra Valley Life Care",
+      city: "Melbourne",
       type: "Residential",
       beds: 80,
       established: 2001,
       indicators: {
-        residents: 3.5,
-        staffing: 3.2,
-        qualityMeasures: 3.4,
-        compliance: 3.8,
-        safetyClinical: 3.3,
-        preventiveCare: 1.6,
-        experience: 3.6,
-        equity: 3.1,
+        residents: 3.1,
+        staffing: 2.8,
+        qualityMeasures: 3.3,
+        compliance: 3.5,
+        safetyClinical: 3.2,
+        preventiveCare: 1.9,
+        experience: 3.0,
+        equity: 2.9,
       },
       indicatorMeta: {
         residents: {
           trend: "stable",
           insight:
-            "ℹ Resident Experience is marginally acceptable. Survey completion rates are low, limiting data reliability.",
+            "ℹ Resident Experience is below average. Survey completion rates are low, limiting data reliability.",
         },
         staffing: {
           trend: "declining",
@@ -1608,7 +1985,7 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
         preventiveCare: {
           trend: "declining",
           insight:
-            "⚠ This provider has critically low Preventive Screening completion compared with national average. Malnutrition and cognitive assessments are significantly overdue.",
+            "⚠ Preventive screening completion is critically low. Malnutrition and cognitive assessments are significantly overdue.",
         },
         experience: {
           trend: "stable",
@@ -1618,25 +1995,26 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
         equity: {
           trend: "stable",
           insight:
-            "ℹ Equity access is marginally adequate. CALD community representation gaps have been identified.",
+            "ℹ Equity access is marginal. First Nations and CALD community representation gaps have been identified.",
         },
       },
     },
     {
-      id: "KOL-002",
-      name: "Bengal Senior Living",
-      city: "Kolkata",
+      // HIGH performer: strong staffing, good safety — Overall ~4★
+      id: "MEL-002",
+      name: "Southbank Senior Living",
+      city: "Melbourne",
       type: "Residential",
       beds: 60,
       established: 1998,
       indicators: {
-        residents: 4.1,
-        staffing: 4.9,
-        qualityMeasures: 4.0,
-        compliance: 4.3,
+        residents: 4.2,
+        staffing: 4.8,
+        qualityMeasures: 4.1,
+        compliance: 4.4,
         safetyClinical: 3.9,
         preventiveCare: 3.8,
-        experience: 4.2,
+        experience: 4.3,
         equity: 3.7,
       },
       indicatorMeta: {
@@ -1648,12 +2026,12 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
         staffing: {
           trend: "improving",
           insight:
-            "✅ This provider demonstrates excellent performance in Staffing Coverage. Staff retention rates are the highest in the region and serve as a benchmark.",
+            "✅ Excellent staffing coverage. Staff retention rates are the highest in the region and serve as a regional benchmark.",
         },
         qualityMeasures: {
           trend: "stable",
           insight:
-            "✅ Quality Measures are performing well with consistent results over the last four quarters.",
+            "✅ Quality Measures are performing well with consistent results over four quarters.",
         },
         compliance: {
           trend: "stable",
@@ -1663,12 +2041,12 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
         safetyClinical: {
           trend: "stable",
           insight:
-            "ℹ Safety and Clinical performance is within acceptable range. Falls prevention protocols are in place.",
+            "ℹ Safety performance is within acceptable range. Falls prevention protocols are in place and monitored.",
         },
         preventiveCare: {
           trend: "improving",
           insight:
-            "ℹ Preventive Care completion is improving. Screening bundles are being progressively completed.",
+            "ℹ Preventive Care completion is improving. Screening bundles are being progressively completed across all cohorts.",
         },
         experience: {
           trend: "stable",
@@ -1683,34 +2061,37 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
       },
     },
   ],
-  Delhi: [
+
+  // ── Brisbane: 2 providers — HIGH / LOW-AVERAGE (5★, 2★) ─────────────────────
+  Brisbane: [
     {
-      id: "DEL-001",
-      name: "Capital Elder Home",
-      city: "Delhi",
+      // HIGH performer: top performer across all domains — Overall ~5★
+      id: "BRI-001",
+      name: "Sunshine Coast Elder Home",
+      city: "Brisbane",
       type: "Residential",
       beds: 150,
       established: 2006,
       indicators: {
-        residents: 4.5,
-        staffing: 4.6,
-        qualityMeasures: 4.4,
-        compliance: 4.7,
-        safetyClinical: 4.5,
-        preventiveCare: 4.4,
-        experience: 4.6,
-        equity: 4.3,
+        residents: 4.8,
+        staffing: 4.7,
+        qualityMeasures: 4.6,
+        compliance: 4.9,
+        safetyClinical: 4.8,
+        preventiveCare: 4.7,
+        experience: 4.8,
+        equity: 4.5,
       },
       indicatorMeta: {
         residents: {
           trend: "improving",
           insight:
-            "✅ Resident Experience is consistently excellent, placing this provider in the top quintile nationally. Satisfaction scores have improved for three consecutive quarters.",
+            "✅ Resident Experience is consistently excellent, placing this provider in the top quintile nationally.",
         },
         staffing: {
           trend: "stable",
           insight:
-            "✅ Staffing performance is outstanding. All positions are filled with qualified staff and retention is above 90%.",
+            "✅ Staffing performance is outstanding. All positions filled with qualified staff; retention above 91%.",
         },
         qualityMeasures: {
           trend: "improving",
@@ -1720,457 +2101,1851 @@ export const CITY_PROVIDERS: Record<string, CityProvider[]> = {
         compliance: {
           trend: "stable",
           insight:
-            "✅ Full compliance with all ACQSC standards. No outstanding notices or conditions. A model for regional peers.",
+            "✅ Full compliance with all ACQSC standards. No outstanding notices or conditions.",
         },
         safetyClinical: {
           trend: "improving",
           insight:
-            "✅ Safety and Clinical performance is excellent. Falls harm rate and medication-related incidents are well below national average.",
+            "✅ Safety and Clinical performance is excellent. Falls harm rate and medication incidents well below national average.",
         },
         preventiveCare: {
           trend: "stable",
           insight:
-            "✅ Preventive Care completion rates are high across all mandatory screening bundles. Post-discharge protocols are consistently met.",
+            "✅ Preventive Care completion rates are high across all mandatory screening bundles. Post-discharge protocols consistently met.",
         },
         experience: {
           trend: "improving",
           insight:
-            "✅ Experience indicators are outstanding. Complaint rates are the lowest in the region with rapid resolution times.",
+            "✅ Experience indicators outstanding. Complaint rates are the lowest in the region with rapid resolution.",
         },
         equity: {
           trend: "stable",
           insight:
-            "✅ Equity access performance is strong. CALD community access gaps are minimal and monitored proactively.",
+            "✅ Equity access performance is strong. First Nations and CALD community access gaps are minimal and monitored proactively.",
         },
       },
     },
     {
-      id: "DEL-002",
-      name: "Silver Years Residency",
-      city: "Delhi",
+      // LOW-AVERAGE performer: poor safety, weak preventive — Overall ~2★
+      id: "BRI-002",
+      name: "Gold Coast Residency",
+      city: "Brisbane",
       type: "Residential",
       beds: 90,
       established: 2011,
       indicators: {
-        residents: 3.6,
-        staffing: 3.8,
-        qualityMeasures: 3.5,
-        compliance: 3.7,
-        safetyClinical: 2.2,
+        residents: 2.4,
+        staffing: 2.8,
+        qualityMeasures: 2.2,
+        compliance: 2.5,
+        safetyClinical: 1.8,
+        preventiveCare: 1.9,
+        experience: 2.3,
+        equity: 2.6,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "declining",
+          insight:
+            "⚠ Resident Experience is well below city average. Multiple unresolved complaints are under investigation.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing is critically below acceptable levels. Agency staff usage is at 45%, impacting continuity of care.",
+        },
+        qualityMeasures: {
+          trend: "declining",
+          insight:
+            "⚠ Quality Measures are declining. Incident trend analysis shows worsening clinical governance outcomes.",
+        },
+        compliance: {
+          trend: "declining",
+          insight:
+            "⚠ Compliance is below minimum requirements. Two conditions from the last assessment cycle remain unresolved.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Falls Risk Safety is critically poor. Incident rate is 2.8× the regional benchmark. A targeted safety improvement plan is urgently required.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive Screening completion is significantly below national average. Falls risk and oral health screening are critically low.",
+        },
+        experience: {
+          trend: "declining",
+          insight:
+            "⚠ Experience scores are in the lower quartile. Complaint resolution time has doubled year-on-year.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity access performance is marginal. Referral-to-placement time is above the regional average.",
+        },
+      },
+    },
+  ],
+
+  // ── Perth: 4 providers — HIGH / AVERAGE / HIGH / LOW (5★, 3★, 4★, 2★) ───────
+  Perth: [
+    {
+      // HIGH performer: strong safety + experience — Overall ~5★
+      id: "PER-001",
+      name: "Swan River Senior Care",
+      city: "Perth",
+      type: "Residential",
+      beds: 110,
+      established: 2009,
+      indicators: {
+        residents: 4.6,
+        staffing: 4.8,
+        qualityMeasures: 4.5,
+        compliance: 4.9,
+        safetyClinical: 4.7,
+        preventiveCare: 4.5,
+        experience: 4.7,
+        equity: 4.3,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience scores are at the top quartile nationally. Satisfaction has improved for four consecutive quarters.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing is excellent. All clinical positions filled; RN hours per resident exceed national requirement by 18%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are top-tier. Clinical governance processes are embedded and consistently delivering strong outcomes.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance maintained. No notices or conditions outstanding from regulator.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Falls with harm rate is well below the national benchmark. Medication-related incidents are negligible.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive screening completion at 94%. All mandatory screening bundles completed within required timeframes.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Experience indicators are exceptional. Complaint rate is among the lowest in the state.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access is strong. First Nations and CALD access gap is minimal and proactively managed.",
+        },
+      },
+    },
+    {
+      // AVERAGE performer: mixed indicators — strong staffing, weak safety — Overall ~3★
+      id: "PER-002",
+      name: "Fremantle Aged Services",
+      city: "Perth",
+      type: "Residential",
+      beds: 85,
+      established: 2013,
+      indicators: {
+        residents: 3.2,
+        staffing: 4.1,
+        qualityMeasures: 3.0,
+        compliance: 3.4,
+        safetyClinical: 2.6,
         preventiveCare: 2.8,
-        experience: 3.6,
+        experience: 3.1,
         equity: 3.3,
       },
       indicatorMeta: {
         residents: {
           trend: "stable",
           insight:
-            "ℹ Resident Experience is within acceptable range but below city average. Structured improvement planning is in progress.",
+            "ℹ Resident Experience is below city average. Improvement in complaint handling processes is recommended.",
         },
         staffing: {
-          trend: "stable",
+          trend: "improving",
           insight:
-            "ℹ Staffing is marginally acceptable. Agency staff usage is elevated which may impact care continuity.",
+            "✅ Staffing is a relative strength. RN coverage ratios meet national standards and agency staff reliance has reduced.",
         },
         qualityMeasures: {
-          trend: "declining",
+          trend: "stable",
           insight:
-            "ℹ Quality Measures are borderline. Incident trend analysis shows scope for improvement in clinical governance.",
+            "ℹ Quality Measures are marginally acceptable. Structured improvement planning is in progress.",
         },
         compliance: {
           trend: "stable",
           insight:
-            "ℹ Compliance meets minimum requirements. One condition from the last assessment cycle remains open.",
+            "ℹ Compliance meets minimum requirements. One outstanding action item from the last audit cycle.",
         },
         safetyClinical: {
           trend: "declining",
           insight:
-            "⚠ This provider shows poor performance in Falls Risk Safety indicator due to higher incident rate compared to regional benchmark. A targeted safety improvement plan is required.",
+            "⚠ Falls with harm rate is above regional benchmark. Medication prevalence indicators require review.",
         },
         preventiveCare: {
           trend: "declining",
           insight:
-            "⚠ Preventive Screening completion is significantly below national average. Falls risk and oral health screening completion are critically low.",
+            "⚠ Preventive screening completion is below national average. Depression screening and malnutrition review completion are lagging.",
         },
         experience: {
           trend: "stable",
           insight:
-            "ℹ Experience scores are below average. Complaint resolution time has increased and requires management attention.",
+            "ℹ Experience indicators are below regional peers. Complaint resolution time is trending upward.",
         },
         equity: {
           trend: "stable",
           insight:
-            "ℹ Equity access performance is acceptable. Referral-to-placement time is within range but above the regional average.",
+            "ℹ Equity performance is acceptable. Referral-to-placement monitoring is ongoing.",
         },
       },
     },
-  ],
-  Mumbai: [
     {
-      id: "MUM-001",
-      name: "Maitri Senior Care",
-      city: "Mumbai",
-      type: "Residential",
-      beds: 110,
-      established: 2009,
-      indicators: {
-        residents: 4.3,
-        staffing: 4.6,
-        qualityMeasures: 4.2,
-        compliance: 4.7,
-        safetyClinical: 4.4,
-        preventiveCare: 4.1,
-        experience: 4.5,
-        equity: 4.0,
-      },
-    },
-    {
-      id: "MUM-002",
-      name: "Vanaprastha Mumbai",
-      city: "Mumbai",
-      type: "Residential",
-      beds: 85,
-      established: 2013,
-      indicators: {
-        residents: 3.8,
-        staffing: 4.1,
-        qualityMeasures: 3.9,
-        compliance: 4.4,
-        safetyClinical: 4.0,
-        preventiveCare: 3.7,
-        experience: 4.2,
-        equity: 3.6,
-      },
-    },
-    {
-      id: "MUM-003",
-      name: "SilverBay Care",
-      city: "Mumbai",
+      // HIGH performer: 4★ — good safety, strong staffing — Overall ~4★
+      id: "PER-003",
+      name: "Cottesloe Home Care",
+      city: "Perth",
       type: "Home Care",
       established: 2016,
       indicators: {
-        residents: 4.5,
-        staffing: 4.7,
-        qualityMeasures: 4.4,
-        compliance: 4.9,
-        safetyClinical: 4.6,
-        preventiveCare: 4.3,
-        experience: 4.7,
-        equity: 4.2,
+        residents: 4.3,
+        staffing: 4.5,
+        qualityMeasures: 4.2,
+        compliance: 4.6,
+        safetyClinical: 4.4,
+        preventiveCare: 4.1,
+        experience: 4.4,
+        equity: 4.0,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "✅ Resident Experience is strong and consistent across all care domains. Satisfaction surveys show high engagement.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing coverage is above average. RN hours per resident exceed national minimum.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are performing well. Incident review processes demonstrate a strong safety culture.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance is well-maintained. All mandatory reporting submitted on time with no conditions.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "✅ Safety performance is above average. Falls with harm rate is within the national top two quintiles.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive Care completion is improving. Screening bundles are being completed at an increasing rate.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "✅ Experience indicators are above regional average. Resident feedback is positive.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is ongoing.",
+        },
       },
     },
     {
-      id: "MUM-004",
-      name: "Anand Ashram Mumbai",
-      city: "Mumbai",
+      // LOW performer: poor safety, very weak preventive — Overall ~2★
+      id: "PER-004",
+      name: "Rockingham Care Centre",
+      city: "Perth",
       type: "Residential",
       beds: 68,
       established: 2010,
       indicators: {
-        residents: 4.0,
-        staffing: 4.3,
-        qualityMeasures: 4.1,
-        compliance: 4.6,
-        safetyClinical: 4.2,
-        preventiveCare: 3.9,
-        experience: 4.3,
-        equity: 3.8,
+        residents: 2.1,
+        staffing: 2.4,
+        qualityMeasures: 2.0,
+        compliance: 2.3,
+        safetyClinical: 1.6,
+        preventiveCare: 1.8,
+        experience: 2.2,
+        equity: 2.5,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "declining",
+          insight:
+            "⚠ Resident Experience is critically low. Complaint volumes have increased and two formal investigations are underway.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing is significantly below minimum standards. Reliance on casual staff is impacting care continuity and quality.",
+        },
+        qualityMeasures: {
+          trend: "declining",
+          insight:
+            "⚠ Quality Measures are poor. Multiple adverse incidents reflect systemic clinical governance failures.",
+        },
+        compliance: {
+          trend: "declining",
+          insight:
+            "⚠ Multiple compliance conditions remain unresolved. Enhanced regulatory monitoring is in place.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Falls with harm rate is critically above benchmark. Polypharmacy prevalence is in the worst quintile nationally. Urgent review required.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive screening completion is critically low at under 32%. All mandatory bundles are significantly overdue.",
+        },
+        experience: {
+          trend: "declining",
+          insight:
+            "⚠ Experience scores are in the bottom decile nationally. Resident complaints are unresolved beyond 30 days.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "⚠ Equity access is poor. Referral-to-placement time is 2× the national benchmark.",
+        },
       },
     },
   ],
-  Chennai: [
+
+  // ── Adelaide: 4 providers — HIGH / AVERAGE / HIGH / AVERAGE (5★, 3★, 4★, 3★) ─
+  Adelaide: [
     {
-      id: "CHE-001",
-      name: "VelaCare Senior Services",
-      city: "Chennai",
+      // HIGH performer: excellent safety, top compliance — Overall ~5★
+      id: "ADL-001",
+      name: "Glenelg Senior Services",
+      city: "Adelaide",
       type: "Residential",
       beds: 100,
       established: 2007,
       indicators: {
-        residents: 4.2,
-        staffing: 4.5,
-        qualityMeasures: 4.0,
-        compliance: 4.8,
-        safetyClinical: 4.3,
-        preventiveCare: 4.1,
-        experience: 4.6,
-        equity: 3.9,
+        residents: 4.7,
+        staffing: 4.6,
+        qualityMeasures: 4.8,
+        compliance: 4.9,
+        safetyClinical: 4.8,
+        preventiveCare: 4.6,
+        experience: 4.7,
+        equity: 4.4,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is outstanding. Placed in top quintile nationally for two consecutive reporting periods.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing is excellent. All positions filled; staff retention rate is 93%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are exemplary. Continuous improvement culture is reflected in all outcome metrics.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance with all ACQSC standards. No outstanding notices or conditions.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Safety indicators are at the highest level. Falls harm rate is 60% below the national benchmark.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive Care completion at 95%. All mandatory bundles completed within required timeframes.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Experience indicators are exceptional. Resident complaint rate is near zero.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access is strong. No measurable CALD access gap identified. First Nations access plan is active.",
+        },
       },
     },
     {
-      id: "CHE-002",
-      name: "Thanga Thozhil Home",
-      city: "Chennai",
+      // AVERAGE performer: moderate across all — some weak areas — Overall ~3★
+      id: "ADL-002",
+      name: "Barossa Valley Elder Care",
+      city: "Adelaide",
       type: "Residential",
       beds: 75,
       established: 2004,
       indicators: {
-        residents: 3.9,
-        staffing: 4.2,
-        qualityMeasures: 3.8,
-        compliance: 4.5,
-        safetyClinical: 4.0,
-        preventiveCare: 3.8,
-        experience: 4.3,
-        equity: 3.6,
+        residents: 3.3,
+        staffing: 3.0,
+        qualityMeasures: 3.4,
+        compliance: 3.6,
+        safetyClinical: 3.1,
+        preventiveCare: 2.9,
+        experience: 3.2,
+        equity: 3.0,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is marginally acceptable. Improvement in care personalisation and complaint handling is recommended.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing ratios are declining. Vacancy rates are elevated and clinical supervision coverage is below standard.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are borderline. Incident review cycle needs to be strengthened.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance is within minimum thresholds. One outstanding action item from the last audit cycle.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "ℹ Safety performance is borderline. Falls rate is slightly above the regional average. Monitoring protocol is in place.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive screening completion is below average. Cognitive and nutritional assessment completion rates require improvement.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience indicators are average. Complaint resolution times are within acceptable range but trending upward.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is in place.",
+        },
       },
     },
     {
-      id: "CHE-003",
-      name: "Karunalaya Elder Care",
-      city: "Chennai",
+      // HIGH performer: 4★ — good safety, above average staffing — Overall ~4★
+      id: "ADL-003",
+      name: "Hills District Home Care",
+      city: "Adelaide",
       type: "Home Care",
       established: 2018,
       indicators: {
-        residents: 4.4,
-        staffing: 4.7,
-        qualityMeasures: 4.3,
-        compliance: 4.8,
-        safetyClinical: 4.5,
-        preventiveCare: 4.2,
-        experience: 4.6,
-        equity: 4.1,
+        residents: 4.1,
+        staffing: 4.4,
+        qualityMeasures: 4.2,
+        compliance: 4.5,
+        safetyClinical: 4.3,
+        preventiveCare: 4.0,
+        experience: 4.2,
+        equity: 3.9,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is strong. Recent improvements in care coordination have boosted satisfaction scores.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing coverage is above average. Clinical supervision ratios meet national standards.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are above average and improving. Clinical governance processes are producing measurable outcomes.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance is well-maintained. All mandatory reporting is submitted on time.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "✅ Safety performance is good. Falls with harm rate is below the regional benchmark.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive Care completion is improving. Screening bundle completion rate increased 8% over the past quarter.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "✅ Experience indicators are above regional average. Resident feedback is consistently positive.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is ongoing.",
+        },
       },
     },
     {
-      id: "CHE-004",
-      name: "Aarokya Seniors",
-      city: "Chennai",
+      // AVERAGE performer: balanced moderate — some gaps — Overall ~3★
+      id: "ADL-004",
+      name: "Port Adelaide Aged Care",
+      city: "Adelaide",
       type: "Day Care",
       established: 2021,
       indicators: {
-        residents: 3.6,
-        staffing: 3.9,
-        qualityMeasures: 3.7,
-        compliance: 4.2,
-        safetyClinical: 3.8,
-        preventiveCare: 3.5,
-        experience: 4.0,
-        equity: 3.3,
+        residents: 3.0,
+        staffing: 3.5,
+        qualityMeasures: 3.1,
+        compliance: 3.4,
+        safetyClinical: 2.8,
+        preventiveCare: 3.2,
+        experience: 3.0,
+        equity: 3.1,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is at the lower end of acceptable range. Survey participation rates need improvement.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "ℹ Staffing is adequate but below regional peers. Agency staff reliance is a concern for care continuity.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are borderline. Improvement opportunities have been identified in clinical incident reporting.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets minimum requirements. Improvement plan is in progress.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Safety indicators are below average. Falls rate has increased in the past quarter. A targeted prevention plan is required.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Preventive Care completion is at the lower end of acceptable range. Cognitive assessment completion needs improvement.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience scores are average. Complaint resolution process is in place but requires strengthening.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap is being monitored.",
+        },
       },
     },
   ],
-  Bengaluru: [
+
+  // ── Canberra: 4 providers — HIGH / AVERAGE / HIGH / LOW (5★, 3★, 4★, 2★) ────
+  Canberra: [
     {
-      id: "BLR-001",
-      name: "Nandanam Senior Living",
-      city: "Bengaluru",
+      // HIGH performer: 5★ — outstanding all-round — Overall ~5★
+      id: "CAN-001",
+      name: "Tuggeranong Senior Living",
+      city: "Canberra",
       type: "Residential",
       beds: 130,
       established: 2006,
       indicators: {
-        residents: 4.5,
+        residents: 4.9,
         staffing: 4.8,
-        qualityMeasures: 4.4,
-        compliance: 4.9,
-        safetyClinical: 4.6,
-        preventiveCare: 4.3,
-        experience: 4.7,
-        equity: 4.2,
+        qualityMeasures: 4.7,
+        compliance: 5.0,
+        safetyClinical: 4.9,
+        preventiveCare: 4.8,
+        experience: 4.9,
+        equity: 4.6,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is at the highest level nationally. Satisfaction surveys consistently yield 97%+ positive ratings.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing is exceptional. All positions permanently filled; staff retention at 96%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are at the national top. Continuous improvement culture is deeply embedded.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance with all ACQSC standards. Zero outstanding notices. Recognised as a sector leader in compliance.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Safety indicators are exceptional. Falls with harm rate is 70% below the national benchmark.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive screening completion at 98%. Proactive screening model has become a sector exemplar.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Experience indicators are outstanding. Near-zero complaint rate with all complaints resolved within 12 hours.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access is excellent. No measurable CALD access gap. First Nations access plan is fully implemented.",
+        },
       },
     },
     {
-      id: "BLR-002",
-      name: "Sparsh Care Bengaluru",
-      city: "Bengaluru",
+      // AVERAGE performer: adequate across the board — some weak safety — Overall ~3★
+      id: "CAN-002",
+      name: "Belconnen Home Care",
+      city: "Canberra",
       type: "Home Care",
       established: 2017,
       indicators: {
-        residents: 4.1,
-        staffing: 4.4,
-        qualityMeasures: 4.0,
-        compliance: 4.6,
-        safetyClinical: 4.2,
-        preventiveCare: 3.9,
-        experience: 4.3,
-        equity: 3.8,
+        residents: 3.4,
+        staffing: 3.6,
+        qualityMeasures: 3.2,
+        compliance: 3.5,
+        safetyClinical: 2.9,
+        preventiveCare: 3.3,
+        experience: 3.4,
+        equity: 3.1,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is within acceptable range. Below city average with improvement opportunities in personalised care.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "ℹ Staffing is adequate but below city peers. Agency usage is moderate and being actively reduced.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are borderline. Structured improvement planning is recommended.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets minimum requirements. One outstanding notice under resolution.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Safety performance is below average. Falls rate has increased and medication review cycle needs strengthening.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Preventive Care completion is at average levels. Screening bundle completion requires monitoring.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience indicators are borderline. Complaint resolution time has been improving slightly.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is ongoing.",
+        },
       },
     },
     {
-      id: "BLR-003",
-      name: "Vatsalya Elder Home",
-      city: "Bengaluru",
+      // HIGH performer: 4★ — strong compliance, good quality — Overall ~4★
+      id: "CAN-003",
+      name: "Gungahlin Elder Home",
+      city: "Canberra",
       type: "Residential",
       beds: 88,
       established: 2012,
       indicators: {
-        residents: 3.8,
-        staffing: 4.1,
-        qualityMeasures: 3.9,
-        compliance: 4.4,
-        safetyClinical: 4.0,
-        preventiveCare: 3.7,
-        experience: 4.2,
-        equity: 3.6,
+        residents: 4.0,
+        staffing: 4.2,
+        qualityMeasures: 4.3,
+        compliance: 4.6,
+        safetyClinical: 4.1,
+        preventiveCare: 3.9,
+        experience: 4.0,
+        equity: 3.8,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "✅ Resident Experience is above average. Satisfaction surveys show positive trends.",
+        },
+        staffing: {
+          trend: "improving",
+          insight:
+            "✅ Staffing coverage is improving. New recruits have increased RN hours per resident above national minimum.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are performing well. Clinical governance processes are producing good outcomes.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance is well-maintained. All mandatory reporting submitted on time with no conditions.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "✅ Safety performance is above average. Falls with harm rate is within the national top two quintiles.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Preventive Care completion is within acceptable range. Malnutrition screening completion requires monitoring.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "✅ Experience indicators are above regional average. Resident feedback is positive.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is ongoing.",
+        },
       },
     },
     {
-      id: "BLR-004",
-      name: "Sukhayam Senior Care",
-      city: "Bengaluru",
+      // LOW performer: poor safety, poor staffing — Overall ~2★
+      id: "CAN-004",
+      name: "Woden Valley Care",
+      city: "Canberra",
       type: "Residential",
       beds: 105,
       established: 2009,
       indicators: {
-        residents: 4.3,
-        staffing: 4.6,
-        qualityMeasures: 4.2,
-        compliance: 4.7,
-        safetyClinical: 4.4,
-        preventiveCare: 4.1,
-        experience: 4.5,
-        equity: 4.0,
+        residents: 2.3,
+        staffing: 1.9,
+        qualityMeasures: 2.1,
+        compliance: 2.4,
+        safetyClinical: 1.7,
+        preventiveCare: 2.0,
+        experience: 2.2,
+        equity: 2.5,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "declining",
+          insight:
+            "⚠ Resident Experience is significantly below standard. High complaint volumes and slow resolution times are impacting the rating.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing is critically below minimum thresholds. High vacancy rates and heavy reliance on casual staff are impacting care quality.",
+        },
+        qualityMeasures: {
+          trend: "declining",
+          insight:
+            "⚠ Quality Measures are poor. Incident analysis reveals systemic failures in clinical governance processes.",
+        },
+        compliance: {
+          trend: "declining",
+          insight:
+            "⚠ Multiple compliance conditions outstanding. Provider is subject to enhanced monitoring.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Safety indicators are critically poor. Falls with harm rate is in the worst quintile nationally. Pressure injury prevalence is above the acceptable threshold.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive screening completion is critically low. All mandatory bundles are significantly overdue across multiple cohorts.",
+        },
+        experience: {
+          trend: "declining",
+          insight:
+            "⚠ Experience scores are in the lower quartile nationally. Complaint rates have increased sharply in the past two quarters.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "⚠ Equity access performance is below standard. CALD access gap and referral-to-placement time require urgent attention.",
+        },
       },
     },
   ],
-  Pune: [
+
+  // ── Hobart: 4 providers — AVERAGE / AVERAGE-LOW / HIGH / LOW (3★, 3★, 4★, 1★) ─
+  Hobart: [
     {
-      id: "PUN-001",
-      name: "Shantivan Senior Care",
-      city: "Pune",
+      // AVERAGE performer: balanced moderate — Overall ~3★
+      id: "HOB-001",
+      name: "Sandy Bay Senior Care",
+      city: "Hobart",
       type: "Residential",
       beds: 92,
       established: 2010,
       indicators: {
-        residents: 4.0,
-        staffing: 4.3,
-        qualityMeasures: 4.1,
-        compliance: 4.6,
-        safetyClinical: 4.2,
-        preventiveCare: 4.0,
-        experience: 4.4,
-        equity: 3.8,
+        residents: 3.3,
+        staffing: 3.5,
+        qualityMeasures: 3.4,
+        compliance: 3.7,
+        safetyClinical: 3.0,
+        preventiveCare: 3.2,
+        experience: 3.3,
+        equity: 3.1,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is within acceptable range. Improvement planning is in progress.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "ℹ Staffing is adequate but below city peers. Agency usage has stabilised.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are borderline. Improvement opportunities have been identified.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets minimum requirements. No new notices outstanding.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "ℹ Safety performance is average. Falls rate is within the national mid-range. Improvement plan is in place.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Preventive Care completion is at average levels. Screening bundle completion requires ongoing monitoring.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience indicators are borderline. Complaint resolution process is in place.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap is being monitored.",
+        },
       },
     },
     {
-      id: "PUN-002",
-      name: "Prayag Elder Services",
-      city: "Pune",
+      // AVERAGE-LOW performer: weak safety but improving, moderate compliance — Overall ~3★
+      id: "HOB-002",
+      name: "Huon Valley Elder Services",
+      city: "Hobart",
       type: "Home Care",
       established: 2019,
       indicators: {
-        residents: 3.7,
-        staffing: 4.0,
-        qualityMeasures: 3.8,
-        compliance: 4.3,
-        safetyClinical: 3.9,
-        preventiveCare: 3.6,
-        experience: 4.1,
-        equity: 3.4,
+        residents: 2.9,
+        staffing: 3.2,
+        qualityMeasures: 2.7,
+        compliance: 3.1,
+        safetyClinical: 2.4,
+        preventiveCare: 2.6,
+        experience: 2.8,
+        equity: 3.0,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is below average. Improvement in complaint handling is required.",
+        },
+        staffing: {
+          trend: "improving",
+          insight:
+            "ℹ Staffing is improving from a low base. New recruitment campaign has reduced vacancy rates.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are below acceptable range. Structured improvement planning is recommended.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets minimum requirements. One outstanding action item remains open.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "⚠ Safety performance is below average but has improved slightly. Falls rate remains above the regional benchmark.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "⚠ Preventive Care completion is below national average. Cognitive and malnutrition screening bundles require priority attention.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience indicators are below average. Complaint resolution time has improved but remains above the national benchmark.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. Access gap monitoring is in place.",
+        },
       },
     },
     {
-      id: "PUN-003",
-      name: "Arjuna Senior Living",
-      city: "Pune",
+      // HIGH performer: 4★ — strong quality, good safety — Overall ~4★
+      id: "HOB-003",
+      name: "North Hobart Aged Care",
+      city: "Hobart",
       type: "Residential",
       beds: 115,
       established: 2007,
       indicators: {
-        residents: 4.4,
-        staffing: 4.7,
-        qualityMeasures: 4.3,
-        compliance: 4.8,
-        safetyClinical: 4.5,
-        preventiveCare: 4.2,
-        experience: 4.6,
-        equity: 4.1,
+        residents: 4.2,
+        staffing: 4.5,
+        qualityMeasures: 4.4,
+        compliance: 4.7,
+        safetyClinical: 4.3,
+        preventiveCare: 4.1,
+        experience: 4.2,
+        equity: 4.0,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is strong. Satisfaction surveys show consistent above-average results.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing is above average. RN hours per resident exceed national minimum by 15%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are performing well. Continuous improvement processes are driving measurable outcomes.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance is well-maintained. All mandatory reporting submitted on time with no conditions.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "✅ Safety performance is above average. Falls with harm rate is in the national top two quintiles.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive Care completion is improving. Screening bundle completion rate is above the national average.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "✅ Experience indicators are above regional average. Resident feedback is positive.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity performance is good. First Nations and CALD access gap is being actively managed.",
+        },
       },
     },
     {
-      id: "PUN-004",
-      name: "Sahyadri Care Home",
-      city: "Pune",
+      // LOW performer: 1★ — critically weak across all domains — Overall ~1★
+      id: "HOB-004",
+      name: "Tasman Care Home",
+      city: "Hobart",
       type: "Residential",
       beds: 70,
       established: 2015,
       indicators: {
-        residents: 3.5,
-        staffing: 3.8,
-        qualityMeasures: 3.6,
-        compliance: 4.0,
-        safetyClinical: 3.7,
-        preventiveCare: 3.4,
-        experience: 3.9,
-        equity: 3.2,
+        residents: 1.4,
+        staffing: 1.6,
+        qualityMeasures: 1.3,
+        compliance: 1.5,
+        safetyClinical: 1.1,
+        preventiveCare: 1.2,
+        experience: 1.4,
+        equity: 1.7,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "declining",
+          insight:
+            "⚠ Resident Experience is critically poor. Multiple formal complaints are under active investigation by the regulator.",
+        },
+        staffing: {
+          trend: "declining",
+          insight:
+            "⚠ Staffing is critically below minimum requirements. Reliance on unqualified staff is a significant clinical risk.",
+        },
+        qualityMeasures: {
+          trend: "declining",
+          insight:
+            "⚠ Quality Measures are at the lowest level. Systemic failures in clinical governance have been identified.",
+        },
+        compliance: {
+          trend: "declining",
+          insight:
+            "⚠ Provider is non-compliant with multiple mandatory standards. Formal improvement notice has been issued.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Safety indicators are at the national worst quintile. Falls with serious harm rate is 4× the national benchmark. Urgent escalation required.",
+        },
+        preventiveCare: {
+          trend: "declining",
+          insight:
+            "⚠ Preventive screening completion is critically low at under 22%. Systematic failure to complete mandatory screening bundles.",
+        },
+        experience: {
+          trend: "declining",
+          insight:
+            "⚠ Experience scores are in the bottom decile. Complaint rates are the highest in the city. Resident advocacy involvement is recommended.",
+        },
+        equity: {
+          trend: "declining",
+          insight:
+            "⚠ Equity access performance is the worst in the region. Significant barriers to First Nations and CALD community access have been identified.",
+        },
       },
     },
   ],
-  Ahmedabad: [
+
+  // ── Darwin: 4 providers — HIGH / AVERAGE / HIGH / AVERAGE (4★, 3★, 5★, 3★) ──
+  Darwin: [
     {
-      id: "AMD-001",
-      name: "Shree Senior Seva",
-      city: "Ahmedabad",
+      // HIGH performer: 4★ — good overall — Overall ~4★
+      id: "DAR-001",
+      name: "Mindil Beach Senior Care",
+      city: "Darwin",
       type: "Residential",
       beds: 82,
       established: 2008,
       indicators: {
-        residents: 4.2,
-        staffing: 4.5,
+        residents: 4.1,
+        staffing: 4.4,
         qualityMeasures: 4.0,
-        compliance: 4.8,
-        safetyClinical: 4.3,
-        preventiveCare: 4.1,
-        experience: 4.6,
-        equity: 3.9,
+        compliance: 4.5,
+        safetyClinical: 4.2,
+        preventiveCare: 3.9,
+        experience: 4.1,
+        equity: 3.8,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "✅ Resident Experience is above average. Satisfaction surveys show consistent positive results.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing coverage is strong. All clinical positions are filled and retention is above 88%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are performing well. Clinical governance processes are delivering strong outcomes.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Compliance is well-maintained. All mandatory reporting submitted on time.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "✅ Safety performance is above average. Falls with harm rate is within the national top two quintiles.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Preventive Care completion is within acceptable range. Minor improvement opportunities in cognitive assessment completion.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "✅ Experience indicators are above regional average. Resident feedback is consistently positive.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. First Nations community access gap monitoring is ongoing.",
+        },
       },
     },
     {
-      id: "AMD-002",
-      name: "Amrut Varsham",
-      city: "Ahmedabad",
+      // AVERAGE performer: moderate indicators — some weak areas — Overall ~3★
+      id: "DAR-002",
+      name: "Palmerston Aged Services",
+      city: "Darwin",
       type: "Residential",
       beds: 65,
       established: 2003,
       indicators: {
-        residents: 3.9,
-        staffing: 4.2,
-        qualityMeasures: 3.8,
-        compliance: 4.5,
-        safetyClinical: 4.0,
-        preventiveCare: 3.7,
-        experience: 4.2,
-        equity: 3.5,
+        residents: 3.1,
+        staffing: 3.4,
+        qualityMeasures: 3.0,
+        compliance: 3.3,
+        safetyClinical: 2.7,
+        preventiveCare: 2.9,
+        experience: 3.1,
+        equity: 3.2,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is within acceptable range but below city average. Improvement plan is in progress.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "ℹ Staffing is adequate but below city peers. Agency usage is moderate.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are borderline. Structured improvement planning is recommended.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets minimum requirements. One outstanding action item remains open.",
+        },
+        safetyClinical: {
+          trend: "declining",
+          insight:
+            "⚠ Safety performance is below average. Falls rate has increased slightly. Medication prevalence indicators require attention.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "⚠ Preventive Care completion is below average. Screening bundles for malnutrition and depression are lagging.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience indicators are below city average. Complaint resolution time is above the national benchmark.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. First Nations access gap is being monitored.",
+        },
       },
     },
     {
-      id: "AMD-003",
-      name: "Vridh Aashray",
-      city: "Ahmedabad",
+      // HIGH performer: 5★ — exceptional safety, top compliance — Overall ~5★
+      id: "DAR-003",
+      name: "Darwin Harbour Care",
+      city: "Darwin",
       type: "Home Care",
       established: 2016,
       indicators: {
-        residents: 4.4,
+        residents: 4.8,
         staffing: 4.7,
-        qualityMeasures: 4.3,
-        compliance: 4.8,
-        safetyClinical: 4.5,
-        preventiveCare: 4.2,
-        experience: 4.6,
-        equity: 4.1,
+        qualityMeasures: 4.9,
+        compliance: 4.9,
+        safetyClinical: 4.9,
+        preventiveCare: 4.8,
+        experience: 4.8,
+        equity: 4.6,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "improving",
+          insight:
+            "✅ Resident Experience is outstanding. Satisfaction surveys place this provider in the top quintile nationally.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "✅ Staffing is excellent. All positions filled permanently; staff retention at 94%.",
+        },
+        qualityMeasures: {
+          trend: "improving",
+          insight:
+            "✅ Quality Measures are at the highest level nationally. Continuous improvement culture is evident in all care domains.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "✅ Full compliance with all ACQSC standards. Zero outstanding notices.",
+        },
+        safetyClinical: {
+          trend: "improving",
+          insight:
+            "✅ Safety indicators are at the national top. Falls with harm rate is 72% below the national benchmark.",
+        },
+        preventiveCare: {
+          trend: "improving",
+          insight:
+            "✅ Preventive screening completion at 97%. Proactive screening model recognised as a sector exemplar.",
+        },
+        experience: {
+          trend: "improving",
+          insight:
+            "✅ Experience indicators are exceptional. Near-zero complaint rate with all complaints resolved within 24 hours.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "✅ Equity access is excellent. First Nations community access program is fully operational. No measurable CALD access gap.",
+        },
       },
     },
     {
-      id: "AMD-004",
-      name: "Kalyaan Senior Care",
-      city: "Ahmedabad",
+      // AVERAGE performer: moderate but with some weak safety — Overall ~3★
+      id: "DAR-004",
+      name: "Casuarina Elder Care",
+      city: "Darwin",
       type: "Day Care",
       established: 2020,
       indicators: {
-        residents: 3.6,
-        staffing: 3.9,
-        qualityMeasures: 3.7,
-        compliance: 4.2,
-        safetyClinical: 3.8,
-        preventiveCare: 3.5,
-        experience: 4.0,
-        equity: 3.3,
+        residents: 3.5,
+        staffing: 3.7,
+        qualityMeasures: 3.3,
+        compliance: 3.8,
+        safetyClinical: 3.0,
+        preventiveCare: 3.4,
+        experience: 3.4,
+        equity: 3.2,
+      },
+      indicatorMeta: {
+        residents: {
+          trend: "stable",
+          insight:
+            "ℹ Resident Experience is within acceptable range. Survey participation rates should be improved for more reliable data.",
+        },
+        staffing: {
+          trend: "stable",
+          insight:
+            "ℹ Staffing is adequate but below city peers. Agency staff reliance has been stable.",
+        },
+        qualityMeasures: {
+          trend: "stable",
+          insight:
+            "ℹ Quality Measures are borderline. Improvement opportunities have been identified in clinical incident reporting.",
+        },
+        compliance: {
+          trend: "stable",
+          insight:
+            "ℹ Compliance meets requirements. No new notices outstanding.",
+        },
+        safetyClinical: {
+          trend: "stable",
+          insight:
+            "ℹ Safety performance is average. Falls rate is within the national mid-range. Monitoring protocol is in place.",
+        },
+        preventiveCare: {
+          trend: "stable",
+          insight:
+            "ℹ Preventive Care completion is within acceptable range. Cognitive assessment completion requires monitoring.",
+        },
+        experience: {
+          trend: "stable",
+          insight:
+            "ℹ Experience scores are average. Complaint resolution process is in place.",
+        },
+        equity: {
+          trend: "stable",
+          insight:
+            "ℹ Equity performance is acceptable. First Nations access gap is being monitored.",
+        },
       },
     },
   ],
 };
 
 export const CITY_LIST = Object.keys(CITY_PROVIDERS);
+
+// ── Unified Provider List (single source of truth for all modules) ────────────
+
+const CITY_TO_STATE: Record<string, string> = {
+  Sydney: "New South Wales",
+  Melbourne: "Victoria",
+  Brisbane: "Queensland",
+  Perth: "Western Australia",
+  Adelaide: "South Australia",
+  Canberra: "Australian Capital Territory",
+  Hobart: "Tasmania",
+  Darwin: "Northern Territory",
+};
+
+export interface UnifiedProvider {
+  id: string;
+  name: string;
+  city: string;
+  type: string;
+  serviceType: string;
+  state: string;
+  beds?: number;
+  established: number;
+  accreditationStatus: "accredited" | "conditional" | "not-accredited";
+  acqscStandards: number;
+  domainScores: {
+    safety: number;
+    preventive: number;
+    quality: number;
+    staffing: number;
+    compliance: number;
+    experience: number;
+  };
+  overallStars: number;
+}
+
+function cityProviderToDomainScores(cp: CityProvider): {
+  safety: number;
+  preventive: number;
+  quality: number;
+  staffing: number;
+  compliance: number;
+  experience: number;
+} {
+  return {
+    safety: cp.indicators.safetyClinical,
+    preventive: cp.indicators.preventiveCare,
+    quality: cp.indicators.qualityMeasures,
+    staffing: cp.indicators.staffing,
+    compliance: cp.indicators.compliance,
+    experience: (cp.indicators.residents + cp.indicators.experience) / 2,
+  };
+}
+
+function cityProviderToOverallStars(cp: CityProvider): number {
+  const d = cityProviderToDomainScores(cp);
+  const score =
+    d.safety * 0.3 +
+    d.preventive * 0.2 +
+    d.quality * 0.2 +
+    d.staffing * 0.15 +
+    d.compliance * 0.1 +
+    d.experience * 0.05;
+  if (score >= 4.5) return 5;
+  if (score >= 3.5) return 4;
+  if (score >= 2.5) return 3;
+  if (score >= 1.5) return 2;
+  return 1;
+}
+
+export const UNIFIED_PROVIDERS: UnifiedProvider[] = Object.values(
+  CITY_PROVIDERS,
+)
+  .flat()
+  .map((cp) => {
+    const domainScores = cityProviderToDomainScores(cp);
+    const overallStars = cityProviderToOverallStars(cp);
+    let accreditationStatus: "accredited" | "conditional" | "not-accredited" =
+      "not-accredited";
+    if (overallStars >= 4) accreditationStatus = "accredited";
+    else if (overallStars >= 3) accreditationStatus = "conditional";
+    const acqscStandards = Math.min(
+      8,
+      Math.max(1, Math.round((overallStars / 5) * 8)),
+    );
+    return {
+      id: cp.id,
+      name: cp.name,
+      city: cp.city,
+      type: cp.type,
+      serviceType: cp.type,
+      state: CITY_TO_STATE[cp.city] ?? cp.city,
+      beds: cp.beds,
+      established: cp.established,
+      accreditationStatus,
+      acqscStandards,
+      domainScores,
+      overallStars,
+    };
+  });
+
+/**
+ * Returns domain star scores for any provider ID.
+ * For UNIFIED_PROVIDERS (city-based IDs like SYD-001), returns computed domain scores.
+ * Falls back to getProviderDomainStarScores for legacy PROV-xxx IDs.
+ */
+export function getUnifiedProviderDomainScores(providerId: string): {
+  safety: number;
+  preventive: number;
+  quality: number;
+  staffing: number;
+  compliance: number;
+  experience: number;
+} {
+  const unified = UNIFIED_PROVIDERS.find((p) => p.id === providerId);
+  if (unified) return unified.domainScores;
+  // Fall back to legacy PROV-xxx calculation
+  return getProviderDomainStarScores(providerId);
+}
+
+/**
+ * Returns 10 mock indicators for any provider ID, derived from that provider's
+ * domain scores so that ratings are consistent across all modules.
+ */
+export function getUnifiedProviderIndicators(providerId: string): Array<{
+  id: string;
+  providerId: string;
+  quarter: string;
+  dimension: string;
+  indicatorCode: string;
+  indicatorName: string;
+  rate: number;
+  nationalBenchmark: number;
+  quintileRank: number;
+  trend: "improving" | "stable" | "declining";
+  isLowerBetter: boolean;
+}> {
+  const d = getUnifiedProviderDomainScores(providerId);
+
+  // Get trend from city provider meta if available
+  function getTrend(
+    cp: CityProvider | undefined,
+    field: keyof NonNullable<CityProvider["indicatorMeta"]>,
+  ): "improving" | "stable" | "declining" {
+    return cp?.indicatorMeta?.[field as string]?.trend ?? "stable";
+  }
+
+  const cityProvider = Object.values(CITY_PROVIDERS)
+    .flat()
+    .find((p) => p.id === providerId);
+
+  const safetyTrend = getTrend(cityProvider, "safetyClinical");
+  const preventiveTrend = getTrend(cityProvider, "preventiveCare");
+  const qualityTrend = getTrend(cityProvider, "qualityMeasures");
+  const staffingTrend = getTrend(cityProvider, "staffing");
+  const complianceTrend = getTrend(cityProvider, "compliance");
+  const experienceTrend = getTrend(cityProvider, "experience");
+
+  // Per-indicator quintile from provider-specific domain sub-scores
+  // Uses the city provider's individual indicator scores for each specific indicator
+  const cp = cityProvider;
+
+  // Derive per-indicator quintiles from individual domain indicator values stored on CityProvider
+  // This gives each indicator a distinct quintile instead of sharing the domain-level quintile
+  function indQ(starScore: number): number {
+    return Math.min(5, Math.max(1, Math.round(6 - starScore)));
+  }
+
+  // Safety sub-indicators: derive from safetyClinical score with per-indicator offsets
+  const safetyBase = cp ? cp.indicators.safetyClinical : d.safety;
+  const falls_q = indQ(safetyBase);
+  const medHarm_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, safetyBase + (cp ? (cp.indicators.compliance - 3) * 0.2 : 0)),
+    ),
+  );
+  const highRiskMed_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, safetyBase - (cp ? (cp.indicators.staffing - 3) * 0.15 : 0)),
+    ),
+  );
+  const polypharmacy_q = indQ(
+    Math.min(
+      5,
+      Math.max(
+        1,
+        safetyBase + (cp ? (cp.indicators.preventiveCare - 3) * 0.18 : 0),
+      ),
+    ),
+  );
+  const pressure_q = indQ(
+    Math.min(
+      5,
+      Math.max(
+        1,
+        safetyBase - (cp ? (cp.indicators.qualityMeasures - 3) * 0.12 : 0),
+      ),
+    ),
+  );
+  const ed_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, safetyBase + (cp ? (cp.indicators.residents - 3) * 0.1 : 0)),
+    ),
+  );
+
+  // Preventive sub-indicators
+  const prevBase = cp ? cp.indicators.preventiveCare : d.preventive;
+  const fallsScreen_q = indQ(prevBase);
+  const deprScreen_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, prevBase + (cp ? (cp.indicators.experience - 3) * 0.15 : 0)),
+    ),
+  );
+  const malnutrition_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, prevBase - (cp ? (cp.indicators.staffing - 3) * 0.1 : 0)),
+    ),
+  );
+
+  // Quality sub-indicators
+  const qualBase = cp ? cp.indicators.qualityMeasures : d.quality;
+  const satisfaction_q = indQ(qualBase);
+  const clinical_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, qualBase + (cp ? (cp.indicators.compliance - 3) * 0.1 : 0)),
+    ),
+  );
+
+  // Staffing sub-indicators
+  const staffBase = cp ? cp.indicators.staffing : d.staffing;
+  const rnHours_q = indQ(staffBase);
+  const retention_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, staffBase + (cp ? (cp.indicators.compliance - 3) * 0.12 : 0)),
+    ),
+  );
+
+  // Compliance sub-indicators
+  const compBase = cp ? cp.indicators.compliance : d.compliance;
+  const accred_q = indQ(compBase);
+  const reporting_q = indQ(
+    Math.min(
+      5,
+      Math.max(
+        1,
+        compBase + (cp ? (cp.indicators.qualityMeasures - 3) * 0.1 : 0),
+      ),
+    ),
+  );
+
+  // Experience sub-indicators
+  const expBase = cp ? cp.indicators.experience : d.experience;
+  const expSatisfaction_q = indQ(expBase);
+  const complaintRate_q = indQ(
+    Math.min(
+      5,
+      Math.max(1, expBase - (cp ? (cp.indicators.residents - 3) * 0.15 : 0)),
+    ),
+  );
+
+  function indRate(
+    base: number,
+    q: number,
+    scale: "lower_is_better" | "higher_is_better",
+  ): number {
+    const qFactor: Record<number, number> = {
+      1: 0.62,
+      2: 0.8,
+      3: 1.0,
+      4: 1.28,
+      5: 1.62,
+    };
+    const f = qFactor[q] ?? 1.0;
+    return scale === "lower_is_better"
+      ? Number.parseFloat((base * f).toFixed(1))
+      : Number.parseFloat(Math.min(100, base / f).toFixed(1));
+  }
+
+  // Derive trend per indicator from domain trend + slight per-indicator variation
+  function indTrend(
+    domainTrend: "improving" | "stable" | "declining",
+    q: number,
+  ): "improving" | "stable" | "declining" {
+    // Low-quintile (poor) providers tend to have declining indicators
+    if (domainTrend === "declining") return "declining";
+    if (domainTrend === "improving") return q <= 2 ? "improving" : "stable";
+    // Stable domain: top quintile might still be improving on individual indicators
+    if (q === 1) return "improving";
+    if (q === 5) return "declining";
+    return "stable";
+  }
+
+  return [
+    {
+      id: `IND-${providerId}-1`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-001",
+      indicatorName: "Falls with Harm Rate",
+      rate: indRate(4.2, falls_q, "lower_is_better"),
+      nationalBenchmark: 5.1,
+      quintileRank: falls_q,
+      trend: indTrend(safetyTrend, falls_q),
+      isLowerBetter: true,
+    },
+    {
+      id: `IND-${providerId}-2`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-002",
+      indicatorName: "Medication-Related Harm",
+      rate: indRate(2.8, medHarm_q, "lower_is_better"),
+      nationalBenchmark: 3.2,
+      quintileRank: medHarm_q,
+      trend: indTrend(safetyTrend, medHarm_q),
+      isLowerBetter: true,
+    },
+    {
+      id: `IND-${providerId}-3`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-003",
+      indicatorName: "High-Risk Medication Prevalence",
+      rate: indRate(18.4, highRiskMed_q, "lower_is_better"),
+      nationalBenchmark: 21.2,
+      quintileRank: highRiskMed_q,
+      trend: indTrend(safetyTrend, highRiskMed_q),
+      isLowerBetter: true,
+    },
+    {
+      id: `IND-${providerId}-4`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-004",
+      indicatorName: "Polypharmacy ≥10 Medications",
+      rate: indRate(12.1, polypharmacy_q, "lower_is_better"),
+      nationalBenchmark: 14.8,
+      quintileRank: polypharmacy_q,
+      trend: indTrend(safetyTrend, polypharmacy_q),
+      isLowerBetter: true,
+    },
+    {
+      id: `IND-${providerId}-5`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-005",
+      indicatorName: "Pressure Injuries Stage 2–4",
+      rate: indRate(1.8, pressure_q, "lower_is_better"),
+      nationalBenchmark: 2.4,
+      quintileRank: pressure_q,
+      trend: indTrend(safetyTrend, pressure_q),
+      isLowerBetter: true,
+    },
+    {
+      id: `IND-${providerId}-6`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Safety",
+      indicatorCode: "SAF-006",
+      indicatorName: "ED Presentations (30-day)",
+      rate: indRate(8.4, ed_q, "lower_is_better"),
+      nationalBenchmark: 10.2,
+      quintileRank: ed_q,
+      trend: indTrend(safetyTrend, ed_q),
+      isLowerBetter: true,
+    },
+    {
+      id: `IND-${providerId}-7`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-001",
+      indicatorName: "Falls Risk Screening Completion",
+      rate: indRate(94.2, fallsScreen_q, "higher_is_better"),
+      nationalBenchmark: 88.4,
+      quintileRank: fallsScreen_q,
+      trend: indTrend(preventiveTrend, fallsScreen_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-8`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-002",
+      indicatorName: "Depression Screening (GDS/PHQ-9)",
+      rate: indRate(88.4, deprScreen_q, "higher_is_better"),
+      nationalBenchmark: 82.1,
+      quintileRank: deprScreen_q,
+      trend: indTrend(preventiveTrend, deprScreen_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-9`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Preventive",
+      indicatorCode: "PRV-003",
+      indicatorName: "Malnutrition Screening",
+      rate: indRate(91.2, malnutrition_q, "higher_is_better"),
+      nationalBenchmark: 85.8,
+      quintileRank: malnutrition_q,
+      trend: indTrend(preventiveTrend, malnutrition_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-10`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Quality",
+      indicatorCode: "QM-001",
+      indicatorName: "Satisfaction Survey Score",
+      rate: indRate(84.8, satisfaction_q, "higher_is_better"),
+      nationalBenchmark: 80.2,
+      quintileRank: satisfaction_q,
+      trend: indTrend(qualityTrend, satisfaction_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-11`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Quality",
+      indicatorCode: "QM-002",
+      indicatorName: "Clinical Outcome Score",
+      rate: indRate(76.4, clinical_q, "higher_is_better"),
+      nationalBenchmark: 74.2,
+      quintileRank: clinical_q,
+      trend: indTrend(qualityTrend, clinical_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-12`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Staffing",
+      indicatorCode: "STAFF-001",
+      indicatorName: "Registered Nurse Hours per Resident",
+      rate: indRate(4.8, rnHours_q, "higher_is_better"),
+      nationalBenchmark: 4.1,
+      quintileRank: rnHours_q,
+      trend: indTrend(staffingTrend, rnHours_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-13`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Staffing",
+      indicatorCode: "STAFF-002",
+      indicatorName: "Staff Retention Rate",
+      rate: indRate(88.2, retention_q, "higher_is_better"),
+      nationalBenchmark: 82.4,
+      quintileRank: retention_q,
+      trend: indTrend(staffingTrend, retention_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-14`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Compliance",
+      indicatorCode: "COMP-001",
+      indicatorName: "Accreditation Compliance Score",
+      rate: indRate(92.4, accred_q, "higher_is_better"),
+      nationalBenchmark: 88.0,
+      quintileRank: accred_q,
+      trend: indTrend(complianceTrend, accred_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-15`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Compliance",
+      indicatorCode: "COMP-002",
+      indicatorName: "Mandatory Reporting Completeness",
+      rate: indRate(96.8, reporting_q, "higher_is_better"),
+      nationalBenchmark: 92.0,
+      quintileRank: reporting_q,
+      trend: indTrend(complianceTrend, reporting_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-16`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Experience",
+      indicatorCode: "EXP-001",
+      indicatorName: "Resident Satisfaction Score",
+      rate: indRate(84.8, expSatisfaction_q, "higher_is_better"),
+      nationalBenchmark: 80.2,
+      quintileRank: expSatisfaction_q,
+      trend: indTrend(experienceTrend, expSatisfaction_q),
+      isLowerBetter: false,
+    },
+    {
+      id: `IND-${providerId}-17`,
+      providerId,
+      quarter: "Q4-2025",
+      dimension: "Experience",
+      indicatorCode: "EXP-002",
+      indicatorName: "Complaint Rate",
+      rate: indRate(3.2, complaintRate_q, "lower_is_better"),
+      nationalBenchmark: 4.8,
+      quintileRank: complaintRate_q,
+      trend: indTrend(experienceTrend, complaintRate_q),
+      isLowerBetter: true,
+    },
+  ];
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 

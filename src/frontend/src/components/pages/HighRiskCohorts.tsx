@@ -1,13 +1,19 @@
+import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import type {
+  IndicatorForAlert,
+  PerformanceAlert,
+} from "@/utils/performanceAlerts";
+import { resolveAlertToShow } from "@/utils/performanceAlerts";
 import { Activity, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { useState } from "react";
-import type { HighRiskCohort } from "../../backend.d";
 import {
   MOCK_HIGH_RISK_COHORTS,
   MOCK_PROVIDERS,
   RISK_CRITERIA_LABELS,
+  UNIFIED_PROVIDERS,
 } from "../../data/mockData";
 import { useAllHighRiskCohorts } from "../../hooks/useQueries";
 import CohortRiskDetail from "./CohortRiskDetail";
@@ -80,6 +86,43 @@ function StatusBadge({ status }: { status: string }) {
 export default function HighRiskCohorts() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
+    null,
+  );
+
+  function handleViewDetails(cohortId: string, providerId: string) {
+    // Check provider performance alert before navigating to detail
+    const providerName = getProviderName(providerId);
+    const unifiedProvider = UNIFIED_PROVIDERS.find(
+      (p) => p.name === providerName || p.id === providerId,
+    );
+    if (unifiedProvider) {
+      const d = unifiedProvider.domainScores;
+      const alertIndicators: IndicatorForAlert[] = [
+        { label: "Safety & Clinical", score: d.safety },
+        { label: "Preventive Care", score: d.preventive },
+        { label: "Staffing", score: d.staffing },
+        { label: "Compliance", score: d.compliance },
+        { label: "Residents Experience", score: d.experience },
+        { label: "Quality Measures", score: d.quality },
+      ];
+      const overall =
+        d.safety * 0.3 +
+        d.preventive * 0.2 +
+        d.quality * 0.2 +
+        d.staffing * 0.15 +
+        d.compliance * 0.1 +
+        d.experience * 0.05;
+      const alert = resolveAlertToShow(providerName, overall, alertIndicators);
+      if (alert) {
+        setCurrentAlert(alert);
+        setAlertOpen(true);
+        // Navigate immediately; modal appears on top of detail view
+      }
+    }
+    setSelectedCohortId(cohortId);
+  }
 
   const { data: liveData, isLoading } = useAllHighRiskCohorts();
 
@@ -101,13 +144,20 @@ export default function HighRiskCohorts() {
     return true;
   });
 
-  // Show detail view if a cohort is selected
+  // Show detail view if a cohort is selected (modal renders on top of it)
   if (selectedCohortId) {
     return (
-      <CohortRiskDetail
-        cohortId={selectedCohortId}
-        onBack={() => setSelectedCohortId(null)}
-      />
+      <>
+        <CohortRiskDetail
+          cohortId={selectedCohortId}
+          onBack={() => setSelectedCohortId(null)}
+        />
+        <PerformanceAlertModal
+          open={alertOpen}
+          onClose={() => setAlertOpen(false)}
+          alert={currentAlert}
+        />
+      </>
     );
   }
 
@@ -328,7 +378,9 @@ export default function HighRiskCohorts() {
                             size="sm"
                             className="h-6 text-xs rounded-none border-primary text-primary hover:bg-primary hover:text-white"
                             aria-label={`View details for cohort ${cohort.id}`}
-                            onClick={() => setSelectedCohortId(cohort.id)}
+                            onClick={() =>
+                              handleViewDetails(cohort.id, cohort.providerId)
+                            }
                             data-ocid={`high_risk.view_details.button.${idx + 1}`}
                           >
                             View Details
@@ -343,6 +395,13 @@ export default function HighRiskCohorts() {
           )}
         </CardContent>
       </Card>
+
+      {/* Performance Alert Modal */}
+      <PerformanceAlertModal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        alert={currentAlert}
+      />
     </div>
   );
 }

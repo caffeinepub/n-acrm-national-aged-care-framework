@@ -37,9 +37,9 @@ import {
   scoreToStarBand,
 } from "../../utils/ratingEngine";
 
-// ── Provider data (Green Valley Aged Care, HYD-001) ───────────────────────────
+// ── Provider data (Bondi Aged Care, SYD-001) ─────────────────────────────────
 
-const PROVIDER = CITY_PROVIDERS.Hyderabad?.[0]!; // HYD-001 Green Valley Aged Care
+const PROVIDER = CITY_PROVIDERS.Sydney?.[0]!; // SYD-001 Bondi Aged Care
 
 const PERFORMANCE_INDICATORS = [
   {
@@ -233,7 +233,7 @@ export default function ProviderDashboard() {
                 <CalendarDays className="w-3.5 h-3.5" />
                 Established {PROVIDER.established}
               </span>
-              <span>{PROVIDER.city}, India</span>
+              <span>{PROVIDER.city}, Australia</span>
             </div>
           </div>
           <div className="flex items-center gap-2">

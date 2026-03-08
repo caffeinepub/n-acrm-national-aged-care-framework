@@ -1,52 +1,67 @@
-# N-ACRM National Aged Care Framework — Rating Engine
+# N-ACRM National Aged Care Framework
 
 ## Current State
 
-The application is a full-stack N-ACRM prototype with:
+The application is a full-stack national aged care analytics platform. The backend (`mockData.ts`) already uses Australian states/territories (NSW, VIC, QLD, SA, WA, TAS, NT, ACT) for `REGIONAL_DATA`, `MOCK_PROVIDERS`, `STATE_ADVERSE_EVENTS`, and all non-city data structures.
 
-- Motoko backend storing IndicatorResult, ProviderScorecard, HighRiskCohort, ScreeningWorkflow, AuditLog, and NationalOverviewStats as static mock data
-- Frontend ratingEngine.ts utility containing pure calculation functions: calcIndicatorStarRating, calcDomainScore, calcWeightedProviderRating, scoreToStarBand, calcPayForImprovementEligibility
-- ProviderPerformance page calling backend for live indicators/scorecards and falling back to mock data
-- PayForImprovement page using mock data only
-- No backend logic persisting provider indicator submissions or computing ratings server-side
-- No backend audit trail tied to rating calculation events
-- No API for submitting indicator data and triggering a full recalculation cascade
+However, the `CITY_PROVIDERS` dataset — and all modules that consume it — still contains Indian cities and Indian-named providers:
+- Cities: Hyderabad, Kolkata, Delhi, Mumbai, Chennai, Bengaluru, Pune, Ahmedabad
+- Provider names reference Indian culture (e.g. "Vanaprastha Mumbai", "Nandanam Senior Living", "Sparsh Care Bengaluru", "Vridh Aashray", "Kalyaan Senior Care", etc.)
+- `CITY_TO_STATE` maps Indian cities to Indian states (Telangana, West Bengal, Maharashtra, etc.)
+- `ProviderDashboard.tsx` hard-references `CITY_PROVIDERS.Hyderabad?.[0]` and displays `{PROVIDER.city}, India`
+- `RegionalProviderDrillDown.tsx` shows "Choose from X regions across India"
+
+All other modules (Heatmaps, NationalOverview, PolicyAnalytics, etc.) already use Australian state data.
 
 ## Requested Changes (Diff)
 
 ### Add
-
-- **IndicatorSubmission** backend type: providerId, quarter, list of indicator records (code, name, domain, rate, benchmark, quintile, trend)
-- **RatingEngineResult** backend type: providerId, quarter, indicatorRatings (per indicator star rating + trend adjustment), domainScores (safety, preventive, quality, staffing, compliance, experience), overallScore (float), overallStars (1–5 band), incentiveEligibility (tier, estimated payment, improvement score), calculatedAt timestamp
-- **submitIndicatorData** mutation: accepts a provider indicator submission, runs the full rating cascade in Motoko (quintile→stars, trend adjustment, domain averages, weighted overall score, star band, P4I eligibility), persists the RatingEngineResult, appends an audit log entry with all inputs/outputs
-- **getRatingEngineResult** query: retrieve the latest RatingEngineResult for a given providerId + quarter
-- **getAllRatingEngineResults** query (admin/regulator): returns results across all providers for a given quarter
-- **getProviderScorecardV2** query: returns a fully calculated scorecard derived from the persisted RatingEngineResult — indicator ratings, domain scores, benchmark comparisons, overall rating, incentive tier
-- Audit log entries automatically created on every rating recalculation event with: providerId, quarter, previous overall stars, new overall stars, trigger action
+- 8 Australian cities as city keys: Sydney, Melbourne, Brisbane, Perth, Adelaide, Canberra, Hobart, Darwin
+- Australian-sounding provider names for all city providers (29 total providers preserved, redistributed across Australian cities)
+- Updated `CITY_TO_STATE` mapping Australian cities to Australian states
 
 ### Modify
-
-- **ProviderScorecard** type: add qualityScore, staffingScore, complianceScore fields to match the 6-domain weighted model (Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%)
-- **getIndicatorResults**: expand static seed data to include all 6 domains with realistic SAF-001–SAF-005 style codes, rates, benchmarks, quintiles, and trends
-- **NationalOverviewStats**: add avgQualityScore, avgComplianceScore, avgStaffingScore fields
-- Frontend **ProviderPerformance** page: consume getProviderScorecardV2 / getRatingEngineResult when available; show all 6 domain scores; display calculated overall star rating alongside numeric score
-- Frontend **PayForImprovement** page: consume incentiveEligibility from RatingEngineResult rather than mock calculation; display tier, estimated payment, improvement score from backend
-- Frontend **ratingEngine.ts** utility: keep pure functions for local fallback; add scoreToStarBand export used by new UI components
+- `CITY_PROVIDERS` in `mockData.ts`: Replace all 8 Indian city keys and their providers with 8 Australian city keys and Australian providers, maintaining the same performance tier distribution (5★, 4★, 3★, 2★, 1★ spread)
+- `ProviderDashboard.tsx` line 42: Change `CITY_PROVIDERS.Hyderabad?.[0]` to `CITY_PROVIDERS.Sydney?.[0]`
+- `ProviderDashboard.tsx` line 236: Change `{PROVIDER.city}, India` to `{PROVIDER.city}, Australia`
+- `RegionalProviderDrillDown.tsx` line 1481: Change "regions across India" to "regions across Australia"
+- Provider IDs: Update prefix codes (HYD→SYD, KOL→MEL, DEL→BRI, MUM→PER, CHE→ADL, BLR→CAN, PUN→HOB, AMD→DAR)
 
 ### Remove
-
-- Nothing removed; existing endpoints remain for backward compatibility
+- All Indian city names from `CITY_PROVIDERS` keys
+- All Indian state names from `CITY_TO_STATE`
+- All Indian-culture provider names (Vanaprastha, Nandanam, Sparsh, Vridh Aashray, Maitri, VelaCare, Karunalaya, Vatsalya, Arjuna, Sahyadri, Shantivan, Prayag, Shree Senior Seva, Amrut Varsham, Kalyaan, Aarokya, Thanga Thozhil, Bengal Senior Living, Eastern Life Care, Capital Elder Home, Silver Years Residency, Harmony Care Centre, Green Valley Aged Care, Sunrise Elder Support, Anand Ashram Mumbai, SilverBay Care, Sukhayam Senior Care)
 
 ## Implementation Plan
 
-1. Extend Motoko types: add IndicatorSubmission, RatingEngineResult (with all sub-fields), IncentiveEligibility
-2. Implement pure rating calculation in Motoko: quintile map, trend adjustment, clamp [1,5], domain average, weighted sum, scoreToStarBand thresholds
-3. Implement P4I eligibility logic in Motoko: overallStars ≥ 4 → base; + safety improvement ≥ 10% → bonus; + screeningCompletion ≥ 85% → maximum
-4. Add submitIndicatorData shared function: validate, compute, persist RatingEngineResult, write AuditLog entry
-5. Add getRatingEngineResult query, getAllRatingEngineResults query, getProviderScorecardV2 query
-6. Expand static seed data for indicator results across all 6 domains (Safety, Preventive, Quality, Staffing, Compliance, Experience)
-7. Update backend.d.ts types to reflect new API
-8. Update frontend useQueries hooks: add useRatingEngineResult, useProviderScorecardV2, useSubmitIndicatorData, useAllRatingEngineResults
-9. Update ProviderPerformance page: show 6-domain scores from backend, overall star band
-10. Update PayForImprovement page: pull live incentive tier + payment from backend RatingEngineResult
-11. Add a "Rating Engine Status" panel to the Provider Performance page showing the last recalculation timestamp and sync chain status
+1. **mockData.ts — Replace `CITY_PROVIDERS`**: Replace all 8 Indian city keys with Australian cities:
+   - `Sydney` (3 providers: HIGH/LOW/HIGH matching 5★/1★/5★ pattern)
+   - `Melbourne` (2 providers: 3★/4★)
+   - `Brisbane` (2 providers: 5★/2★)
+   - `Perth` (4 providers: 5★/3★/4★/2★)
+   - `Adelaide` (4 providers: 5★/3★/4★/3★)
+   - `Canberra` (4 providers: 5★/3★/4★/2★)
+   - `Hobart` (4 providers: 3★/3★/4★/1★)
+   - `Darwin` (4 providers: 4★/3★/5★/3★)
+   - All provider names must be Australian-sounding (e.g. "Bondi Aged Care", "Harbour View Seniors", "Yarra Valley Care", etc.)
+   - Preserve all indicator data structures, weights, and performance tier characteristics exactly
+   - Update provider IDs to use Australian city codes: SYD, MEL, BRI, PER, ADL, CAN, HOB, DAR
+
+2. **mockData.ts — Update `CITY_TO_STATE`**: Map each Australian city to correct Australian state:
+   - Sydney → New South Wales
+   - Melbourne → Victoria
+   - Brisbane → Queensland
+   - Perth → Western Australia
+   - Adelaide → South Australia
+   - Canberra → Australian Capital Territory
+   - Hobart → Tasmania
+   - Darwin → Northern Territory
+
+3. **ProviderDashboard.tsx**: 
+   - Change `CITY_PROVIDERS.Hyderabad?.[0]` → `CITY_PROVIDERS.Sydney?.[0]`
+   - Change `{PROVIDER.city}, India` → `{PROVIDER.city}, Australia`
+
+4. **RegionalProviderDrillDown.tsx**: 
+   - Change "regions across India" → "regions across Australia"
+
+5. **Verify**: Confirm all cross-module references to provider IDs (HRC cohort data, PFI data, audit logs, screening workflows) still resolve — these use PROV-xxx IDs not city IDs, so no changes needed there.

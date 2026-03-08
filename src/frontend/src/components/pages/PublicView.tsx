@@ -1,3 +1,6 @@
+import { BenchmarkStatusChip } from "@/components/ui/BenchmarkStatusChip";
+import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
+import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CITY_LIST, CITY_PROVIDERS, type CityProvider } from "@/data/mockData";
+import { isEligibleForIncentive } from "@/utils/benchmarkUtils";
+import type {
+  IndicatorForAlert,
+  PerformanceAlert,
+} from "@/utils/performanceAlerts";
+import { resolveAlertToShow } from "@/utils/performanceAlerts";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -22,7 +31,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -99,6 +108,34 @@ function TrendArrow({
   return (
     <Minus className="w-3.5 h-3.5" style={{ color: "oklch(0.55 0.02 240)" }} />
   );
+}
+
+// ── Build alert indicators from CityProvider ──────────────────────────────────
+
+const PUBLIC_INDICATOR_KEYS: {
+  key: keyof CityProvider["indicators"];
+  label: string;
+}[] = [
+  { key: "residents", label: "Residents Experience" },
+  { key: "staffing", label: "Staffing" },
+  { key: "qualityMeasures", label: "Quality Measures" },
+  { key: "compliance", label: "Compliance" },
+  { key: "safetyClinical", label: "Safety & Clinical" },
+  { key: "preventiveCare", label: "Preventive Care" },
+  { key: "experience", label: "Experience" },
+  { key: "equity", label: "Equity" },
+];
+
+function buildPublicAlertIndicators(
+  provider: CityProvider,
+): IndicatorForAlert[] {
+  return PUBLIC_INDICATOR_KEYS.map((ind) => ({
+    label: ind.label,
+    score: provider.indicators[ind.key],
+    providerValue: provider.indicators[ind.key],
+    benchmark: 3.5,
+    isLowerBetter: false,
+  }));
 }
 
 // ── Indicator config for public display ───────────────────────────────────────
@@ -372,6 +409,27 @@ function ProviderDetailPanel({
   const belowThree = PUBLIC_INDICATORS.filter(
     (ind) => provider.indicators[ind.key] < 3.0,
   ).length;
+  const hasBelowBenchmark = PUBLIC_INDICATORS.some(
+    (ind) => provider.indicators[ind.key] < 3.5,
+  );
+  const incentiveEligible = isEligibleForIncentive(overall, hasBelowBenchmark);
+
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const indicators = buildPublicAlertIndicators(provider);
+    const alertResult = resolveAlertToShow(provider.name, overall, indicators);
+    if (alertResult) {
+      setCurrentAlert(alertResult);
+      setAlertOpen(true);
+    } else {
+      setCurrentAlert(null);
+      setAlertOpen(false);
+    }
+  }, [provider, overall]);
 
   return (
     <div className="space-y-6" data-ocid="public.provider.detail.panel">
@@ -416,6 +474,7 @@ function ProviderDetailPanel({
               <CalendarDays className="w-3.5 h-3.5" />
               Established {provider.established}
             </span>
+            <IncentiveEligibilityBadge eligible={incentiveEligible} size="sm" />
           </div>
         </div>
       </div>
@@ -437,16 +496,19 @@ function ProviderDetailPanel({
           <table className="w-full gov-table">
             <thead>
               <tr>
-                <th className="text-left" style={{ width: "40%" }}>
+                <th className="text-left" style={{ width: "30%" }}>
                   Indicator
                 </th>
-                <th className="text-left" style={{ width: "35%" }}>
+                <th className="text-left" style={{ width: "28%" }}>
                   Star Rating
                 </th>
-                <th className="text-center" style={{ width: "12%" }}>
+                <th className="text-center" style={{ width: "10%" }}>
                   Score
                 </th>
-                <th className="text-center" style={{ width: "13%" }}>
+                <th className="text-left" style={{ width: "18%" }}>
+                  vs Benchmark
+                </th>
+                <th className="text-center" style={{ width: "14%" }}>
                   Band
                 </th>
               </tr>
@@ -497,6 +559,14 @@ function ProviderDetailPanel({
                       >
                         {score.toFixed(1)}
                       </span>
+                    </td>
+                    <td>
+                      <BenchmarkStatusChip
+                        rate={score}
+                        benchmark={3.5}
+                        isLowerBetter={false}
+                        size="xs"
+                      />
                     </td>
                     <td className="text-center">
                       <span className={ratingBadgeClass(score)}>
@@ -620,6 +690,13 @@ function ProviderDetailPanel({
       <RegionComparisonChart
         providers={allProviders}
         selectedId={provider.id}
+      />
+
+      {/* Performance Alert Modal */}
+      <PerformanceAlertModal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        alert={currentAlert}
       />
     </div>
   );
@@ -749,6 +826,10 @@ export default function PublicView() {
   function handleCityChange(city: string) {
     setSelectedCity(city);
     setSelectedProvider(null);
+  }
+
+  function handleProviderSelect(provider: CityProvider) {
+    setSelectedProvider(provider);
   }
 
   return (
@@ -904,7 +985,7 @@ export default function PublicView() {
                 key={provider.id}
                 provider={provider}
                 index={idx + 1}
-                onSelect={setSelectedProvider}
+                onSelect={handleProviderSelect}
               />
             ))}
           </div>

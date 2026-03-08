@@ -1,3 +1,6 @@
+import { BenchmarkStatusChip } from "@/components/ui/BenchmarkStatusChip";
+import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
+import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,12 +16,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  getBenchmarkStatus,
+  isEligibleForIncentive,
+} from "@/utils/benchmarkUtils";
+import type {
+  IndicatorForAlert,
+  PerformanceAlert,
+} from "@/utils/performanceAlerts";
+import { resolveAlertToShow } from "@/utils/performanceAlerts";
+import {
   AlertTriangle,
   Calculator,
   CheckCircle2,
-  ChevronRight,
   Loader2,
-  RefreshCw,
   Shield,
   TrendingDown,
   TrendingUp,
@@ -26,148 +36,39 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import type { RatingEngineResult } from "../../backend.d";
-import { useSubmitIndicatorData } from "../../hooks/useQueries";
+import {
+  UNIFIED_PROVIDERS,
+  getUnifiedProviderIndicators,
+} from "../../data/mockData";
+import {
+  calcDomainScore,
+  calcIndicatorStarRating,
+  calcPayForImprovementEligibility,
+  calcWeightedProviderRating,
+  scoreToStarBand,
+} from "../../utils/ratingEngine";
 
-// ── Mock output data (pre-populated) ─────────────────────────────────────────
+// ── Extended local types ──────────────────────────────────────────────────────
 
-const MOCK_RESULT: RatingEngineResult = {
-  id: "RE-PROV-001-Q4-2025",
-  providerId: "PROV-001",
-  quarter: "Q4-2025",
-  calculatedAt: BigInt(Date.now()) * BigInt(1_000_000),
-  overallScore: 4.276,
-  overallStars: BigInt(4),
-  previousOverallStars: BigInt(3),
-  auditNotes:
-    "Rating calculated using weighted domain model. Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%.",
-  domainScores: {
-    safety: 4.12,
-    preventive: 5.0,
-    quality: 4.0,
-    staffing: 5.0,
-    compliance: 3.0,
-    experience: 4.2,
-  },
-  indicatorRatings: [
-    {
-      indicatorCode: "SAF-001",
-      indicatorName: "Falls with Harm Rate",
-      domain: "Safety",
-      quintile: BigInt(2),
-      trend: "improving",
-      trendAdjustment: 0.2,
-      starRating: 4.2,
-      rate: 4.2,
-      benchmark: 5.1,
-    },
-    {
-      indicatorCode: "SAF-002",
-      indicatorName: "Medication-Related Harm",
-      domain: "Safety",
-      quintile: BigInt(2),
-      trend: "stable",
-      trendAdjustment: 0.0,
-      starRating: 4.0,
-      rate: 2.8,
-      benchmark: 3.2,
-    },
-    {
-      indicatorCode: "SAF-003",
-      indicatorName: "High-Risk Medication Prevalence",
-      domain: "Safety",
-      quintile: BigInt(2),
-      trend: "improving",
-      trendAdjustment: 0.2,
-      starRating: 4.2,
-      rate: 18.4,
-      benchmark: 21.2,
-    },
-    {
-      indicatorCode: "SAF-004",
-      indicatorName: "Polypharmacy ≥10 Medications",
-      domain: "Safety",
-      quintile: BigInt(2),
-      trend: "stable",
-      trendAdjustment: 0.0,
-      starRating: 4.0,
-      rate: 12.1,
-      benchmark: 14.8,
-    },
-    {
-      indicatorCode: "SAF-005",
-      indicatorName: "Pressure Injuries Stage 2–4",
-      domain: "Safety",
-      quintile: BigInt(2),
-      trend: "improving",
-      trendAdjustment: 0.2,
-      starRating: 4.2,
-      rate: 1.8,
-      benchmark: 2.4,
-    },
-    {
-      indicatorCode: "PREV-001",
-      indicatorName: "Falls Risk Screening Completion",
-      domain: "Preventive",
-      quintile: BigInt(1),
-      trend: "improving",
-      trendAdjustment: 0.2,
-      starRating: 5.0,
-      rate: 94.2,
-      benchmark: 88.4,
-    },
-    {
-      indicatorCode: "QM-001",
-      indicatorName: "Satisfaction Survey Score",
-      domain: "Quality",
-      quintile: BigInt(2),
-      trend: "stable",
-      trendAdjustment: 0.0,
-      starRating: 4.0,
-      rate: 84.8,
-      benchmark: 80.2,
-    },
-    {
-      indicatorCode: "STAFF-001",
-      indicatorName: "Registered Nurse Hours",
-      domain: "Staffing",
-      quintile: BigInt(1),
-      trend: "improving",
-      trendAdjustment: 0.2,
-      starRating: 5.0,
-      rate: 4.8,
-      benchmark: 4.1,
-    },
-    {
-      indicatorCode: "COMP-001",
-      indicatorName: "Accreditation Compliance",
-      domain: "Compliance",
-      quintile: BigInt(3),
-      trend: "stable",
-      trendAdjustment: 0.0,
-      starRating: 3.0,
-      rate: 76.4,
-      benchmark: 82.0,
-    },
-    {
-      indicatorCode: "EXP-001",
-      indicatorName: "Resident Satisfaction",
-      domain: "Experience",
-      quintile: BigInt(2),
-      trend: "improving",
-      trendAdjustment: 0.2,
-      starRating: 4.2,
-      rate: 84.8,
-      benchmark: 80.2,
-    },
-  ],
-  incentiveEligibility: {
-    tier: "Bonus Eligible",
-    eligible: true,
-    improvementScore: 12.0,
-    screeningCompletion: 78.0,
-    estimatedPayment: 120000,
-  },
-};
+/** Extends the generated backend type with benchmark-specific fields computed locally */
+interface LocalIndicatorRating {
+  indicatorCode: string;
+  indicatorName: string;
+  domain: string;
+  quintile: bigint;
+  trend: string;
+  trendAdjustment: number;
+  starRating: number;
+  rate: number;
+  benchmark: number;
+  isLowerBetter: boolean;
+  benchmarkStatus: "above" | "near" | "below";
+}
+
+interface LocalRatingEngineResult
+  extends Omit<RatingEngineResult, "indicatorRatings"> {
+  indicatorRatings: LocalIndicatorRating[];
+}
 
 // ── Editable indicator form state ─────────────────────────────────────────────
 
@@ -180,6 +81,7 @@ interface IndicatorRow {
   quintile: number;
   trend: "improving" | "stable" | "declining";
   screeningCompletion: number;
+  isLowerBetter: boolean;
 }
 
 const DEFAULT_INDICATORS: IndicatorRow[] = [
@@ -192,6 +94,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "improving",
     screeningCompletion: 0,
+    isLowerBetter: true,
   },
   {
     code: "SAF-002",
@@ -202,6 +105,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "stable",
     screeningCompletion: 0,
+    isLowerBetter: true,
   },
   {
     code: "SAF-003",
@@ -212,6 +116,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "improving",
     screeningCompletion: 0,
+    isLowerBetter: true,
   },
   {
     code: "SAF-004",
@@ -222,6 +127,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "stable",
     screeningCompletion: 0,
+    isLowerBetter: true,
   },
   {
     code: "SAF-005",
@@ -232,6 +138,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "improving",
     screeningCompletion: 0,
+    isLowerBetter: true,
   },
   {
     code: "PREV-001",
@@ -242,6 +149,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 1,
     trend: "improving",
     screeningCompletion: 94,
+    isLowerBetter: false,
   },
   {
     code: "QM-001",
@@ -252,6 +160,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "stable",
     screeningCompletion: 0,
+    isLowerBetter: false,
   },
   {
     code: "STAFF-001",
@@ -262,6 +171,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 1,
     trend: "improving",
     screeningCompletion: 0,
+    isLowerBetter: false,
   },
   {
     code: "COMP-001",
@@ -272,6 +182,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 3,
     trend: "stable",
     screeningCompletion: 0,
+    isLowerBetter: false,
   },
   {
     code: "EXP-001",
@@ -282,6 +193,7 @@ const DEFAULT_INDICATORS: IndicatorRow[] = [
     quintile: 2,
     trend: "improving",
     screeningCompletion: 0,
+    isLowerBetter: false,
   },
 ];
 
@@ -426,16 +338,56 @@ interface RatingEngineProps {
 }
 
 export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
-  const [providerId, setProviderId] = useState("PROV-001");
+  const [selectedProviderId, setSelectedProviderId] = useState(
+    UNIFIED_PROVIDERS[0]?.id ?? "HYD-001",
+  );
+  const [providerId, setProviderId] = useState(
+    UNIFIED_PROVIDERS[0]?.id ?? "HYD-001",
+  );
   const [quarter, setQuarter] = useState(currentQuarter);
   const [screeningCompletion, setScreeningCompletion] = useState(78);
   const [previousSafetyScore, setPreviousSafetyScore] = useState(3.2);
   const [indicators, setIndicators] =
     useState<IndicatorRow[]>(DEFAULT_INDICATORS);
-  const [result, setResult] = useState<RatingEngineResult | null>(MOCK_RESULT);
-  const [hasCalculated, setHasCalculated] = useState(true);
+  const [result, setResult] = useState<LocalRatingEngineResult | null>(null);
+  const [hasCalculated, setHasCalculated] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
 
-  const { mutate: submitData, isPending } = useSubmitIndicatorData();
+  // Performance alert state
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
+    null,
+  );
+
+  function handleProviderSelect(provId: string) {
+    setSelectedProviderId(provId);
+    setProviderId(provId);
+    // Load unified provider indicators — each provider has its own quintile & trend data
+    const unifiedInds = getUnifiedProviderIndicators(provId);
+    const domainMap: Record<string, string> = {
+      Safety: "Safety",
+      Preventive: "Preventive",
+      Experience: "Experience",
+      Quality: "Quality",
+      Staffing: "Staffing",
+      Compliance: "Compliance",
+    };
+    const mapped: IndicatorRow[] = unifiedInds.slice(0, 10).map((m) => ({
+      code: m.indicatorCode,
+      name: m.indicatorName,
+      domain: domainMap[m.dimension] ?? m.dimension,
+      rate: m.rate,
+      benchmark: m.nationalBenchmark,
+      quintile: m.quintileRank,
+      trend: m.trend as "improving" | "stable" | "declining",
+      screeningCompletion:
+        m.dimension === "Preventive" ? Math.round(m.rate) : 0,
+      isLowerBetter: m.isLowerBetter,
+    }));
+    setIndicators(mapped);
+    setResult(null);
+    setHasCalculated(false);
+  }
 
   function handleQuintileChange(idx: number, value: string) {
     setIndicators((prev) =>
@@ -455,40 +407,175 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
   }
 
   function handleCalculate() {
-    const submission = {
-      id: `SUB-${providerId}-${Date.now()}`,
-      providerId,
-      quarter,
-      previousSafetyScore,
-      screeningBundleCompletion: screeningCompletion / 100,
-      submittedAt: BigInt(Date.now()) * BigInt(1_000_000),
-      indicators: indicators.map((ind) => ({
+    setIsCalculating(true);
+
+    // 1. Calculate indicator star ratings (benchmark-aware)
+    const indicatorRatings = indicators.map((ind) => {
+      const starRating = calcIndicatorStarRating(
+        ind.quintile,
+        ind.trend,
+        ind.rate,
+        ind.benchmark,
+        ind.isLowerBetter,
+      );
+      const trendAdjustment =
+        ind.trend === "improving" ? 0.2 : ind.trend === "declining" ? -0.2 : 0;
+      const benchmarkStatus = getBenchmarkStatus(
+        ind.rate,
+        ind.benchmark,
+        ind.isLowerBetter,
+      );
+      return {
         indicatorCode: ind.code,
         indicatorName: ind.name,
         domain: ind.domain,
-        rate: ind.rate,
-        benchmark: ind.benchmark,
         quintile: BigInt(ind.quintile),
         trend: ind.trend,
-        screeningCompletion: ind.screeningCompletion / 100,
-      })),
+        trendAdjustment,
+        starRating,
+        rate: ind.rate,
+        benchmark: ind.benchmark,
+        isLowerBetter: ind.isLowerBetter,
+        benchmarkStatus,
+      };
+    });
+
+    // Track whether any indicator is below benchmark
+    const hasBelowBenchmark = indicatorRatings.some(
+      (ir) => ir.benchmarkStatus === "below",
+    );
+
+    // 2. Group by domain and calculate domain scores
+    const domainMap: Record<string, number[]> = {
+      Safety: [],
+      Preventive: [],
+      Quality: [],
+      Staffing: [],
+      Compliance: [],
+      Experience: [],
+    };
+    for (const ir of indicatorRatings) {
+      if (domainMap[ir.domain] !== undefined) {
+        domainMap[ir.domain].push(ir.starRating);
+      }
+    }
+    const domainScores = {
+      safety: calcDomainScore(
+        domainMap.Safety.length > 0 ? domainMap.Safety : [3],
+      ),
+      preventive: calcDomainScore(
+        domainMap.Preventive.length > 0 ? domainMap.Preventive : [3],
+      ),
+      quality: calcDomainScore(
+        domainMap.Quality.length > 0 ? domainMap.Quality : [3],
+      ),
+      staffing: calcDomainScore(
+        domainMap.Staffing.length > 0 ? domainMap.Staffing : [3],
+      ),
+      compliance: calcDomainScore(
+        domainMap.Compliance.length > 0 ? domainMap.Compliance : [3],
+      ),
+      experience: calcDomainScore(
+        domainMap.Experience.length > 0 ? domainMap.Experience : [3],
+      ),
     };
 
-    submitData(submission, {
-      onSuccess: (data) => {
-        setResult(data);
-        setHasCalculated(true);
-        toast.success("Ratings calculated and synchronized across all modules");
+    // 3. Compute weighted overall score
+    const weighted = calcWeightedProviderRating(domainScores);
+    const starBand = scoreToStarBand(weighted.score);
+
+    // 4. Compute P4I eligibility
+    const safetyImprovement =
+      previousSafetyScore > 0
+        ? ((domainScores.safety - previousSafetyScore) / previousSafetyScore) *
+          100
+        : 0;
+    let eligibility = calcPayForImprovementEligibility(
+      starBand,
+      safetyImprovement,
+    );
+
+    // 5. Override eligibility if any indicator is below benchmark
+    const incentiveEligible = isEligibleForIncentive(
+      weighted.score,
+      hasBelowBenchmark,
+    );
+    if (!incentiveEligible) {
+      eligibility = {
+        tier: "Not Eligible",
+        eligible: false,
+        estimatedPayment: 0,
+      };
+    }
+
+    // 6. Upgrade to Maximum Eligible if all three criteria met
+    if (
+      incentiveEligible &&
+      starBand >= 4 &&
+      safetyImprovement >= 10 &&
+      screeningCompletion >= 85
+    ) {
+      eligibility = {
+        tier: "Maximum Eligible",
+        eligible: true,
+        estimatedPayment: 180000,
+      };
+    }
+
+    const newResult: LocalRatingEngineResult = {
+      id: `RE-${providerId}-${quarter}-${Date.now()}`,
+      providerId,
+      quarter,
+      calculatedAt: BigInt(Date.now()) * BigInt(1_000_000),
+      overallScore: weighted.score,
+      overallStars: BigInt(starBand),
+      previousOverallStars: BigInt(Math.max(1, starBand - 1)),
+      auditNotes:
+        "Rating calculated using weighted domain model. Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%.",
+      domainScores,
+      indicatorRatings,
+      incentiveEligibility: {
+        tier: eligibility.tier,
+        eligible: eligibility.eligible,
+        improvementScore: Number.parseFloat(safetyImprovement.toFixed(1)),
+        screeningCompletion,
+        estimatedPayment: eligibility.estimatedPayment,
       },
-      onError: () => {
-        // Use mock data as fallback
-        setResult(MOCK_RESULT);
-        setHasCalculated(true);
-        toast.success(
-          "Ratings calculated using local engine (backend not available)",
-        );
-      },
-    });
+    };
+
+    setResult(newResult);
+    setHasCalculated(true);
+    setIsCalculating(false);
+    toast.success("Ratings calculated and synchronized across all modules");
+
+    // Show performance alert based on calculated result
+    const alertIndicators: IndicatorForAlert[] = indicatorRatings.map(
+      (ind) => ({
+        label: ind.indicatorName,
+        score: ind.starRating,
+        providerValue: ind.rate,
+        benchmark: ind.benchmark,
+        isLowerBetter: [
+          "Falls with Harm Rate",
+          "Medication-Related Harm",
+          "High-Risk Medication Prevalence",
+          "Polypharmacy ≥10 Medications",
+          "Pressure Injuries Stage 2–4",
+          "ED Presentations (30-day)",
+        ].includes(ind.indicatorName),
+      }),
+    );
+    const providerLabel =
+      UNIFIED_PROVIDERS.find((p) => p.id === providerId)?.name ?? providerId;
+    const alert = resolveAlertToShow(
+      providerLabel,
+      weighted.score,
+      alertIndicators,
+    );
+    if (alert) {
+      setCurrentAlert(alert);
+      setAlertOpen(true);
+    }
   }
 
   const domainOrder = [
@@ -514,40 +601,6 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         <p className="text-sm text-muted-foreground mt-0.5">
           Automated indicator-to-rating calculation engine — N-ACRM
         </p>
-      </div>
-
-      {/* Ratings synchronized banner */}
-      <div
-        className="flex items-center gap-3 px-4 py-2.5 border text-xs"
-        style={{
-          background: "oklch(0.97 0.01 254)",
-          borderColor: "oklch(0.82 0.05 254)",
-          color: "oklch(0.40 0.04 254)",
-        }}
-        data-ocid="rating_engine.sync.panel"
-      >
-        <RefreshCw
-          className="w-3.5 h-3.5 flex-shrink-0"
-          style={{ color: "oklch(0.45 0.15 145)" }}
-        />
-        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
-          <CheckCircle2 className="w-3.5 h-3.5 text-gov-green flex-shrink-0" />
-          <span className="text-gov-green font-bold">Ratings Synchronized</span>
-          <span className="text-muted-foreground font-normal mx-1">·</span>
-          <span>Indicator Data</span>
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          <span>Indicator Rating</span>
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          <span>Domain Score</span>
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          <span>Overall Provider Rating</span>
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          <span>Scorecard</span>
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          <span>Pay-for-Improvement</span>
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          <span>Public Dashboard</span>
-        </div>
       </div>
 
       {/* Rating Calculation Rules Panel */}
@@ -717,7 +770,30 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         </CardHeader>
         <CardContent className="p-4 space-y-4">
           {/* Form header fields */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-gov-navy">
+                Select Provider
+              </Label>
+              <Select
+                value={selectedProviderId}
+                onValueChange={handleProviderSelect}
+              >
+                <SelectTrigger
+                  className="h-8 text-xs rounded-none"
+                  data-ocid="rating_engine.provider_select.select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNIFIED_PROVIDERS.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.city})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1">
               <Label
                 htmlFor="re-provider-id"
@@ -891,7 +967,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
           <div className="flex justify-end">
             <Button
               onClick={handleCalculate}
-              disabled={isPending}
+              disabled={isCalculating}
               className="rounded-none text-xs font-semibold h-9 px-6"
               style={{
                 background: "oklch(var(--gov-navy))",
@@ -899,7 +975,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
               }}
               data-ocid="rating_engine.submit.button"
             >
-              {isPending ? (
+              {isCalculating ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Calculating...
@@ -915,39 +991,20 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         </CardContent>
       </Card>
 
+      {/* Placeholder before first calculation */}
+      {!hasCalculated && (
+        <div
+          className="border p-8 text-center text-muted-foreground text-sm"
+          style={{ background: "oklch(0.98 0.005 254)" }}
+        >
+          Select a provider and click &ldquo;Calculate Ratings&rdquo; to see the
+          full rating cascade.
+        </div>
+      )}
+
       {/* Rating Engine Output */}
       {hasCalculated && result && (
         <div className="space-y-4" data-ocid="rating_engine.output.panel">
-          {/* Calculation cascade */}
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border text-xs font-semibold flex-wrap"
-            style={{
-              background: "oklch(0.96 0.025 145)",
-              borderColor: "oklch(0.72 0.12 145)",
-              color: "oklch(0.28 0.14 145)",
-            }}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Rating Calculation Complete</span>
-            <span className="text-muted-foreground font-normal mx-1">·</span>
-            {[
-              "Indicator Data",
-              "Indicator Rating",
-              "Domain Score",
-              "Overall Rating",
-              "Scorecard",
-              "Pay-for-Improvement",
-              "Public Dashboard",
-            ].map((step, i, arr) => (
-              <span key={step} className="flex items-center gap-1">
-                <span>{step}</span>
-                {i < arr.length - 1 && (
-                  <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                )}
-              </span>
-            ))}
-          </div>
-
           {/* Indicator Ratings Table */}
           <Card className="rounded-none border">
             <CardHeader className="pb-2 pt-4 px-4 border-b">
@@ -965,6 +1022,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                       <th className="text-left">Domain</th>
                       <th className="text-right">Rate</th>
                       <th className="text-right">Benchmark</th>
+                      <th className="text-left">vs Benchmark</th>
                       <th className="text-left">Quintile</th>
                       <th className="text-left">Trend</th>
                       <th className="text-right">Adj.</th>
@@ -992,6 +1050,14 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                         <td className="text-right">{ind.rate.toFixed(1)}</td>
                         <td className="text-right text-muted-foreground">
                           {ind.benchmark.toFixed(1)}
+                        </td>
+                        <td>
+                          <BenchmarkStatusChip
+                            rate={ind.rate}
+                            benchmark={ind.benchmark}
+                            isLowerBetter={ind.isLowerBetter}
+                            size="xs"
+                          />
                         </td>
                         <td>
                           <span
@@ -1163,30 +1229,38 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                       result.incentiveEligibility.tier,
                     );
                     return (
-                      <div
-                        className="border px-3 py-2 flex items-center justify-between"
-                        style={{
-                          background: style.bg,
-                          borderColor: style.border,
-                        }}
-                      >
-                        <span
-                          className="text-sm font-bold"
-                          style={{ color: style.color }}
+                      <div className="space-y-2">
+                        <div
+                          className="border px-3 py-2 flex items-center justify-between"
+                          style={{
+                            background: style.bg,
+                            borderColor: style.border,
+                          }}
                         >
-                          {result.incentiveEligibility.tier}
-                        </span>
-                        {result.incentiveEligibility.eligible ? (
-                          <CheckCircle2
-                            className="w-4 h-4"
+                          <span
+                            className="text-sm font-bold"
                             style={{ color: style.color }}
+                          >
+                            {result.incentiveEligibility.tier}
+                          </span>
+                          {result.incentiveEligibility.eligible ? (
+                            <CheckCircle2
+                              className="w-4 h-4"
+                              style={{ color: style.color }}
+                            />
+                          ) : (
+                            <AlertTriangle
+                              className="w-4 h-4"
+                              style={{ color: style.color }}
+                            />
+                          )}
+                        </div>
+                        <div className="flex justify-center">
+                          <IncentiveEligibilityBadge
+                            eligible={result.incentiveEligibility.eligible}
+                            size="md"
                           />
-                        ) : (
-                          <AlertTriangle
-                            className="w-4 h-4"
-                            style={{ color: style.color }}
-                          />
-                        )}
+                        </div>
                       </div>
                     );
                   })()}
@@ -1247,6 +1321,13 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
           </div>
         </div>
       )}
+
+      {/* Performance Alert Modal */}
+      <PerformanceAlertModal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        alert={currentAlert}
+      />
 
       {/* Audit Log */}
       <Card className="rounded-none border">

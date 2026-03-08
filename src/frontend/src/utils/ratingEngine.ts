@@ -1,15 +1,20 @@
 // Rating Engine — Pure calculation functions for N-ACRM indicator and provider ratings
 
 /**
- * Calculates a star rating (1-5) from a quintile position and trend.
+ * Calculates a star rating (1-5) from a quintile position, trend, and optional benchmark comparison.
  * Q1→5, Q2→4, Q3→3, Q4→2, Q5→1
  * Improving trend: +0.2 boost
  * Declining trend: -0.2 penalty
+ * Below benchmark: -0.5 penalty
+ * Above benchmark by >10%: +0.2 boost
  * Result is clamped to [1, 5].
  */
 export function calcIndicatorStarRating(
   quintile: number,
   trend: string,
+  rate?: number,
+  benchmark?: number,
+  isLowerBetter?: boolean,
 ): number {
   const baseRatings: Record<number, number> = {
     1: 5,
@@ -21,7 +26,37 @@ export function calcIndicatorStarRating(
   const base = baseRatings[quintile] ?? 3;
   const trendAdjustment =
     trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
-  return Math.min(5, Math.max(1, base + trendAdjustment));
+  let rating = base + trendAdjustment;
+
+  // Apply benchmark adjustment if data is provided — inlined to avoid circular deps
+  if (
+    rate !== undefined &&
+    benchmark !== undefined &&
+    isLowerBetter !== undefined &&
+    benchmark !== 0
+  ) {
+    const benchmarkStatus: "above" | "near" | "below" = (() => {
+      if (isLowerBetter) {
+        if (rate < benchmark * 0.95) return "above";
+        if (rate <= benchmark * 1.05) return "near";
+        return "below";
+      }
+      if (rate > benchmark * 1.05) return "above";
+      if (rate >= benchmark * 0.95) return "near";
+      return "below";
+    })();
+
+    if (benchmarkStatus === "below") {
+      rating -= 0.5;
+    } else if (benchmarkStatus === "above") {
+      const pct = isLowerBetter
+        ? (benchmark - rate) / benchmark
+        : (rate - benchmark) / benchmark;
+      if (pct > 0.1) rating += 0.2;
+    }
+  }
+
+  return Math.min(5, Math.max(1, rating));
 }
 
 /**

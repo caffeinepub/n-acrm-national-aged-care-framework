@@ -1,16 +1,21 @@
+import { BenchmarkStatusChip } from "@/components/ui/BenchmarkStatusChip";
+import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
+import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  CheckCircle2,
-  Minus,
-  RefreshCw,
-  Search,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
-import { useState } from "react";
+  getBenchmarkStatus,
+  isEligibleForIncentive,
+} from "@/utils/benchmarkUtils";
+import type {
+  IndicatorForAlert,
+  PerformanceAlert,
+} from "@/utils/performanceAlerts";
+import { resolveAlertToShow } from "@/utils/performanceAlerts";
+import { Minus, Search, TrendingDown, TrendingUp } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -22,10 +27,11 @@ import {
   YAxis,
 } from "recharts";
 import {
-  MOCK_INDICATORS,
-  MOCK_PROVIDERS,
   MOCK_SCORECARDS,
-  type MockProvider,
+  UNIFIED_PROVIDERS,
+  type UnifiedProvider,
+  getUnifiedProviderDomainScores,
+  getUnifiedProviderIndicators,
 } from "../../data/mockData";
 import {
   useIndicatorResults,
@@ -103,17 +109,25 @@ function ScoreCard({
   label,
   value,
   quintile,
+  scale = "percent",
 }: {
   label: string;
   value: number;
   quintile?: number;
+  scale?: "percent" | "stars";
 }) {
   const scoreColor =
-    value >= 80
-      ? "oklch(var(--gov-green))"
-      : value >= 70
-        ? "oklch(var(--gov-amber))"
-        : "oklch(var(--gov-red))";
+    scale === "stars"
+      ? value >= 4.0
+        ? "oklch(var(--gov-green))"
+        : value >= 3.0
+          ? "oklch(var(--gov-amber))"
+          : "oklch(var(--gov-red))"
+      : value >= 80
+        ? "oklch(var(--gov-green))"
+        : value >= 70
+          ? "oklch(var(--gov-amber))"
+          : "oklch(var(--gov-red))";
 
   return (
     <Card className="rounded-none border">
@@ -144,13 +158,20 @@ export default function ProviderPerformance({
   currentQuarter,
 }: ProviderPerformanceProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState<MockProvider>(
-    MOCK_PROVIDERS[0],
+  const [selectedProvider, setSelectedProvider] = useState<UnifiedProvider>(
+    UNIFIED_PROVIDERS[0],
   );
 
-  const filteredProviders = MOCK_PROVIDERS.filter(
+  // Performance alert state
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
+    null,
+  );
+
+  const filteredProviders = UNIFIED_PROVIDERS.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.state.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
@@ -173,11 +194,70 @@ export default function ProviderPerformance({
       ? liveIndicators.map((ind) => ({
           ...ind,
           quintileRank: Number(ind.quintileRank),
+          // isLowerBetter not available from backend; default to false
+          isLowerBetter: false as boolean,
         }))
-      : MOCK_INDICATORS(selectedProvider.id);
+      : getUnifiedProviderIndicators(selectedProvider.id);
 
   const latestScorecard = scorecards[scorecards.length - 1];
-  const dimensions = ["Safety", "Preventive", "Experience", "Equity"];
+  const dimensions = [
+    "Safety",
+    "Preventive",
+    "Quality",
+    "Staffing",
+    "Compliance",
+    "Experience",
+  ];
+
+  // Compute domain star ratings from unified provider data (provider-specific, changes per provider)
+  const domainStars = useMemo(
+    () => getUnifiedProviderDomainScores(selectedProvider.id),
+    [selectedProvider.id],
+  );
+
+  // Weighted overall star score: Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%
+  const overallStars = useMemo(
+    () =>
+      domainStars.safety * 0.3 +
+      domainStars.preventive * 0.2 +
+      domainStars.quality * 0.2 +
+      domainStars.staffing * 0.15 +
+      domainStars.compliance * 0.1 +
+      domainStars.experience * 0.05,
+    [domainStars],
+  );
+
+  function handleProviderSelect(provider: UnifiedProvider) {
+    setSelectedProvider(provider);
+    // Build indicator list for alert engine
+    const provInds = getUnifiedProviderIndicators(provider.id);
+    const alertIndicators: IndicatorForAlert[] = provInds.map((ind) => ({
+      label: ind.indicatorName,
+      score: calcIndicatorStarRating(
+        ind.quintileRank,
+        ind.trend,
+        ind.rate,
+        ind.nationalBenchmark,
+        ind.isLowerBetter,
+      ),
+      providerValue: ind.rate,
+      benchmark: ind.nationalBenchmark,
+      isLowerBetter: ind.isLowerBetter,
+    }));
+    const domScores = getUnifiedProviderDomainScores(provider.id);
+    const overall =
+      domScores.safety * 0.3 +
+      domScores.preventive * 0.2 +
+      domScores.quality * 0.2 +
+      domScores.staffing * 0.15 +
+      domScores.compliance * 0.1 +
+      domScores.experience * 0.05;
+    const alert = resolveAlertToShow(provider.name, overall, alertIndicators);
+    if (alert) {
+      setCurrentAlert(alert);
+      setAlertOpen(true);
+    }
+  }
 
   return (
     <div className="p-6 space-y-5">
@@ -188,36 +268,6 @@ export default function ProviderPerformance({
         <p className="text-sm text-muted-foreground mt-0.5">
           Provider scorecards and indicator results — {currentQuarter}
         </p>
-      </div>
-
-      {/* Ratings Synchronized status banner */}
-      <div
-        className="flex items-center gap-3 px-4 py-2.5 border text-xs"
-        style={{
-          background: "oklch(0.97 0.01 254)",
-          borderColor: "oklch(0.82 0.05 254)",
-          color: "oklch(0.40 0.04 254)",
-        }}
-        data-ocid="provider_performance.sync.panel"
-      >
-        <RefreshCw
-          className="w-3.5 h-3.5 flex-shrink-0"
-          style={{ color: "oklch(0.45 0.15 145)" }}
-        />
-        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
-          <CheckCircle2 className="w-3.5 h-3.5 text-gov-green flex-shrink-0" />
-          <span className="text-gov-green font-bold">Ratings Synchronized</span>
-          <span className="text-muted-foreground font-normal mx-1">·</span>
-          <span>Indicator Data</span>
-          <span>→</span>
-          <span>Indicator Rating</span>
-          <span>→</span>
-          <span>Scorecard</span>
-          <span>→</span>
-          <span>Overall Rating</span>
-          <span>→</span>
-          <span>Pay-for-Improvement</span>
-        </div>
       </div>
 
       <div className="flex gap-4">
@@ -244,11 +294,11 @@ export default function ProviderPerformance({
             className="overflow-y-auto"
             style={{ maxHeight: "calc(100vh - 280px)" }}
           >
-            {filteredProviders.slice(0, 10).map((provider, idx) => (
+            {filteredProviders.map((provider, idx) => (
               <button
                 type="button"
                 key={provider.id}
-                onClick={() => setSelectedProvider(provider)}
+                onClick={() => handleProviderSelect(provider)}
                 data-ocid={`provider_performance.provider.item.${idx + 1}`}
                 aria-label={`Select provider ${provider.name}`}
                 className="w-full text-left px-3 py-2.5 border-b transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
@@ -267,7 +317,7 @@ export default function ProviderPerformance({
                   {provider.name}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {provider.state} · {provider.serviceType}
+                  {provider.city} · {provider.type}
                   {provider.beds ? ` · ${provider.beds} beds` : ""}
                 </div>
               </button>
@@ -288,9 +338,11 @@ export default function ProviderPerformance({
                   {selectedProvider.name}
                 </h2>
                 <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
+                  <span>{selectedProvider.city}</span>
+                  <span>·</span>
                   <span>{selectedProvider.state}</span>
                   <span>·</span>
-                  <span>{selectedProvider.serviceType}</span>
+                  <span>{selectedProvider.type}</span>
                   {selectedProvider.beds && (
                     <>
                       <span>·</span>
@@ -301,6 +353,22 @@ export default function ProviderPerformance({
                   <span>
                     ACQSC Standards: {selectedProvider.acqscStandards}/8
                   </span>
+                </div>
+                {/* Incentive Eligibility Badge */}
+                <div className="mt-2">
+                  <IncentiveEligibilityBadge
+                    eligible={isEligibleForIncentive(
+                      overallStars,
+                      indicators.some(
+                        (ind) =>
+                          getBenchmarkStatus(
+                            ind.rate,
+                            ind.nationalBenchmark,
+                            ind.isLowerBetter,
+                          ) === "below",
+                      ),
+                    )}
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -329,45 +397,46 @@ export default function ProviderPerformance({
                 <Skeleton key={k} className="h-20 rounded-none" />
               ))}
             </div>
-          ) : latestScorecard ? (
+          ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               <ScoreCard
                 label="Overall Score"
-                value={latestScorecard.overallScore}
-                quintile={latestScorecard.quintileRank}
+                value={Number.parseFloat(overallStars.toFixed(2))}
+                quintile={latestScorecard?.quintileRank}
+                scale="stars"
               />
-              <ScoreCard label="Safety" value={latestScorecard.safetyScore} />
+              <ScoreCard
+                label="Safety"
+                value={domainStars.safety}
+                scale="stars"
+              />
               <ScoreCard
                 label="Preventive"
-                value={latestScorecard.preventiveScore}
+                value={domainStars.preventive}
+                scale="stars"
               />
               <ScoreCard
                 label="Experience"
-                value={latestScorecard.experienceScore}
+                value={domainStars.experience}
+                scale="stars"
               />
               <ScoreCard
                 label="Quality"
-                value={
-                  (latestScorecard as unknown as { qualityScore?: number })
-                    .qualityScore ?? 82.1
-                }
+                value={domainStars.quality}
+                scale="stars"
               />
               <ScoreCard
                 label="Staffing"
-                value={
-                  (latestScorecard as unknown as { staffingScore?: number })
-                    .staffingScore ?? 77.4
-                }
+                value={domainStars.staffing}
+                scale="stars"
               />
               <ScoreCard
                 label="Compliance"
-                value={
-                  (latestScorecard as unknown as { complianceScore?: number })
-                    .complianceScore ?? 85.0
-                }
+                value={domainStars.compliance}
+                scale="stars"
               />
             </div>
-          ) : null}
+          )}
 
           {/* 4-quarter trend */}
           <Card className="rounded-none border">
@@ -457,6 +526,7 @@ export default function ProviderPerformance({
                         <th className="text-left">Code</th>
                         <th className="text-right">Rate</th>
                         <th className="text-right">Benchmark</th>
+                        <th className="text-left">vs Benchmark</th>
                         <th className="text-left">Quintile</th>
                         <th className="text-left">Trend</th>
                         <th className="text-left">Star Rating</th>
@@ -471,7 +541,7 @@ export default function ProviderPerformance({
                         return [
                           <tr key={`dim-${dim}`}>
                             <td
-                              colSpan={7}
+                              colSpan={8}
                               className="font-bold text-xs uppercase tracking-wide py-1.5"
                               style={{
                                 background: "oklch(0.94 0.012 240)",
@@ -484,9 +554,13 @@ export default function ProviderPerformance({
                           </tr>,
                           ...dimIndicators.map((ind) => {
                             const qStyle = getQuintileStyle(ind.quintileRank);
+                            const ilb = ind.isLowerBetter;
                             const starRating = calcIndicatorStarRating(
                               ind.quintileRank,
                               ind.trend,
+                              ind.rate,
+                              ind.nationalBenchmark,
+                              ilb,
                             );
                             return (
                               <tr key={ind.id}>
@@ -501,6 +575,14 @@ export default function ProviderPerformance({
                                 </td>
                                 <td className="text-right text-muted-foreground">
                                   {ind.nationalBenchmark.toFixed(1)}
+                                </td>
+                                <td>
+                                  <BenchmarkStatusChip
+                                    rate={ind.rate}
+                                    benchmark={ind.nationalBenchmark}
+                                    isLowerBetter={ilb}
+                                    size="xs"
+                                  />
                                 </td>
                                 <td>
                                   <span
@@ -539,6 +621,13 @@ export default function ProviderPerformance({
           </Card>
         </div>
       </div>
+
+      {/* Performance Alert Modal */}
+      <PerformanceAlertModal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        alert={currentAlert}
+      />
     </div>
   );
 }

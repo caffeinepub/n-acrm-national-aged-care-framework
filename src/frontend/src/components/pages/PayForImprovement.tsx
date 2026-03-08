@@ -1,12 +1,25 @@
+import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
+import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  calcBaselineImprovement,
+  calcBenchmarkImprovement,
+} from "@/utils/benchmarkUtils";
+import type {
+  IndicatorForAlert,
+  PerformanceAlert,
+} from "@/utils/performanceAlerts";
+import { resolveAlertToShow } from "@/utils/performanceAlerts";
+import {
+  AlertTriangle,
   CheckCircle2,
   DollarSign,
-  RefreshCw,
   TrendingUp,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -19,34 +32,52 @@ import {
   YAxis,
 } from "recharts";
 import {
-  CITY_PROVIDERS,
+  MOCK_PROVIDERS,
   PAY_FOR_IMPROVEMENT_DATA,
   PAY_FOR_IMPROVEMENT_THRESHOLDS,
+  UNIFIED_PROVIDERS,
+  getUnifiedProviderDomainScores,
 } from "../../data/mockData";
 import {
-  type DomainScores,
   calcWeightedProviderRating,
   scoreToStarBand,
 } from "../../utils/ratingEngine";
 
+// ── Benchmark values for each P4I metric ─────────────────────────────────────
+
+const METRIC_BENCHMARKS: Record<
+  string,
+  { benchmarkValue: number; isLowerBetter: boolean }
+> = {
+  "ED Reduction 90-Day": { benchmarkValue: 11.2, isLowerBetter: true },
+  "Hospitalization Reduction": { benchmarkValue: 9.0, isLowerBetter: true },
+  "Deprescribing Rate": { benchmarkValue: 20.0, isLowerBetter: false },
+  "Screening Completion": { benchmarkValue: 85.0, isLowerBetter: false },
+  "Social Participation": { benchmarkValue: 55.0, isLowerBetter: false },
+};
+
 // ── Provider star rating lookup ───────────────────────────────────────────────
 
-// Map PFI provider names to city providers for rating lookup
-const ALL_CITY_PROVIDERS = Object.values(CITY_PROVIDERS).flat();
-
 function getProviderOverallStars(providerName: string): number | null {
-  const found = ALL_CITY_PROVIDERS.find((p) => p.name === providerName);
-  if (!found) return null;
-  const domains: DomainScores = {
-    safety: found.indicators.safetyClinical,
-    preventive: found.indicators.preventiveCare,
-    quality: found.indicators.qualityMeasures,
-    staffing: found.indicators.staffing,
-    compliance: found.indicators.compliance,
-    experience: (found.indicators.residents + found.indicators.experience) / 2,
-  };
-  const { score } = calcWeightedProviderRating(domains);
-  return scoreToStarBand(score);
+  // First try UNIFIED_PROVIDERS (covers all city-based providers)
+  const unified = UNIFIED_PROVIDERS.find(
+    (p) => p.name.toLowerCase() === providerName.toLowerCase(),
+  );
+  if (unified) {
+    return unified.overallStars;
+  }
+
+  // Fall back to MOCK_PROVIDERS (legacy PROV-xxx based providers)
+  const legacy = MOCK_PROVIDERS.find(
+    (p) => p.name.toLowerCase() === providerName.toLowerCase(),
+  );
+  if (legacy) {
+    const domains = getUnifiedProviderDomainScores(legacy.id);
+    const { score } = calcWeightedProviderRating(domains);
+    return scoreToStarBand(score);
+  }
+
+  return null;
 }
 
 interface PayForImprovementProps {
@@ -56,6 +87,42 @@ interface PayForImprovementProps {
 export default function PayForImprovement({
   currentQuarter,
 }: PayForImprovementProps) {
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
+    null,
+  );
+
+  function handleViewAlert(providerName: string) {
+    const overallStars = getProviderOverallStars(providerName);
+    if (overallStars === null) return;
+    // Build minimal indicator set from domain scores for the provider
+    const unified = UNIFIED_PROVIDERS.find(
+      (p) => p.name.toLowerCase() === providerName.toLowerCase(),
+    );
+    const alertIndicators: IndicatorForAlert[] = unified
+      ? [
+          { label: "Safety & Clinical", score: unified.domainScores.safety },
+          { label: "Preventive Care", score: unified.domainScores.preventive },
+          { label: "Staffing", score: unified.domainScores.staffing },
+          { label: "Compliance", score: unified.domainScores.compliance },
+          {
+            label: "Residents Experience",
+            score: unified.domainScores.experience,
+          },
+          { label: "Quality Measures", score: unified.domainScores.quality },
+        ]
+      : [{ label: "Overall Performance", score: overallStars }];
+    const alert = resolveAlertToShow(
+      providerName,
+      overallStars,
+      alertIndicators,
+    );
+    if (alert) {
+      setCurrentAlert(alert);
+      setAlertOpen(true);
+    }
+  }
+
   const eligibleCount = PAY_FOR_IMPROVEMENT_DATA.filter(
     (d) => d.eligible,
   ).length;
@@ -90,36 +157,6 @@ export default function PayForImprovement({
           {currentQuarter} Eligibility Report — Improvement metrics and funding
           eligibility assessment
         </p>
-      </div>
-
-      {/* Ratings synchronized banner */}
-      <div
-        className="flex items-center gap-3 px-4 py-2.5 border text-xs"
-        style={{
-          background: "oklch(0.97 0.01 254)",
-          borderColor: "oklch(0.82 0.05 254)",
-          color: "oklch(0.40 0.04 254)",
-        }}
-        data-ocid="pfi.sync.panel"
-      >
-        <RefreshCw
-          className="w-3.5 h-3.5 flex-shrink-0"
-          style={{ color: "oklch(0.45 0.15 145)" }}
-        />
-        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
-          <CheckCircle2 className="w-3.5 h-3.5 text-gov-green flex-shrink-0" />
-          <span className="text-gov-green font-bold">Ratings Synchronized</span>
-          <span className="text-muted-foreground font-normal mx-1">·</span>
-          <span>Indicator Performance</span>
-          <span>→</span>
-          <span>Indicator Rating</span>
-          <span>→</span>
-          <span>Provider Scorecard</span>
-          <span>→</span>
-          <span>Overall Rating</span>
-          <span>→</span>
-          <span>Pay-for-Improvement Eligibility</span>
-        </div>
       </div>
 
       {/* Eligibility Logic Explanation */}
@@ -336,29 +373,77 @@ export default function PayForImprovement({
                 <tr>
                   <th className="text-left">Provider</th>
                   <th className="text-left">Metric Type</th>
+                  <th className="text-right">Benchmark</th>
                   <th className="text-right">Baseline</th>
                   <th className="text-right">Current</th>
-                  <th className="text-right">Improvement %</th>
-                  <th className="text-right">Threshold Required</th>
+                  <th className="text-right">vs Benchmark %</th>
+                  <th className="text-right">vs Baseline %</th>
+                  <th className="text-right">Threshold</th>
                   <th className="text-left">Overall Rating</th>
                   <th className="text-left">Funding Eligible</th>
                   <th className="text-right">Est. Funding</th>
+                  <th className="text-center">Alert</th>
                 </tr>
               </thead>
               <tbody>
                 {PAY_FOR_IMPROVEMENT_DATA.map((row) => {
+                  const threshold = PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
+                    (t) => t.metric === row.metric,
+                  );
+                  const metricBenchmark = METRIC_BENCHMARKS[row.metric];
                   const aboveThreshold =
-                    row.improvement >=
-                    (PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
-                      (t) => t.metric === row.metric,
-                    )?.threshold || 0);
+                    row.improvement >= (threshold?.threshold || 0);
                   const overallStars = getProviderOverallStars(row.provider);
+
+                  // Dynamic eligibility based on improvement threshold
+                  const dynamicEligible = aboveThreshold;
+
+                  // Benchmark improvement %
+                  let vsBenchmarkPct: number | null = null;
+                  if (metricBenchmark) {
+                    vsBenchmarkPct = calcBenchmarkImprovement(
+                      row.current,
+                      metricBenchmark.benchmarkValue,
+                      metricBenchmark.isLowerBetter,
+                    );
+                  }
+
+                  // Baseline improvement %
+                  const vsBaselinePct = calcBaselineImprovement(
+                    row.baseline,
+                    row.current,
+                    metricBenchmark?.isLowerBetter ?? true,
+                  );
+
+                  const benchmarkColor = (pct: number) =>
+                    pct >= 0
+                      ? "oklch(var(--gov-green))"
+                      : "oklch(var(--gov-red))";
+
                   return (
                     <tr key={row.id}>
                       <td className="font-medium">{row.provider}</td>
                       <td>{row.metric}</td>
+                      <td className="text-right text-muted-foreground text-xs">
+                        {metricBenchmark
+                          ? `${metricBenchmark.benchmarkValue}${metricBenchmark.isLowerBetter ? "" : "%"}`
+                          : "—"}
+                      </td>
                       <td className="text-right">{row.baseline.toFixed(1)}%</td>
                       <td className="text-right">{row.current.toFixed(1)}%</td>
+                      <td className="text-right">
+                        {vsBenchmarkPct !== null ? (
+                          <span
+                            className="font-bold text-xs"
+                            style={{ color: benchmarkColor(vsBenchmarkPct) }}
+                          >
+                            {vsBenchmarkPct >= 0 ? "+" : ""}
+                            {vsBenchmarkPct.toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td
                         className="text-right font-bold"
                         style={{
@@ -367,13 +452,11 @@ export default function PayForImprovement({
                             : "oklch(var(--gov-red))",
                         }}
                       >
-                        {row.improvement.toFixed(1)}%
+                        {vsBaselinePct >= 0 ? "+" : ""}
+                        {vsBaselinePct.toFixed(1)}%
                       </td>
                       <td className="text-right text-muted-foreground">
-                        {PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
-                          (t) => t.metric === row.metric,
-                        )?.threshold ?? "—"}
-                        %
+                        {threshold?.threshold ?? "—"}%
                       </td>
                       <td>
                         {overallStars !== null ? (
@@ -387,16 +470,37 @@ export default function PayForImprovement({
                         )}
                       </td>
                       <td>
-                        {row.eligible ? (
-                          <span className="badge-green">ELIGIBLE</span>
-                        ) : (
-                          <span className="badge-red">NOT ELIGIBLE</span>
-                        )}
+                        <IncentiveEligibilityBadge
+                          eligible={dynamicEligible}
+                          size="sm"
+                        />
                       </td>
                       <td className="text-right font-semibold">
                         {row.funding > 0
                           ? `$${row.funding.toLocaleString()}`
                           : "—"}
+                      </td>
+                      <td className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 rounded-none"
+                          title={`View performance alert for ${row.provider}`}
+                          onClick={() => handleViewAlert(row.provider)}
+                          data-ocid="pfi.alert.button"
+                        >
+                          <AlertTriangle
+                            className="w-3.5 h-3.5"
+                            style={{
+                              color:
+                                overallStars !== null && overallStars > 4.5
+                                  ? "oklch(0.45 0.15 145)"
+                                  : overallStars !== null && overallStars <= 2
+                                    ? "oklch(0.48 0.20 25)"
+                                    : "oklch(0.60 0.08 72)",
+                            }}
+                          />
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -475,6 +579,13 @@ export default function PayForImprovement({
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* Performance Alert Modal */}
+      <PerformanceAlertModal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        alert={currentAlert}
+      />
 
       {/* Threshold configuration */}
       <Card className="rounded-none border">

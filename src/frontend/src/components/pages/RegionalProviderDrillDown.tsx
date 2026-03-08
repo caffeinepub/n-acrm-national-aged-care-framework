@@ -1,3 +1,6 @@
+import { BenchmarkStatusChip } from "@/components/ui/BenchmarkStatusChip";
+import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
+import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +24,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CITY_LIST, CITY_PROVIDERS, type CityProvider } from "@/data/mockData";
+import { isEligibleForIncentive } from "@/utils/benchmarkUtils";
+import type {
+  IndicatorForAlert,
+  PerformanceAlert,
+} from "@/utils/performanceAlerts";
+import { resolveAlertToShow } from "@/utils/performanceAlerts";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -34,7 +43,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -945,12 +954,28 @@ interface ProviderDetailProps {
   onBack: () => void;
 }
 
+function buildCityProviderAlertIndicators(
+  provider: CityProvider,
+): IndicatorForAlert[] {
+  return INDICATOR_CONFIG.map((ind) => ({
+    label: ind.label,
+    score: provider.indicators[ind.key],
+    providerValue: provider.indicators[ind.key],
+    benchmark: 3.5,
+    isLowerBetter: false,
+  }));
+}
+
 function ProviderDetail({
   provider,
   allProviders,
   onBack,
 }: ProviderDetailProps) {
   const overall = calcOverall(provider.indicators);
+  const hasBelowBenchmark = INDICATOR_CONFIG.some(
+    (ind) => provider.indicators[ind.key] < 3.5,
+  );
+  const incentiveEligible = isEligibleForIncentive(overall, hasBelowBenchmark);
 
   const [insightOpen, setInsightOpen] = useState(false);
   const [insightData, setInsightData] = useState<{
@@ -959,6 +984,25 @@ function ProviderDetail({
     score: number;
     trend: "improving" | "declining" | "stable";
   } | null>(null);
+
+  // Performance alert state
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
+    null,
+  );
+
+  // Auto-show alert when provider changes
+  useEffect(() => {
+    const indicators = buildCityProviderAlertIndicators(provider);
+    const alertResult = resolveAlertToShow(provider.name, overall, indicators);
+    if (alertResult) {
+      setCurrentAlert(alertResult);
+      setAlertOpen(true);
+    } else {
+      setCurrentAlert(null);
+      setAlertOpen(false);
+    }
+  }, [provider, overall]);
 
   function openInsight(ind: (typeof INDICATOR_CONFIG)[0]) {
     const score = provider.indicators[ind.key];
@@ -1012,6 +1056,7 @@ function ProviderDetail({
               <CalendarDays className="w-3.5 h-3.5" />
               Established {provider.established}
             </span>
+            <IncentiveEligibilityBadge eligible={incentiveEligible} size="sm" />
           </div>
         </div>
       </div>
@@ -1036,22 +1081,25 @@ function ProviderDetail({
           <table className="w-full gov-table">
             <thead>
               <tr>
-                <th className="text-left" style={{ width: "26%" }}>
+                <th className="text-left" style={{ width: "24%" }}>
                   Indicator
                 </th>
-                <th className="text-left" style={{ width: "8%" }}>
+                <th className="text-left" style={{ width: "7%" }}>
                   Weight
                 </th>
-                <th className="text-left" style={{ width: "32%" }}>
+                <th className="text-left" style={{ width: "26%" }}>
                   Star Rating
                 </th>
-                <th className="text-center" style={{ width: "10%" }}>
+                <th className="text-center" style={{ width: "8%" }}>
                   Score
                 </th>
-                <th className="text-center" style={{ width: "10%" }}>
+                <th className="text-center" style={{ width: "8%" }}>
                   Trend
                 </th>
-                <th className="text-center" style={{ width: "14%" }}>
+                <th className="text-left" style={{ width: "15%" }}>
+                  vs Benchmark
+                </th>
+                <th className="text-center" style={{ width: "12%" }}>
                   Band
                 </th>
               </tr>
@@ -1147,6 +1195,14 @@ function ProviderDetail({
                       <div className="flex justify-center">
                         <TrendArrow trend={trend} />
                       </div>
+                    </td>
+                    <td>
+                      <BenchmarkStatusChip
+                        rate={score}
+                        benchmark={3.5}
+                        isLowerBetter={false}
+                        size="xs"
+                      />
                     </td>
                     <td className="text-center">
                       <span className={ratingBadgeClass(score)}>
@@ -1318,6 +1374,13 @@ function ProviderDetail({
           trend={insightData.trend}
         />
       )}
+
+      {/* Performance Alert Modal */}
+      <PerformanceAlertModal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        alert={currentAlert}
+      />
     </div>
   );
 }
@@ -1415,7 +1478,7 @@ export default function RegionalProviderDrillDown() {
             Select a region to view providers
           </p>
           <p className="text-xs mt-1" style={{ color: "oklch(0.55 0.02 240)" }}>
-            Choose from {CITY_LIST.length} regions across India
+            Choose from {CITY_LIST.length} regions across Australia
           </p>
         </div>
       )}
