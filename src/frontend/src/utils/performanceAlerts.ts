@@ -3,8 +3,9 @@
 export interface HighPerformanceAlert {
   type: "high";
   providerName: string;
-  overallRating: number;
-  topIndicators: Array<{ label: string; score: number }>;
+  overallRating: number; // fractional stars 0-5
+  overallScore: number; // 0-100 performance score
+  topIndicators: Array<{ label: string; score: number; perfScore: number }>;
 }
 
 export interface LowPerformanceAlert {
@@ -86,6 +87,7 @@ export function getSuggestedImprovement(indicatorKey: string): string {
 export interface IndicatorForAlert {
   label: string;
   score: number;
+  perfScore?: number;
   benchmark?: number;
   providerValue?: number;
   isLowerBetter?: boolean;
@@ -99,13 +101,24 @@ export function getHighPerformanceAlert(
   providerName: string,
   overallRating: number,
   indicators: IndicatorForAlert[],
+  overallScore?: number,
 ): HighPerformanceAlert | null {
   if (overallRating <= 4.5) return null;
   const topIndicators = [...indicators]
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
-    .map((i) => ({ label: i.label, score: i.score }));
-  return { type: "high", providerName, overallRating, topIndicators };
+    .map((i) => ({
+      label: i.label,
+      score: i.score,
+      perfScore: i.perfScore ?? i.score * 20,
+    }));
+  return {
+    type: "high",
+    providerName,
+    overallRating,
+    overallScore: overallScore ?? overallRating * 20,
+    topIndicators,
+  };
 }
 
 /**
@@ -148,11 +161,13 @@ export function resolveAlertToShow(
   providerName: string,
   overallRating: number,
   indicators: IndicatorForAlert[],
+  overallScore?: number,
 ): PerformanceAlert | null {
   const highAlert = getHighPerformanceAlert(
     providerName,
     overallRating,
     indicators,
+    overallScore,
   );
   if (highAlert) return highAlert;
   const lowAlerts = getLowPerformanceAlerts(providerName, indicators);

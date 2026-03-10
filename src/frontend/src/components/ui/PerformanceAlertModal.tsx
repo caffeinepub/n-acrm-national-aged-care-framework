@@ -61,7 +61,12 @@ const THEME = {
 
 // ── Helper: score row for high performance table ──────────────────────────────
 
-function ScoreRow({ label, score }: { label: string; score: number }) {
+function ScoreRow({
+  label,
+  score,
+  perfScore,
+}: { label: string; score: number; perfScore?: number }) {
+  const displayScore = perfScore ?? score * 20;
   return (
     <tr>
       <td
@@ -77,7 +82,7 @@ function ScoreRow({ label, score }: { label: string; score: number }) {
         className="py-2 text-right text-xs font-bold tabular-nums"
         style={{ color: "oklch(0.38 0.14 145)" }}
       >
-        {score.toFixed(1)}&thinsp;/ 5
+        {displayScore.toFixed(1)}&thinsp;/ 100
       </td>
     </tr>
   );
@@ -132,7 +137,7 @@ function ComparisonRow({
             className="text-xs mt-0.5 font-semibold"
             style={{ color: valueColor }}
           >
-            ▲ Above benchmark
+            ▲ Worse than benchmark
           </div>
         )}
       </div>
@@ -286,19 +291,22 @@ export function PerformanceAlertModal({
                     className="text-xs uppercase tracking-wide font-bold mb-0.5"
                     style={{ color: "oklch(0.46 0.025 250)" }}
                   >
-                    Overall Rating
+                    Performance Score
                   </div>
                   <div
-                    className="text-4xl font-black tabular-nums leading-none"
+                    className="text-3xl font-black tabular-nums leading-none"
                     style={{ color: theme.accentText }}
                   >
-                    {highAlert.overallRating.toFixed(2)}
+                    {(
+                      highAlert.overallScore ?? highAlert.overallRating * 20
+                    ).toFixed(1)}{" "}
+                    / 100
                   </div>
                   <div
-                    className="text-xs mt-0.5"
-                    style={{ color: "oklch(0.55 0.02 240)" }}
+                    className="text-sm font-bold mt-1"
+                    style={{ color: theme.accentText }}
                   >
-                    out of 5.0
+                    {highAlert.overallRating.toFixed(1)} / 5 ★
                   </div>
                 </div>
                 <div className="flex-1">
@@ -311,7 +319,11 @@ export function PerformanceAlertModal({
                     className="text-xs mt-1.5 font-semibold"
                     style={{ color: theme.accentText }}
                   >
-                    Excellent — Above Regional Benchmark
+                    {highAlert.overallScore >= 90
+                      ? "Excellent performance"
+                      : highAlert.overallScore >= 80
+                        ? "Good performance"
+                        : "Above benchmark performance"}
                   </div>
                 </div>
               </div>
@@ -330,6 +342,7 @@ export function PerformanceAlertModal({
                         key={ind.label}
                         label={ind.label}
                         score={ind.score}
+                        perfScore={ind.perfScore}
                       />
                     ))}
                   </tbody>

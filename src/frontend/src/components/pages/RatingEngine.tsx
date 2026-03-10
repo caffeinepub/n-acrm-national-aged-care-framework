@@ -33,7 +33,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { RatingEngineResult } from "../../backend.d";
 import {
@@ -42,9 +42,13 @@ import {
 } from "../../data/mockData";
 import {
   calcDomainScore,
+  calcIndicatorPerformanceScore,
   calcIndicatorStarRating,
+  calcNewWeightedOverallScore,
   calcPayForImprovementEligibility,
   calcWeightedProviderRating,
+  overallScoreToStars,
+  scoreToFractionalStars,
   scoreToStarBand,
 } from "../../utils/ratingEngine";
 
@@ -66,7 +70,12 @@ interface LocalIndicatorRating {
 }
 
 interface LocalRatingEngineResult
-  extends Omit<RatingEngineResult, "indicatorRatings"> {
+  extends Omit<
+    RatingEngineResult,
+    "indicatorRatings" | "overallStars" | "previousOverallStars"
+  > {
+  overallStars: number;
+  previousOverallStars: number;
   indicatorRatings: LocalIndicatorRating[];
 }
 
@@ -289,8 +298,8 @@ function getTierBadgeStyle(tier: string): {
 }
 
 function getDomainColor(score: number): string {
-  if (score >= 4.0) return "oklch(0.45 0.15 145)";
-  if (score >= 3.0) return "oklch(0.55 0.14 75)";
+  if (score >= 80) return "oklch(0.45 0.15 145)";
+  if (score >= 65) return "oklch(0.55 0.14 75)";
   return "oklch(0.52 0.22 25)";
 }
 
@@ -406,18 +415,23 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
     );
   }
 
-  function handleCalculate() {
-    setIsCalculating(true);
+  function handleRateChange(idx: number, value: string) {
+    const num = Number.parseFloat(value);
+    if (Number.isNaN(num) || num < 0) return;
+    setIndicators((prev) =>
+      prev.map((ind, i) => (i === idx ? { ...ind, rate: num } : ind)),
+    );
+  }
 
-    // 1. Calculate indicator star ratings (benchmark-aware)
-    const indicatorRatings = indicators.map((ind) => {
-      const starRating = calcIndicatorStarRating(
-        ind.quintile,
-        ind.trend,
+  function runCalculation(inds: IndicatorRow[]) {
+    // 1. Calculate indicator performance scores (0-100) and star ratings
+    const indicatorRatings = inds.map((ind) => {
+      const perfScore = calcIndicatorPerformanceScore(
         ind.rate,
         ind.benchmark,
         ind.isLowerBetter,
       );
+      const starRating = scoreToFractionalStars(perfScore);
       const trendAdjustment =
         ind.trend === "improving" ? 0.2 : ind.trend === "declining" ? -0.2 : 0;
       const benchmarkStatus = getBenchmarkStatus(
@@ -433,6 +447,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         trend: ind.trend,
         trendAdjustment,
         starRating,
+        perfScore,
         rate: ind.rate,
         benchmark: ind.benchmark,
         isLowerBetter: ind.isLowerBetter,
@@ -440,12 +455,10 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
       };
     });
 
-    // Track whether any indicator is below benchmark
     const hasBelowBenchmark = indicatorRatings.some(
       (ir) => ir.benchmarkStatus === "below",
     );
 
-    // 2. Group by domain and calculate domain scores
     const domainMap: Record<string, number[]> = {
       Safety: [],
       Preventive: [],
@@ -456,35 +469,34 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
     };
     for (const ir of indicatorRatings) {
       if (domainMap[ir.domain] !== undefined) {
-        domainMap[ir.domain].push(ir.starRating);
+        domainMap[ir.domain].push(ir.perfScore);
       }
     }
     const domainScores = {
       safety: calcDomainScore(
-        domainMap.Safety.length > 0 ? domainMap.Safety : [3],
+        domainMap.Safety.length > 0 ? domainMap.Safety : [75],
       ),
       preventive: calcDomainScore(
-        domainMap.Preventive.length > 0 ? domainMap.Preventive : [3],
+        domainMap.Preventive.length > 0 ? domainMap.Preventive : [75],
       ),
       quality: calcDomainScore(
-        domainMap.Quality.length > 0 ? domainMap.Quality : [3],
+        domainMap.Quality.length > 0 ? domainMap.Quality : [75],
       ),
       staffing: calcDomainScore(
-        domainMap.Staffing.length > 0 ? domainMap.Staffing : [3],
+        domainMap.Staffing.length > 0 ? domainMap.Staffing : [75],
       ),
       compliance: calcDomainScore(
-        domainMap.Compliance.length > 0 ? domainMap.Compliance : [3],
+        domainMap.Compliance.length > 0 ? domainMap.Compliance : [75],
       ),
       experience: calcDomainScore(
-        domainMap.Experience.length > 0 ? domainMap.Experience : [3],
+        domainMap.Experience.length > 0 ? domainMap.Experience : [75],
       ),
     };
 
-    // 3. Compute weighted overall score
-    const weighted = calcWeightedProviderRating(domainScores);
-    const starBand = scoreToStarBand(weighted.score);
+    const overallScore = calcNewWeightedOverallScore(domainScores);
+    const starBand = scoreToFractionalStars(overallScore);
+    const weighted = { score: overallScore, stars: starBand };
 
-    // 4. Compute P4I eligibility
     const safetyImprovement =
       previousSafetyScore > 0
         ? ((domainScores.safety - previousSafetyScore) / previousSafetyScore) *
@@ -495,7 +507,6 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
       safetyImprovement,
     );
 
-    // 5. Override eligibility if any indicator is below benchmark
     const incentiveEligible = isEligibleForIncentive(
       weighted.score,
       hasBelowBenchmark,
@@ -508,7 +519,6 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
       };
     }
 
-    // 6. Upgrade to Maximum Eligible if all three criteria met
     if (
       incentiveEligible &&
       starBand >= 4 &&
@@ -528,8 +538,8 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
       quarter,
       calculatedAt: BigInt(Date.now()) * BigInt(1_000_000),
       overallScore: weighted.score,
-      overallStars: BigInt(starBand),
-      previousOverallStars: BigInt(Math.max(1, starBand - 1)),
+      overallStars: starBand,
+      previousOverallStars: Math.max(0, starBand - 0.5),
       auditNotes:
         "Rating calculated using weighted domain model. Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%.",
       domainScores,
@@ -546,36 +556,43 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
     setResult(newResult);
     setHasCalculated(true);
     setIsCalculating(false);
-    toast.success("Ratings calculated and synchronized across all modules");
 
-    // Show performance alert based on calculated result
     const alertIndicators: IndicatorForAlert[] = indicatorRatings.map(
       (ind) => ({
         label: ind.indicatorName,
         score: ind.starRating,
+        perfScore: ind.perfScore,
         providerValue: ind.rate,
         benchmark: ind.benchmark,
-        isLowerBetter: [
-          "Falls with Harm Rate",
-          "Medication-Related Harm",
-          "High-Risk Medication Prevalence",
-          "Polypharmacy ≥10 Medications",
-          "Pressure Injuries Stage 2–4",
-          "ED Presentations (30-day)",
-        ].includes(ind.indicatorName),
+        isLowerBetter: ind.isLowerBetter,
       }),
     );
     const providerLabel =
       UNIFIED_PROVIDERS.find((p) => p.id === providerId)?.name ?? providerId;
     const alert = resolveAlertToShow(
       providerLabel,
-      weighted.score,
+      starBand,
       alertIndicators,
+      overallScore,
     );
     if (alert) {
       setCurrentAlert(alert);
       setAlertOpen(true);
     }
+  }
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runCalculation intentionally omitted to avoid infinite loop
+  useEffect(() => {
+    if (hasCalculated && indicators.length > 0) {
+      runCalculation(indicators);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indicators, hasCalculated]);
+
+  function handleCalculate() {
+    setIsCalculating(true);
+    runCalculation(indicators);
+    toast.success("Ratings calculated and synchronized across all modules");
   }
 
   const domainOrder = [
@@ -732,12 +749,13 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
               <table className="w-full text-xs">
                 <tbody>
                   {[
-                    { range: "4.5 – 5.0", stars: 5 },
-                    { range: "3.5 – 4.49", stars: 4 },
-                    { range: "2.5 – 3.49", stars: 3 },
-                    { range: "1.5 – 2.49", stars: 2 },
-                    { range: "0 – 1.49", stars: 1 },
-                  ].map(({ range, stars }) => (
+                    { range: "90–100", stars: 4.75, label: "4.5–5.0 ★" },
+                    { range: "80–89", stars: 4.25, label: "4.0–4.5 ★" },
+                    { range: "70–79", stars: 3.75, label: "3.5–4.0 ★" },
+                    { range: "60–69", stars: 3.25, label: "3.0–3.5 ★" },
+                    { range: "50–59", stars: 2.75, label: "2.5–3.0 ★" },
+                    { range: "< 50", stars: 2.0, label: "< 2.5 ★" },
+                  ].map(({ range, stars, label }) => (
                     <tr key={range} className="border-b last:border-0">
                       <td
                         className="py-1 font-mono text-xs"
@@ -745,8 +763,14 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                       >
                         {range}
                       </td>
-                      <td className="py-1 text-right">
+                      <td className="py-1">
                         <StarRating value={stars} size="sm" showLabel={false} />
+                      </td>
+                      <td
+                        className="py-1 text-right text-xs font-bold"
+                        style={{ color: "oklch(0.45 0.04 254)" }}
+                      >
+                        {label}
                       </td>
                     </tr>
                   ))}
@@ -817,7 +841,33 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
               >
                 Quarter
               </Label>
-              <Select value={quarter} onValueChange={setQuarter}>
+              <Select
+                value={quarter}
+                onValueChange={(v) => {
+                  setQuarter(v);
+                  const unifiedInds = getUnifiedProviderIndicators(
+                    selectedProviderId,
+                    v,
+                  );
+                  const mapped: IndicatorRow[] = unifiedInds
+                    .slice(0, 10)
+                    .map((m) => ({
+                      code: m.indicatorCode,
+                      name: m.indicatorName,
+                      domain: m.dimension,
+                      rate: m.rate,
+                      benchmark: m.nationalBenchmark,
+                      quintile: m.quintileRank,
+                      trend: m.trend as "improving" | "stable" | "declining",
+                      screeningCompletion:
+                        m.dimension === "Preventive" ? Math.round(m.rate) : 0,
+                      isLowerBetter: m.isLowerBetter,
+                    }));
+                  setIndicators(mapped);
+                  setResult(null);
+                  setHasCalculated(false);
+                }}
+              >
                 <SelectTrigger
                   id="re-quarter"
                   className="h-8 text-xs rounded-none"
@@ -911,7 +961,17 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                         {ind.domain}
                       </span>
                     </td>
-                    <td className="text-right">{ind.rate}</td>
+                    <td className="text-right">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={ind.rate}
+                        onChange={(e) => handleRateChange(idx, e.target.value)}
+                        className="h-7 text-xs rounded-none w-20 text-right"
+                        data-ocid={`rating_engine.indicator.rate.input.${idx + 1}`}
+                      />
+                    </td>
                     <td className="text-right text-muted-foreground">
                       {ind.benchmark}
                     </td>
@@ -1146,18 +1206,11 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                             </Badge>
                           </div>
                           <div className="text-2xl font-bold" style={{ color }}>
-                            {score.toFixed(2)}
-                          </div>
-                          <div className="mt-1.5">
-                            <StarRating
-                              value={score}
-                              size="sm"
-                              showLabel={false}
-                            />
+                            {Math.round(score)}%
                           </div>
                           <div className="mt-1.5">
                             <Progress
-                              value={(score / 5) * 100}
+                              value={score}
                               className="h-1.5 rounded-none"
                             />
                           </div>
@@ -1180,30 +1233,45 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                 </CardHeader>
                 <CardContent className="p-4 text-center">
                   <div
-                    className="text-5xl font-bold mb-1"
+                    className="text-4xl font-bold mb-0.5"
                     style={{ color: "oklch(var(--gov-navy))" }}
                   >
-                    {result.overallScore.toFixed(2)}
+                    {result.overallScore.toFixed(1)} / 100
+                  </div>
+                  <div
+                    className="text-sm font-semibold mb-2"
+                    style={{ color: "oklch(0.45 0.04 254)" }}
+                  >
+                    Star Rating:{" "}
+                    {scoreToFractionalStars(result.overallScore).toFixed(1)} / 5
                   </div>
                   <div className="flex justify-center mb-2">
                     <StarRating
-                      value={Number(result.overallStars)}
+                      value={scoreToFractionalStars(result.overallScore)}
                       size="lg"
-                      showLabel={true}
+                      showLabel={false}
                     />
                   </div>
                   <p
-                    className="text-xs text-center mt-2"
+                    className="text-xs font-semibold text-center"
                     style={{ color: "oklch(0.45 0.04 254)" }}
                   >
-                    Weighted composite score of all 6 domains
+                    {result.overallScore >= 90
+                      ? "Excellent performance"
+                      : result.overallScore >= 80
+                        ? "Good performance"
+                        : result.overallScore >= 70
+                          ? "Satisfactory performance"
+                          : result.overallScore >= 60
+                            ? "Below average"
+                            : "Poor performance"}
                   </p>
                   {result.previousOverallStars !== result.overallStars && (
                     <div
                       className="mt-2 text-xs font-semibold"
                       style={{ color: "oklch(0.45 0.15 145)" }}
                     >
-                      ▲ Improved from {Number(result.previousOverallStars)}{" "}
+                      ▲ Improved from {result.previousOverallStars.toFixed(1)}{" "}
                       stars
                     </div>
                   )}

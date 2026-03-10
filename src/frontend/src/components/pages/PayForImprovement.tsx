@@ -40,6 +40,7 @@ import {
 } from "../../data/mockData";
 import {
   calcWeightedProviderRating,
+  overallScoreToStars,
   scoreToStarBand,
 } from "../../utils/ratingEngine";
 
@@ -76,8 +77,8 @@ function getProviderOverallStars(
   );
   if (legacy) {
     const domains = getUnifiedProviderDomainScores(legacy.id, q);
-    const { score } = calcWeightedProviderRating(domains);
-    return scoreToStarBand(score);
+    const { stars } = calcWeightedProviderRating(domains);
+    return stars;
   }
 
   return null;
@@ -104,15 +105,30 @@ export default function PayForImprovement({
     );
     const alertIndicators: IndicatorForAlert[] = unified
       ? [
-          { label: "Safety & Clinical", score: unified.domainScores.safety },
-          { label: "Preventive Care", score: unified.domainScores.preventive },
-          { label: "Staffing", score: unified.domainScores.staffing },
-          { label: "Compliance", score: unified.domainScores.compliance },
+          {
+            label: "Safety & Clinical",
+            score: overallScoreToStars(unified.domainScores.safety),
+          },
+          {
+            label: "Preventive Care",
+            score: overallScoreToStars(unified.domainScores.preventive),
+          },
+          {
+            label: "Staffing",
+            score: overallScoreToStars(unified.domainScores.staffing),
+          },
+          {
+            label: "Compliance",
+            score: overallScoreToStars(unified.domainScores.compliance),
+          },
           {
             label: "Residents Experience",
-            score: unified.domainScores.experience,
+            score: overallScoreToStars(unified.domainScores.experience),
           },
-          { label: "Quality Measures", score: unified.domainScores.quality },
+          {
+            label: "Quality Measures",
+            score: overallScoreToStars(unified.domainScores.quality),
+          },
         ]
       : [{ label: "Overall Performance", score: overallStars }];
     const alert = resolveAlertToShow(
@@ -496,7 +512,7 @@ export default function PayForImprovement({
                             className="w-3.5 h-3.5"
                             style={{
                               color:
-                                overallStars !== null && overallStars > 4.5
+                                overallStars !== null && overallStars >= 5
                                   ? "oklch(0.45 0.15 145)"
                                   : overallStars !== null && overallStars <= 2
                                     ? "oklch(0.48 0.20 25)"

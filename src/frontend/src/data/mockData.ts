@@ -1,4 +1,9 @@
 // Mock data for sections that don't have full backend support
+import {
+  calcNewWeightedOverallScore,
+  overallScoreToStars,
+  starsToPercentScore,
+} from "../utils/ratingEngine";
 
 export interface MockProvider {
   id: string;
@@ -624,13 +629,13 @@ export const MOCK_SCORECARDS = (providerId: string) => {
     const step = (3 - i) * 3; // Q4 = 0, Q3 = 3, Q2 = 6, Q1 = 9 pts lower
     const clamp = (v: number) =>
       Math.min(95, Math.max(10, Math.round(v - step)));
-    const safety = clamp(starsToPercent(d.safety));
-    const preventive = clamp(starsToPercent(d.preventive));
-    const quality = clamp(starsToPercent(d.quality));
-    const staffing = clamp(starsToPercent(d.staffing));
-    const compliance = clamp(starsToPercent(d.compliance));
-    const experience = clamp(starsToPercent(d.experience));
-    const equity = clamp(starsToPercent(d.safety)); // proxy equity from safety domain
+    const safety = clamp(starsToPercentScore(d.safety));
+    const preventive = clamp(starsToPercentScore(d.preventive));
+    const quality = clamp(starsToPercentScore(d.quality));
+    const staffing = clamp(starsToPercentScore(d.staffing));
+    const compliance = clamp(starsToPercentScore(d.compliance));
+    const experience = clamp(starsToPercentScore(d.experience));
+    const equity = clamp(starsToPercentScore(d.safety)); // proxy equity from safety domain
     const overallScore = clamp(latestOverall);
     // Quintile improves toward Q4 for most providers
     const quintileRank = Math.min(5, Math.max(1, q + (3 - i)));
@@ -888,12 +893,7 @@ export function getProviderDomainStarScores(providerId: string): {
   };
 }
 
-// Convert star score (1-5) to a percentage display value
-function starsToPercent(stars: number): number {
-  return Math.round(stars * 16 + 2);
-}
-
-// Weighted overall score → percentage
+// Weighted overall score → percentage (0–100)
 function domainScoresToOverallPercent(domains: {
   safety: number;
   preventive: number;
@@ -902,14 +902,16 @@ function domainScoresToOverallPercent(domains: {
   compliance: number;
   experience: number;
 }): number {
-  const weighted =
-    domains.safety * 0.3 +
-    domains.preventive * 0.2 +
-    domains.quality * 0.2 +
-    domains.staffing * 0.15 +
-    domains.compliance * 0.1 +
-    domains.experience * 0.05;
-  return Math.round(weighted * 16 + 2);
+  // domains are still 1-5 star values from getProviderDomainStarScores
+  const asPercent = {
+    safety: starsToPercentScore(domains.safety),
+    preventive: starsToPercentScore(domains.preventive),
+    quality: starsToPercentScore(domains.quality),
+    staffing: starsToPercentScore(domains.staffing),
+    compliance: starsToPercentScore(domains.compliance),
+    experience: starsToPercentScore(domains.experience),
+  };
+  return Math.round(calcNewWeightedOverallScore(asPercent));
 }
 
 // Quintile rank from overall star score
@@ -3468,29 +3470,21 @@ function cityProviderToDomainScores(cp: CityProvider): {
   experience: number;
 } {
   return {
-    safety: cp.indicators.safetyClinical,
-    preventive: cp.indicators.preventiveCare,
-    quality: cp.indicators.qualityMeasures,
-    staffing: cp.indicators.staffing,
-    compliance: cp.indicators.compliance,
-    experience: (cp.indicators.residents + cp.indicators.experience) / 2,
+    safety: starsToPercentScore(cp.indicators.safetyClinical),
+    preventive: starsToPercentScore(cp.indicators.preventiveCare),
+    quality: starsToPercentScore(cp.indicators.qualityMeasures),
+    staffing: starsToPercentScore(cp.indicators.staffing),
+    compliance: starsToPercentScore(cp.indicators.compliance),
+    experience: starsToPercentScore(
+      (cp.indicators.residents + cp.indicators.experience) / 2,
+    ),
   };
 }
 
 function cityProviderToOverallStars(cp: CityProvider): number {
   const d = cityProviderToDomainScores(cp);
-  const score =
-    d.safety * 0.3 +
-    d.preventive * 0.2 +
-    d.quality * 0.2 +
-    d.staffing * 0.15 +
-    d.compliance * 0.1 +
-    d.experience * 0.05;
-  if (score >= 4.5) return 5;
-  if (score >= 3.5) return 4;
-  if (score >= 2.5) return 3;
-  if (score >= 1.5) return 2;
-  return 1;
+  const overallScore = calcNewWeightedOverallScore(d);
+  return overallScoreToStars(overallScore);
 }
 
 export const UNIFIED_PROVIDERS: UnifiedProvider[] = Object.values(
@@ -3547,42 +3541,7 @@ export function getUnifiedProviderDomainScores(
   }
   // For non-base quarters, recalculate from quarter-specific indicator data
   const inds = getUnifiedProviderIndicators(providerId, quarter);
-  const baseRatings: Record<number, number> = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 };
-  function calcStar(
-    q: number,
-    trend: string,
-    rate?: number,
-    bench?: number,
-    isLB?: boolean,
-  ): number {
-    const base = baseRatings[q] ?? 3;
-    const ta = trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
-    let r = base + ta;
-    if (
-      rate !== undefined &&
-      bench !== undefined &&
-      isLB !== undefined &&
-      bench !== 0
-    ) {
-      const st = isLB
-        ? rate < bench * 0.95
-          ? "above"
-          : rate <= bench * 1.05
-            ? "near"
-            : "below"
-        : rate > bench * 1.05
-          ? "above"
-          : rate >= bench * 0.95
-            ? "near"
-            : "below";
-      if (st === "below") r -= 0.5;
-      else if (st === "above") {
-        const p = isLB ? (bench - rate) / bench : (rate - bench) / bench;
-        if (p > 0.1) r += 0.2;
-      }
-    }
-    return Math.min(5, Math.max(1, r));
-  }
+  // Use new 0-100 scoring model
   const domMap: Record<string, number[]> = {
     Safety: [],
     Preventive: [],
@@ -3592,15 +3551,20 @@ export function getUnifiedProviderDomainScores(
     Experience: [],
   };
   for (const ind of inds) {
-    const s = calcStar(
-      ind.quintileRank,
-      ind.trend,
-      ind.rate,
-      ind.nationalBenchmark,
-      ind.isLowerBetter,
-    );
+    const score =
+      ind.rate !== undefined &&
+      ind.nationalBenchmark !== undefined &&
+      ind.nationalBenchmark !== 0 &&
+      ind.rate !== 0
+        ? Math.min(
+            100,
+            ind.isLowerBetter
+              ? (ind.nationalBenchmark / ind.rate) * 100
+              : (ind.rate / ind.nationalBenchmark) * 100,
+          )
+        : 75;
     const dimKey = ind.dimension as keyof typeof domMap;
-    if (domMap[dimKey]) domMap[dimKey].push(s);
+    if (domMap[dimKey]) domMap[dimKey].push(score);
   }
   const avg = (arr: number[]) =>
     arr.length === 0 ? 3 : arr.reduce((a, b) => a + b, 0) / arr.length;

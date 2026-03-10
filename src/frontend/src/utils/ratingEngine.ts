@@ -1,70 +1,79 @@
-// Rating Engine — Pure calculation functions for N-ACRM indicator and provider ratings
+// Rating Engine — N-ACRM
+// New standardized 0–100 scoring model
 
 /**
- * Calculates a star rating (1-5) from a quintile position, trend, and optional benchmark comparison.
- * Q1→5, Q2→4, Q3→3, Q4→2, Q5→1
- * Improving trend: +0.2 boost
- * Declining trend: -0.2 penalty
- * Below benchmark: -0.5 penalty
- * Above benchmark by >10%: +0.2 boost
- * Result is clamped to [1, 5].
+ * Maps 1–5 star values to representative 0–100 percent scores.
+ * Used when only aggregate star data is available (no raw rate/benchmark).
  */
-export function calcIndicatorStarRating(
-  quintile: number,
-  trend: string,
-  rate?: number,
-  benchmark?: number,
-  isLowerBetter?: boolean,
-): number {
-  const baseRatings: Record<number, number> = {
-    1: 5,
-    2: 4,
-    3: 3,
-    4: 2,
-    5: 1,
-  };
-  const base = baseRatings[quintile] ?? 3;
-  const trendAdjustment =
-    trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
-  let rating = base + trendAdjustment;
-
-  // Apply benchmark adjustment if data is provided — inlined to avoid circular deps
-  if (
-    rate !== undefined &&
-    benchmark !== undefined &&
-    isLowerBetter !== undefined &&
-    benchmark !== 0
-  ) {
-    const benchmarkStatus: "above" | "near" | "below" = (() => {
-      if (isLowerBetter) {
-        if (rate < benchmark * 0.95) return "above";
-        if (rate <= benchmark * 1.05) return "near";
-        return "below";
-      }
-      if (rate > benchmark * 1.05) return "above";
-      if (rate >= benchmark * 0.95) return "near";
-      return "below";
-    })();
-
-    if (benchmarkStatus === "below") {
-      rating -= 0.5;
-    } else if (benchmarkStatus === "above") {
-      const pct = isLowerBetter
-        ? (benchmark - rate) / benchmark
-        : (rate - benchmark) / benchmark;
-      if (pct > 0.1) rating += 0.2;
-    }
-  }
-
-  return Math.min(5, Math.max(1, rating));
+export function starsToPercentScore(stars: number): number {
+  if (stars >= 4.5) return 92;
+  if (stars >= 3.5) return 85;
+  if (stars >= 2.5) return 75;
+  if (stars >= 1.5) return 65;
+  return 50;
 }
 
 /**
- * Calculates the average domain score from an array of indicator star ratings.
+ * Calculates a 0–100 indicator performance score.
+ * lower_is_better: score = (benchmark / providerValue) × 100, capped at 100
+ * higher_is_better: score = (providerValue / benchmark) × 100, capped at 100
  */
-export function calcDomainScore(starRatings: number[]): number {
-  if (starRatings.length === 0) return 3;
-  return starRatings.reduce((sum, r) => sum + r, 0) / starRatings.length;
+export function calcIndicatorPerformanceScore(
+  providerValue: number,
+  benchmark: number,
+  isLowerBetter: boolean,
+): number {
+  if (benchmark === 0 || providerValue === 0) return 50;
+  const raw = isLowerBetter
+    ? (benchmark / providerValue) * 100
+    : (providerValue / benchmark) * 100;
+  return Math.min(100, raw);
+}
+
+/**
+ * Converts 0–100 score to a continuous 0–5 star rating.
+ * StarRating = (score / 100) × 5
+ */
+export function scoreToFractionalStars(score: number): number {
+  return Math.min(5, Math.max(0, (score / 100) * 5));
+}
+
+/**
+ * Converts a 0–100 overall score to a 1–5 star rating band:
+ * 90–100 → 5 stars
+ * 80–89  → 4 stars
+ * 70–79  → 3 stars
+ * 60–69  → 2 stars
+ * < 60   → 1 star
+ */
+export function overallScoreToStars(score: number): number {
+  if (score >= 90) return 5;
+  if (score >= 80) return 4;
+  if (score >= 70) return 3;
+  if (score >= 60) return 2;
+  return 1;
+}
+
+/**
+ * Calculates weighted overall provider score (0–100) from domain scores (0–100):
+ * Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%
+ */
+export function calcNewWeightedOverallScore(domains: {
+  safety: number;
+  preventive: number;
+  quality: number;
+  staffing: number;
+  compliance: number;
+  experience: number;
+}): number {
+  return (
+    domains.safety * 0.3 +
+    domains.preventive * 0.2 +
+    domains.quality * 0.2 +
+    domains.staffing * 0.15 +
+    domains.compliance * 0.1 +
+    domains.experience * 0.05
+  );
 }
 
 export interface DomainScores {
@@ -82,32 +91,59 @@ export interface ProviderRating {
 }
 
 /**
- * Calculates overall provider rating using a weighted domain model:
- * Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%
- * Returns { score: number, stars: number } where stars is rounded and clamped to [1,5].
+ * Legacy wrapper — kept for backward compat.
+ * Expects domain scores in 0–100 range, returns { score, stars }.
  */
 export function calcWeightedProviderRating(
   domains: DomainScores,
 ): ProviderRating {
-  const score =
-    domains.safety * 0.3 +
-    domains.preventive * 0.2 +
-    domains.quality * 0.2 +
-    domains.staffing * 0.15 +
-    domains.compliance * 0.1 +
-    domains.experience * 0.05;
-
-  const stars = Math.min(5, Math.max(1, Math.round(score)));
-  return { score, stars };
+  const score = calcNewWeightedOverallScore(domains);
+  return { score, stars: overallScoreToStars(score) };
 }
 
 /**
- * Converts an overall score (e.g. 4.2) to a star band (1-5):
- * 4.5–5.0 → 5 stars
- * 3.5–4.49 → 4 stars
- * 2.5–3.49 → 3 stars
- * 1.5–2.49 → 2 stars
- * 0–1.49 → 1 star
+ * Legacy indicator star rating — kept for backward compat where rate/benchmark unavailable.
+ * Uses new 0–100 model when rate + benchmark are provided.
+ * Falls back to starsToPercentScore(quintileStars) + overallScoreToStars when not.
+ */
+export function calcIndicatorStarRating(
+  quintile: number,
+  trend: string,
+  rate?: number,
+  benchmark?: number,
+  isLowerBetter?: boolean,
+): number {
+  if (
+    rate !== undefined &&
+    benchmark !== undefined &&
+    isLowerBetter !== undefined &&
+    benchmark !== 0 &&
+    rate !== 0
+  ) {
+    const score = calcIndicatorPerformanceScore(rate, benchmark, isLowerBetter);
+    return scoreToFractionalStars(score);
+  }
+  // Fallback: quintile-based
+  const baseRatings: Record<number, number> = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 };
+  const base = baseRatings[quintile] ?? 3;
+  const trendAdj =
+    trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
+  return Math.min(5, Math.max(1, base + trendAdj));
+}
+
+/**
+ * Calculates domain score (0–100) from array of indicator performance scores (0–100).
+ */
+export function calcDomainScore(indicatorScores: number[]): number {
+  if (indicatorScores.length === 0) return 75;
+  return (
+    indicatorScores.reduce((sum, s) => sum + s, 0) / indicatorScores.length
+  );
+}
+
+/**
+ * Converts an overall score (0–5 legacy scale) to a star band using old thresholds.
+ * @deprecated Use overallScoreToStars for new model.
  */
 export function scoreToStarBand(score: number): number {
   if (score >= 4.5) return 5;
@@ -124,32 +160,24 @@ export interface EligibilityResult {
 }
 
 /**
- * Calculates Pay-for-Improvement eligibility:
- * - overallStars >= 4 AND safetyImprovement >= 15% → "Bonus Eligible" ($120,000)
- * - overallStars >= 4 → "Base Eligible" ($75,000)
- * - otherwise → "Not Eligible" ($0)
+ * Pay-for-Improvement eligibility based on overallStars and safetyImprovement %.
  */
 export function calcPayForImprovementEligibility(
   overallStars: number,
   safetyImprovement: number,
 ): EligibilityResult {
-  if (overallStars >= 4 && safetyImprovement >= 15) {
+  if (overallStars >= 4.5) {
     return {
-      tier: "Bonus Eligible",
+      tier: "Maximum Eligible",
       eligible: true,
-      estimatedPayment: 120000,
+      estimatedPayment: 180000,
     };
+  }
+  if (overallStars >= 4 && safetyImprovement >= 15) {
+    return { tier: "Bonus Eligible", eligible: true, estimatedPayment: 120000 };
   }
   if (overallStars >= 4) {
-    return {
-      tier: "Base Eligible",
-      eligible: true,
-      estimatedPayment: 75000,
-    };
+    return { tier: "Base Eligible", eligible: true, estimatedPayment: 75000 };
   }
-  return {
-    tier: "Not Eligible",
-    eligible: false,
-    estimatedPayment: 0,
-  };
+  return { tier: "Not Eligible", eligible: false, estimatedPayment: 0 };
 }

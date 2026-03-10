@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getBenchmarkStatus,
+  getIndicatorDirection,
   isEligibleForIncentive,
 } from "@/utils/benchmarkUtils";
 import type {
@@ -37,7 +38,11 @@ import {
   useIndicatorResults,
   useScorecardsByProvider,
 } from "../../hooks/useQueries";
-import { calcIndicatorStarRating } from "../../utils/ratingEngine";
+import {
+  calcIndicatorStarRating,
+  calcNewWeightedOverallScore,
+  overallScoreToStars,
+} from "../../utils/ratingEngine";
 
 interface ProviderPerformanceProps {
   currentQuarter: string;
@@ -136,7 +141,7 @@ function ScoreCard({
           {label}
         </div>
         <div className="text-2xl font-bold" style={{ color: scoreColor }}>
-          {value.toFixed(1)}
+          {scale === "percent" ? `${Math.round(value)}%` : value.toFixed(1)}
         </div>
         {quintile && (
           <div
@@ -194,8 +199,7 @@ export default function ProviderPerformance({
       ? liveIndicators.map((ind) => ({
           ...ind,
           quintileRank: Number(ind.quintileRank),
-          // isLowerBetter not available from backend; default to false
-          isLowerBetter: false as boolean,
+          isLowerBetter: getIndicatorDirection(ind.indicatorName ?? ""),
         }))
       : getUnifiedProviderIndicators(selectedProvider.id, currentQuarter);
 
@@ -215,15 +219,9 @@ export default function ProviderPerformance({
     [selectedProvider.id, currentQuarter],
   );
 
-  // Weighted overall star score: Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%
+  // Weighted overall star score using new 0-100 model
   const overallStars = useMemo(
-    () =>
-      domainStars.safety * 0.3 +
-      domainStars.preventive * 0.2 +
-      domainStars.quality * 0.2 +
-      domainStars.staffing * 0.15 +
-      domainStars.compliance * 0.1 +
-      domainStars.experience * 0.05,
+    () => overallScoreToStars(calcNewWeightedOverallScore(domainStars)),
     [domainStars],
   );
 
@@ -248,13 +246,7 @@ export default function ProviderPerformance({
       provider.id,
       currentQuarter,
     );
-    const overall =
-      domScores.safety * 0.3 +
-      domScores.preventive * 0.2 +
-      domScores.quality * 0.2 +
-      domScores.staffing * 0.15 +
-      domScores.compliance * 0.1 +
-      domScores.experience * 0.05;
+    const overall = overallScoreToStars(calcNewWeightedOverallScore(domScores));
     const alert = resolveAlertToShow(provider.name, overall, alertIndicators);
     if (alert) {
       setCurrentAlert(alert);
@@ -404,39 +396,39 @@ export default function ProviderPerformance({
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               <ScoreCard
                 label="Overall Score"
-                value={Number.parseFloat(overallStars.toFixed(2))}
+                value={overallStars}
                 quintile={latestScorecard?.quintileRank}
                 scale="stars"
               />
               <ScoreCard
                 label="Safety"
                 value={domainStars.safety}
-                scale="stars"
+                scale="percent"
               />
               <ScoreCard
                 label="Preventive"
                 value={domainStars.preventive}
-                scale="stars"
+                scale="percent"
               />
               <ScoreCard
                 label="Experience"
                 value={domainStars.experience}
-                scale="stars"
+                scale="percent"
               />
               <ScoreCard
                 label="Quality"
                 value={domainStars.quality}
-                scale="stars"
+                scale="percent"
               />
               <ScoreCard
                 label="Staffing"
                 value={domainStars.staffing}
-                scale="stars"
+                scale="percent"
               />
               <ScoreCard
                 label="Compliance"
                 value={domainStars.compliance}
-                scale="stars"
+                scale="percent"
               />
             </div>
           )}
