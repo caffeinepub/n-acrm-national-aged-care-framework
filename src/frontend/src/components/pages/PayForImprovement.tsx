@@ -58,7 +58,10 @@ const METRIC_BENCHMARKS: Record<
 
 // ── Provider star rating lookup ───────────────────────────────────────────────
 
-function getProviderOverallStars(providerName: string): number | null {
+function getProviderOverallStars(
+  providerName: string,
+  q = "Q4-2025",
+): number | null {
   // First try UNIFIED_PROVIDERS (covers all city-based providers)
   const unified = UNIFIED_PROVIDERS.find(
     (p) => p.name.toLowerCase() === providerName.toLowerCase(),
@@ -72,7 +75,7 @@ function getProviderOverallStars(providerName: string): number | null {
     (p) => p.name.toLowerCase() === providerName.toLowerCase(),
   );
   if (legacy) {
-    const domains = getUnifiedProviderDomainScores(legacy.id);
+    const domains = getUnifiedProviderDomainScores(legacy.id, q);
     const { score } = calcWeightedProviderRating(domains);
     return scoreToStarBand(score);
   }
@@ -93,7 +96,7 @@ export default function PayForImprovement({
   );
 
   function handleViewAlert(providerName: string) {
-    const overallStars = getProviderOverallStars(providerName);
+    const overallStars = getProviderOverallStars(providerName, currentQuarter);
     if (overallStars === null) return;
     // Build minimal indicator set from domain scores for the provider
     const unified = UNIFIED_PROVIDERS.find(

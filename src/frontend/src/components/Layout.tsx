@@ -35,7 +35,7 @@ export default function Layout({
   const renderPage = () => {
     // Public role sees the dedicated public provider directory
     if (currentRole === "Public") {
-      return <PublicView />;
+      return <PublicView currentQuarter={currentQuarter} />;
     }
 
     // Provider role: national_overview defaults to Provider Dashboard
@@ -66,7 +66,7 @@ export default function Layout({
       case "audit_governance":
         return <AuditGovernance />;
       case "regional_provider":
-        return <RegionalProviderDrillDown />;
+        return <RegionalProviderDrillDown currentQuarter={currentQuarter} />;
       case "policy_analytics":
         return <PolicyAnalytics />;
       case "rating_engine":

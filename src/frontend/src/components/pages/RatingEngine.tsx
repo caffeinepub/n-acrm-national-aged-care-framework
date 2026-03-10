@@ -363,7 +363,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
     setSelectedProviderId(provId);
     setProviderId(provId);
     // Load unified provider indicators — each provider has its own quintile & trend data
-    const unifiedInds = getUnifiedProviderIndicators(provId);
+    const unifiedInds = getUnifiedProviderIndicators(provId, currentQuarter);
     const domainMap: Record<string, string> = {
       Safety: "Safety",
       Preventive: "Preventive",

@@ -197,7 +197,7 @@ export default function ProviderPerformance({
           // isLowerBetter not available from backend; default to false
           isLowerBetter: false as boolean,
         }))
-      : getUnifiedProviderIndicators(selectedProvider.id);
+      : getUnifiedProviderIndicators(selectedProvider.id, currentQuarter);
 
   const latestScorecard = scorecards[scorecards.length - 1];
   const dimensions = [
@@ -211,8 +211,8 @@ export default function ProviderPerformance({
 
   // Compute domain star ratings from unified provider data (provider-specific, changes per provider)
   const domainStars = useMemo(
-    () => getUnifiedProviderDomainScores(selectedProvider.id),
-    [selectedProvider.id],
+    () => getUnifiedProviderDomainScores(selectedProvider.id, currentQuarter),
+    [selectedProvider.id, currentQuarter],
   );
 
   // Weighted overall star score: Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%
@@ -230,7 +230,7 @@ export default function ProviderPerformance({
   function handleProviderSelect(provider: UnifiedProvider) {
     setSelectedProvider(provider);
     // Build indicator list for alert engine
-    const provInds = getUnifiedProviderIndicators(provider.id);
+    const provInds = getUnifiedProviderIndicators(provider.id, currentQuarter);
     const alertIndicators: IndicatorForAlert[] = provInds.map((ind) => ({
       label: ind.indicatorName,
       score: calcIndicatorStarRating(
@@ -244,7 +244,10 @@ export default function ProviderPerformance({
       benchmark: ind.nationalBenchmark,
       isLowerBetter: ind.isLowerBetter,
     }));
-    const domScores = getUnifiedProviderDomainScores(provider.id);
+    const domScores = getUnifiedProviderDomainScores(
+      provider.id,
+      currentQuarter,
+    );
     const overall =
       domScores.safety * 0.3 +
       domScores.preventive * 0.2 +

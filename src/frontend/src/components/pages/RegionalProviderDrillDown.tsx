@@ -1387,7 +1387,12 @@ function ProviderDetail({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function RegionalProviderDrillDown() {
+interface RegionalProviderDrillDownProps {
+  currentQuarter?: string;
+}
+export default function RegionalProviderDrillDown({
+  currentQuarter: _currentQuarter = "Q4-2025",
+}: RegionalProviderDrillDownProps) {
   const [selectedCity, setSelectedCity] = useState<string>("");
   const [selectedProvider, setSelectedProvider] = useState<CityProvider | null>(
     null,

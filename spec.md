@@ -1,67 +1,40 @@
 # N-ACRM National Aged Care Framework
 
 ## Current State
-
-The application is a full-stack national aged care analytics platform. The backend (`mockData.ts`) already uses Australian states/territories (NSW, VIC, QLD, SA, WA, TAS, NT, ACT) for `REGIONAL_DATA`, `MOCK_PROVIDERS`, `STATE_ADVERSE_EVENTS`, and all non-city data structures.
-
-However, the `CITY_PROVIDERS` dataset — and all modules that consume it — still contains Indian cities and Indian-named providers:
-- Cities: Hyderabad, Kolkata, Delhi, Mumbai, Chennai, Bengaluru, Pune, Ahmedabad
-- Provider names reference Indian culture (e.g. "Vanaprastha Mumbai", "Nandanam Senior Living", "Sparsh Care Bengaluru", "Vridh Aashray", "Kalyaan Senior Care", etc.)
-- `CITY_TO_STATE` maps Indian cities to Indian states (Telangana, West Bengal, Maharashtra, etc.)
-- `ProviderDashboard.tsx` hard-references `CITY_PROVIDERS.Hyderabad?.[0]` and displays `{PROVIDER.city}, India`
-- `RegionalProviderDrillDown.tsx` shows "Choose from X regions across India"
-
-All other modules (Heatmaps, NationalOverview, PolicyAnalytics, etc.) already use Australian state data.
+The app has a centralized rating engine, unified provider registry, role-based views, regional provider lookup, provider performance dashboard, pay-for-improvement tracker, and a rating engine page. Core issues:
+1. `getUnifiedProviderIndicators` always returns `quarter: "Q4-2025"` and identical data regardless of which quarter is selected — all modules show the same values across Q1/Q2/Q3/Q4.
+2. Alert logic in `resolveAlertToShow` / `getLowPerformanceAlerts` incorrectly triggers red warnings for providers performing BETTER than benchmark (does not properly respect `isLowerBetter` direction).
+3. Star rating display is sometimes inconsistent across modules; domain scores and overall ratings need to flow from a single calculation path.
+4. Pay-for-Improvement improvement percentages don't update when quarter changes.
 
 ## Requested Changes (Diff)
 
 ### Add
-- 8 Australian cities as city keys: Sydney, Melbourne, Brisbane, Perth, Adelaide, Canberra, Hobart, Darwin
-- Australian-sounding provider names for all city providers (29 total providers preserved, redistributed across Australian cities)
-- Updated `CITY_TO_STATE` mapping Australian cities to Australian states
+- Quarter-specific data multipliers in `getUnifiedProviderIndicators(providerId, quarter)` — Q1 shows highest rates (worse), Q4 shows lowest rates (best), so indicators visibly change per quarter
+- Quarter-keyed domain score helper `getUnifiedProviderDomainScoresByQuarter(providerId, quarter)` — returns slightly different domain scores per quarter derived from the quarterly indicator data
+- `QUARTER_MULTIPLIERS` map: Q1→1.15, Q2→1.07, Q3→1.0, Q4→0.93 for lower-is-better indicators (inverted for higher-is-better)
+- Proper `isLowerBetter`-aware alert classification in `getLowPerformanceAlerts`
 
 ### Modify
-- `CITY_PROVIDERS` in `mockData.ts`: Replace all 8 Indian city keys and their providers with 8 Australian city keys and Australian providers, maintaining the same performance tier distribution (5★, 4★, 3★, 2★, 1★ spread)
-- `ProviderDashboard.tsx` line 42: Change `CITY_PROVIDERS.Hyderabad?.[0]` to `CITY_PROVIDERS.Sydney?.[0]`
-- `ProviderDashboard.tsx` line 236: Change `{PROVIDER.city}, India` to `{PROVIDER.city}, Australia`
-- `RegionalProviderDrillDown.tsx` line 1481: Change "regions across India" to "regions across Australia"
-- Provider IDs: Update prefix codes (HYD→SYD, KOL→MEL, DEL→BRI, MUM→PER, CHE→ADL, BLR→CAN, PUN→HOB, AMD→DAR)
+- `getUnifiedProviderIndicators(providerId)` → `getUnifiedProviderIndicators(providerId, quarter?: string)` — apply quarter multipliers to `rate` and recalculate `quintileRank` and `trend` based on quarter progression
+- `getUnifiedProviderDomainScores(providerId)` → add optional `quarter` param, delegate to quarterly variant
+- `ProviderPerformance.tsx` — pass `currentQuarter` to `getUnifiedProviderIndicators` and `getUnifiedProviderDomainScoresByQuarter`; recompute `domainStars` and `overallStars` when quarter changes
+- `RatingEngine.tsx` — pass `currentQuarter` to data helpers; pre-populate form with quarter-specific values
+- `PayForImprovement.tsx` — derive improvement % from quarter-specific baseline vs current values
+- `RegionalProviderDrillDown.tsx` — accept and use `currentQuarter` prop for indicator display
+- `PublicView.tsx` — accept and use `currentQuarter` prop
+- `performanceAlerts.ts` `getLowPerformanceAlerts` — fix benchmark comparison: for `isLowerBetter=true`, provider is performing WELL if `rate < benchmark`; only flag as poor if `rate > benchmark * 1.05`
+- `StarRating.tsx` — ensure consistent ⭐ emoji-based stars from 1–5, no malformed icons
 
 ### Remove
-- All Indian city names from `CITY_PROVIDERS` keys
-- All Indian state names from `CITY_TO_STATE`
-- All Indian-culture provider names (Vanaprastha, Nandanam, Sparsh, Vridh Aashray, Maitri, VelaCare, Karunalaya, Vatsalya, Arjuna, Sahyadri, Shantivan, Prayag, Shree Senior Seva, Amrut Varsham, Kalyaan, Aarokya, Thanga Thozhil, Bengal Senior Living, Eastern Life Care, Capital Elder Home, Silver Years Residency, Harmony Care Centre, Green Valley Aged Care, Sunrise Elder Support, Anand Ashram Mumbai, SilverBay Care, Sukhayam Senior Care)
+- Hardcoded `quarter: "Q4-2025"` string inside `getUnifiedProviderIndicators` indicators array (replace with dynamic quarter param)
 
 ## Implementation Plan
-
-1. **mockData.ts — Replace `CITY_PROVIDERS`**: Replace all 8 Indian city keys with Australian cities:
-   - `Sydney` (3 providers: HIGH/LOW/HIGH matching 5★/1★/5★ pattern)
-   - `Melbourne` (2 providers: 3★/4★)
-   - `Brisbane` (2 providers: 5★/2★)
-   - `Perth` (4 providers: 5★/3★/4★/2★)
-   - `Adelaide` (4 providers: 5★/3★/4★/3★)
-   - `Canberra` (4 providers: 5★/3★/4★/2★)
-   - `Hobart` (4 providers: 3★/3★/4★/1★)
-   - `Darwin` (4 providers: 4★/3★/5★/3★)
-   - All provider names must be Australian-sounding (e.g. "Bondi Aged Care", "Harbour View Seniors", "Yarra Valley Care", etc.)
-   - Preserve all indicator data structures, weights, and performance tier characteristics exactly
-   - Update provider IDs to use Australian city codes: SYD, MEL, BRI, PER, ADL, CAN, HOB, DAR
-
-2. **mockData.ts — Update `CITY_TO_STATE`**: Map each Australian city to correct Australian state:
-   - Sydney → New South Wales
-   - Melbourne → Victoria
-   - Brisbane → Queensland
-   - Perth → Western Australia
-   - Adelaide → South Australia
-   - Canberra → Australian Capital Territory
-   - Hobart → Tasmania
-   - Darwin → Northern Territory
-
-3. **ProviderDashboard.tsx**: 
-   - Change `CITY_PROVIDERS.Hyderabad?.[0]` → `CITY_PROVIDERS.Sydney?.[0]`
-   - Change `{PROVIDER.city}, India` → `{PROVIDER.city}, Australia`
-
-4. **RegionalProviderDrillDown.tsx**: 
-   - Change "regions across India" → "regions across Australia"
-
-5. **Verify**: Confirm all cross-module references to provider IDs (HRC cohort data, PFI data, audit logs, screening workflows) still resolve — these use PROV-xxx IDs not city IDs, so no changes needed there.
+1. Update `mockData.ts`: add `QUARTER_MULTIPLIERS`, update `getUnifiedProviderIndicators(providerId, quarter?)` and `getUnifiedProviderDomainScores(providerId, quarter?)` to apply quarter-based rate scaling
+2. Fix `performanceAlerts.ts` `getLowPerformanceAlerts` to correctly check `isLowerBetter` direction before flagging red
+3. Update `ProviderPerformance.tsx` to pass `currentQuarter` through to data helpers and recompute scores reactively
+4. Update `RatingEngine.tsx` to use quarter-specific data
+5. Update `PayForImprovement.tsx` to use quarter-specific improvement baselines
+6. Update `RegionalProviderDrillDown.tsx` and `PublicView.tsx` with quarter prop
+7. Ensure `StarRating.tsx` renders consistent ⭐ star format
+8. Validate and fix build errors

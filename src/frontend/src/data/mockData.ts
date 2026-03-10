@@ -3529,7 +3529,10 @@ export const UNIFIED_PROVIDERS: UnifiedProvider[] = Object.values(
  * For UNIFIED_PROVIDERS (city-based IDs like SYD-001), returns computed domain scores.
  * Falls back to getProviderDomainStarScores for legacy PROV-xxx IDs.
  */
-export function getUnifiedProviderDomainScores(providerId: string): {
+export function getUnifiedProviderDomainScores(
+  providerId: string,
+  quarter = "Q4-2025",
+): {
   safety: number;
   preventive: number;
   quality: number;
@@ -3537,17 +3540,88 @@ export function getUnifiedProviderDomainScores(providerId: string): {
   compliance: number;
   experience: number;
 } {
-  const unified = UNIFIED_PROVIDERS.find((p) => p.id === providerId);
-  if (unified) return unified.domainScores;
-  // Fall back to legacy PROV-xxx calculation
-  return getProviderDomainStarScores(providerId);
+  if (quarter === "Q4-2025") {
+    const unified = UNIFIED_PROVIDERS.find((p) => p.id === providerId);
+    if (unified) return unified.domainScores;
+    return getProviderDomainStarScores(providerId);
+  }
+  // For non-base quarters, recalculate from quarter-specific indicator data
+  const inds = getUnifiedProviderIndicators(providerId, quarter);
+  const baseRatings: Record<number, number> = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 };
+  function calcStar(
+    q: number,
+    trend: string,
+    rate?: number,
+    bench?: number,
+    isLB?: boolean,
+  ): number {
+    const base = baseRatings[q] ?? 3;
+    const ta = trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
+    let r = base + ta;
+    if (
+      rate !== undefined &&
+      bench !== undefined &&
+      isLB !== undefined &&
+      bench !== 0
+    ) {
+      const st = isLB
+        ? rate < bench * 0.95
+          ? "above"
+          : rate <= bench * 1.05
+            ? "near"
+            : "below"
+        : rate > bench * 1.05
+          ? "above"
+          : rate >= bench * 0.95
+            ? "near"
+            : "below";
+      if (st === "below") r -= 0.5;
+      else if (st === "above") {
+        const p = isLB ? (bench - rate) / bench : (rate - bench) / bench;
+        if (p > 0.1) r += 0.2;
+      }
+    }
+    return Math.min(5, Math.max(1, r));
+  }
+  const domMap: Record<string, number[]> = {
+    Safety: [],
+    Preventive: [],
+    Quality: [],
+    Staffing: [],
+    Compliance: [],
+    Experience: [],
+  };
+  for (const ind of inds) {
+    const s = calcStar(
+      ind.quintileRank,
+      ind.trend,
+      ind.rate,
+      ind.nationalBenchmark,
+      ind.isLowerBetter,
+    );
+    const dimKey = ind.dimension as keyof typeof domMap;
+    if (domMap[dimKey]) domMap[dimKey].push(s);
+  }
+  const avg = (arr: number[]) =>
+    arr.length === 0 ? 3 : arr.reduce((a, b) => a + b, 0) / arr.length;
+  return {
+    safety: avg(domMap.Safety),
+    preventive: avg(domMap.Preventive),
+    quality: avg(domMap.Quality),
+    staffing: avg(domMap.Staffing),
+    compliance: avg(domMap.Compliance),
+    experience: avg(domMap.Experience),
+  };
 }
 
 /**
  * Returns 10 mock indicators for any provider ID, derived from that provider's
  * domain scores so that ratings are consistent across all modules.
  */
-export function getUnifiedProviderIndicators(providerId: string): Array<{
+export function getUnifiedProviderIndicators(
+  providerId: string,
+  quarter = "Q4-2025",
+): Array<{
   id: string;
   providerId: string;
   quarter: string;
@@ -3560,6 +3634,38 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
   trend: "improving" | "stable" | "declining";
   isLowerBetter: boolean;
 }> {
+  const QUARTER_MULTIPLIERS: Record<string, number> = {
+    "Q1-2025": 1.18,
+    "Q2-2025": 1.09,
+    "Q3-2025": 1.0,
+    "Q4-2025": 0.92,
+  };
+  const qMult = QUARTER_MULTIPLIERS[quarter] ?? 1.0;
+
+  function adjustQuintileForQuarter(baseQ: number, q: string): number {
+    const adj: Record<string, number> = {
+      "Q1-2025": 1,
+      "Q2-2025": 0,
+      "Q3-2025": 0,
+      "Q4-2025": -1,
+    };
+    return Math.min(5, Math.max(1, baseQ + (adj[q] ?? 0)));
+  }
+
+  function applyQuarterRate(baseRate: number, isLowerBetter2: boolean): number {
+    if (isLowerBetter2) return Number.parseFloat((baseRate * qMult).toFixed(1));
+    return Number.parseFloat(Math.min(100, baseRate / qMult).toFixed(1));
+  }
+
+  function quarterTrend(
+    baseTrend: "improving" | "stable" | "declining",
+    q_rank: number,
+  ): "improving" | "stable" | "declining" {
+    if (quarter === "Q1-2025" && q_rank >= 4) return "declining";
+    if (quarter === "Q4-2025" && baseTrend === "stable") return "improving";
+    return baseTrend;
+  }
+
   const d = getUnifiedProviderDomainScores(providerId);
 
   // Get trend from city provider meta if available
@@ -3726,24 +3832,24 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-1`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Safety",
       indicatorCode: "SAF-001",
       indicatorName: "Falls with Harm Rate",
-      rate: indRate(4.2, falls_q, "lower_is_better"),
+      rate: applyQuarterRate(indRate(4.2, falls_q, "lower_is_better"), true),
       nationalBenchmark: 5.1,
-      quintileRank: falls_q,
-      trend: indTrend(safetyTrend, falls_q),
+      quintileRank: adjustQuintileForQuarter(falls_q, quarter),
+      trend: quarterTrend(indTrend(safetyTrend, falls_q), falls_q),
       isLowerBetter: true,
     },
     {
       id: `IND-${providerId}-2`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Safety",
       indicatorCode: "SAF-002",
       indicatorName: "Medication-Related Harm",
-      rate: indRate(2.8, medHarm_q, "lower_is_better"),
+      rate: applyQuarterRate(indRate(2.8, medHarm_q, "lower_is_better"), true),
       nationalBenchmark: 3.2,
       quintileRank: medHarm_q,
       trend: indTrend(safetyTrend, medHarm_q),
@@ -3752,11 +3858,14 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-3`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Safety",
       indicatorCode: "SAF-003",
       indicatorName: "High-Risk Medication Prevalence",
-      rate: indRate(18.4, highRiskMed_q, "lower_is_better"),
+      rate: applyQuarterRate(
+        indRate(18.4, highRiskMed_q, "lower_is_better"),
+        true,
+      ),
       nationalBenchmark: 21.2,
       quintileRank: highRiskMed_q,
       trend: indTrend(safetyTrend, highRiskMed_q),
@@ -3765,50 +3874,59 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-4`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Safety",
       indicatorCode: "SAF-004",
       indicatorName: "Polypharmacy ≥10 Medications",
-      rate: indRate(12.1, polypharmacy_q, "lower_is_better"),
+      rate: applyQuarterRate(
+        indRate(12.1, polypharmacy_q, "lower_is_better"),
+        true,
+      ),
       nationalBenchmark: 14.8,
-      quintileRank: polypharmacy_q,
-      trend: indTrend(safetyTrend, polypharmacy_q),
+      quintileRank: adjustQuintileForQuarter(polypharmacy_q, quarter),
+      trend: quarterTrend(
+        indTrend(safetyTrend, polypharmacy_q),
+        polypharmacy_q,
+      ),
       isLowerBetter: true,
     },
     {
       id: `IND-${providerId}-5`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Safety",
       indicatorCode: "SAF-005",
       indicatorName: "Pressure Injuries Stage 2–4",
-      rate: indRate(1.8, pressure_q, "lower_is_better"),
+      rate: applyQuarterRate(indRate(1.8, pressure_q, "lower_is_better"), true),
       nationalBenchmark: 2.4,
-      quintileRank: pressure_q,
-      trend: indTrend(safetyTrend, pressure_q),
+      quintileRank: adjustQuintileForQuarter(pressure_q, quarter),
+      trend: quarterTrend(indTrend(safetyTrend, pressure_q), pressure_q),
       isLowerBetter: true,
     },
     {
       id: `IND-${providerId}-6`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Safety",
       indicatorCode: "SAF-006",
       indicatorName: "ED Presentations (30-day)",
-      rate: indRate(8.4, ed_q, "lower_is_better"),
+      rate: applyQuarterRate(indRate(8.4, ed_q, "lower_is_better"), true),
       nationalBenchmark: 10.2,
-      quintileRank: ed_q,
-      trend: indTrend(safetyTrend, ed_q),
+      quintileRank: adjustQuintileForQuarter(ed_q, quarter),
+      trend: quarterTrend(indTrend(safetyTrend, ed_q), ed_q),
       isLowerBetter: true,
     },
     {
       id: `IND-${providerId}-7`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Preventive",
       indicatorCode: "PRV-001",
       indicatorName: "Falls Risk Screening Completion",
-      rate: indRate(94.2, fallsScreen_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(94.2, fallsScreen_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 88.4,
       quintileRank: fallsScreen_q,
       trend: indTrend(preventiveTrend, fallsScreen_q),
@@ -3817,11 +3935,14 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-8`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Preventive",
       indicatorCode: "PRV-002",
       indicatorName: "Depression Screening (GDS/PHQ-9)",
-      rate: indRate(88.4, deprScreen_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(88.4, deprScreen_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 82.1,
       quintileRank: deprScreen_q,
       trend: indTrend(preventiveTrend, deprScreen_q),
@@ -3830,50 +3951,68 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-9`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Preventive",
       indicatorCode: "PRV-003",
       indicatorName: "Malnutrition Screening",
-      rate: indRate(91.2, malnutrition_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(91.2, malnutrition_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 85.8,
-      quintileRank: malnutrition_q,
-      trend: indTrend(preventiveTrend, malnutrition_q),
+      quintileRank: adjustQuintileForQuarter(malnutrition_q, quarter),
+      trend: quarterTrend(
+        indTrend(preventiveTrend, malnutrition_q),
+        malnutrition_q,
+      ),
       isLowerBetter: false,
     },
     {
       id: `IND-${providerId}-10`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Quality",
       indicatorCode: "QM-001",
       indicatorName: "Satisfaction Survey Score",
-      rate: indRate(84.8, satisfaction_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(84.8, satisfaction_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 80.2,
-      quintileRank: satisfaction_q,
-      trend: indTrend(qualityTrend, satisfaction_q),
+      quintileRank: adjustQuintileForQuarter(satisfaction_q, quarter),
+      trend: quarterTrend(
+        indTrend(qualityTrend, satisfaction_q),
+        satisfaction_q,
+      ),
       isLowerBetter: false,
     },
     {
       id: `IND-${providerId}-11`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Quality",
       indicatorCode: "QM-002",
       indicatorName: "Clinical Outcome Score",
-      rate: indRate(76.4, clinical_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(76.4, clinical_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 74.2,
-      quintileRank: clinical_q,
-      trend: indTrend(qualityTrend, clinical_q),
+      quintileRank: adjustQuintileForQuarter(clinical_q, quarter),
+      trend: quarterTrend(indTrend(qualityTrend, clinical_q), clinical_q),
       isLowerBetter: false,
     },
     {
       id: `IND-${providerId}-12`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Staffing",
       indicatorCode: "STAFF-001",
       indicatorName: "Registered Nurse Hours per Resident",
-      rate: indRate(4.8, rnHours_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(4.8, rnHours_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 4.1,
       quintileRank: rnHours_q,
       trend: indTrend(staffingTrend, rnHours_q),
@@ -3882,50 +4021,62 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-13`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Staffing",
       indicatorCode: "STAFF-002",
       indicatorName: "Staff Retention Rate",
-      rate: indRate(88.2, retention_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(88.2, retention_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 82.4,
-      quintileRank: retention_q,
-      trend: indTrend(staffingTrend, retention_q),
+      quintileRank: adjustQuintileForQuarter(retention_q, quarter),
+      trend: quarterTrend(indTrend(staffingTrend, retention_q), retention_q),
       isLowerBetter: false,
     },
     {
       id: `IND-${providerId}-14`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Compliance",
       indicatorCode: "COMP-001",
       indicatorName: "Accreditation Compliance Score",
-      rate: indRate(92.4, accred_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(92.4, accred_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 88.0,
-      quintileRank: accred_q,
-      trend: indTrend(complianceTrend, accred_q),
+      quintileRank: adjustQuintileForQuarter(accred_q, quarter),
+      trend: quarterTrend(indTrend(complianceTrend, accred_q), accred_q),
       isLowerBetter: false,
     },
     {
       id: `IND-${providerId}-15`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Compliance",
       indicatorCode: "COMP-002",
       indicatorName: "Mandatory Reporting Completeness",
-      rate: indRate(96.8, reporting_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(96.8, reporting_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 92.0,
-      quintileRank: reporting_q,
-      trend: indTrend(complianceTrend, reporting_q),
+      quintileRank: adjustQuintileForQuarter(reporting_q, quarter),
+      trend: quarterTrend(indTrend(complianceTrend, reporting_q), reporting_q),
       isLowerBetter: false,
     },
     {
       id: `IND-${providerId}-16`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Experience",
       indicatorCode: "EXP-001",
       indicatorName: "Resident Satisfaction Score",
-      rate: indRate(84.8, expSatisfaction_q, "higher_is_better"),
+      rate: applyQuarterRate(
+        indRate(84.8, expSatisfaction_q, "higher_is_better"),
+        false,
+      ),
       nationalBenchmark: 80.2,
       quintileRank: expSatisfaction_q,
       trend: indTrend(experienceTrend, expSatisfaction_q),
@@ -3934,11 +4085,14 @@ export function getUnifiedProviderIndicators(providerId: string): Array<{
     {
       id: `IND-${providerId}-17`,
       providerId,
-      quarter: "Q4-2025",
+      quarter,
       dimension: "Experience",
       indicatorCode: "EXP-002",
       indicatorName: "Complaint Rate",
-      rate: indRate(3.2, complaintRate_q, "lower_is_better"),
+      rate: applyQuarterRate(
+        indRate(3.2, complaintRate_q, "lower_is_better"),
+        true,
+      ),
       nationalBenchmark: 4.8,
       quintileRank: complaintRate_q,
       trend: indTrend(experienceTrend, complaintRate_q),

@@ -815,7 +815,12 @@ function ProviderCard({
 
 // ── Main Public View ───────────────────────────────────────────────────────────
 
-export default function PublicView() {
+interface PublicViewProps {
+  currentQuarter?: string;
+}
+export default function PublicView({
+  currentQuarter: _currentQuarter = "Q4-2025",
+}: PublicViewProps) {
   const [selectedCity, setSelectedCity] = useState<string>("");
   const [selectedProvider, setSelectedProvider] = useState<CityProvider | null>(
     null,
