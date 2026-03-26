@@ -15,11 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CITY_PROVIDERS, type CityProvider } from "@/data/mockData";
 import {
-  calcWeightedProviderRating,
-  starsToPercentScore,
-} from "@/utils/ratingEngine";
+  CITY_PROVIDERS,
+  type CityProvider,
+  getProviderRatingForQuarter,
+} from "@/data/mockData";
+
 import {
   Activity,
   AlertTriangle,
@@ -40,24 +41,6 @@ import {
 import { useMemo, useState } from "react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getDomains(p: CityProvider) {
-  const i = p.indicators;
-  return {
-    safety: starsToPercentScore(i.safetyClinical),
-    preventive: starsToPercentScore(i.preventiveCare),
-    quality: starsToPercentScore(i.qualityMeasures),
-    staffing: starsToPercentScore(i.staffing),
-    compliance: starsToPercentScore(i.compliance),
-    experience: starsToPercentScore(i.experience),
-  };
-}
-
-function getStars(p: CityProvider): number {
-  const domains = getDomains(p);
-  const result = calcWeightedProviderRating(domains);
-  return result.stars;
-}
 
 /** Unified indicator status — uses 1–5 star scale thresholds */
 function getIndicatorStatus(score: number): {
@@ -338,13 +321,15 @@ const DOMAIN_ORDER = [
 function PublicProviderModal({
   provider,
   onClose,
+  currentQuarter = "Q4-2025",
 }: {
   provider: CityProvider | null;
   onClose: () => void;
+  currentQuarter?: string;
 }) {
   if (!provider) return null;
 
-  const stars = getStars(provider);
+  const stars = getProviderRatingForQuarter(provider.id, currentQuarter).stars;
   const risk = getRiskLevelFromIndicators(provider.indicators);
   const perf = getPerformanceLabel(stars);
   const explanation = generateDynamicExplanation(stars, provider.indicators);
@@ -528,11 +513,13 @@ function PublicProviderModal({
 function ProviderCard({
   provider,
   onSelect,
+  currentQuarter = "Q4-2025",
 }: {
   provider: CityProvider;
   onSelect: (p: CityProvider) => void;
+  currentQuarter?: string;
 }) {
-  const stars = getStars(provider);
+  const stars = getProviderRatingForQuarter(provider.id, currentQuarter).stars;
   const risk = getRiskLevelFromIndicators(provider.indicators);
   const fallsStatus = getIndicatorStatus(provider.indicators.safetyClinical);
   const screeningPct = getScorePct(provider);
@@ -619,10 +606,13 @@ interface PublicViewProps {
   currentQuarter?: string;
 }
 
-export default function PublicView(_props: PublicViewProps) {
+export default function PublicView({
+  currentQuarter = "Q4-2025",
+}: PublicViewProps) {
   const cities = Object.keys(CITY_PROVIDERS);
   const [selectedCity, setSelectedCity] = useState("Sydney");
   const [sortBy, setSortBy] = useState<"rating" | "name">("rating");
+
   const [selectedProvider, setSelectedProvider] = useState<CityProvider | null>(
     null,
   );
@@ -630,14 +620,20 @@ export default function PublicView(_props: PublicViewProps) {
   const providers = useMemo(() => {
     const list = CITY_PROVIDERS[selectedCity] ?? [];
     return [...list].sort((a, b) => {
-      if (sortBy === "rating") return getStars(b) - getStars(a);
+      if (sortBy === "rating")
+        return (
+          getProviderRatingForQuarter(b.id, currentQuarter).stars -
+          getProviderRatingForQuarter(a.id, currentQuarter).stars
+        );
       return a.name.localeCompare(b.name);
     });
-  }, [selectedCity, sortBy]);
+  }, [selectedCity, sortBy, currentQuarter]);
 
   // KPI calculations
   const kpi = useMemo(() => {
-    const stars = providers.map(getStars);
+    const stars = providers.map(
+      (p) => getProviderRatingForQuarter(p.id, currentQuarter).stars,
+    );
     const avgRating =
       stars.length > 0 ? stars.reduce((s, x) => s + x, 0) / stars.length : 0;
     const goodOrAbove = stars.filter((s) => s >= 4).length;
@@ -653,7 +649,7 @@ export default function PublicView(_props: PublicViewProps) {
           : 0,
       higherRisk,
     };
-  }, [providers]);
+  }, [providers, currentQuarter]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -806,7 +802,11 @@ export default function PublicView(_props: PublicViewProps) {
           >
             {providers.map((p, idx) => (
               <div key={p.id} data-ocid={`public.item.${idx + 1}`}>
-                <ProviderCard provider={p} onSelect={setSelectedProvider} />
+                <ProviderCard
+                  provider={p}
+                  onSelect={setSelectedProvider}
+                  currentQuarter={currentQuarter}
+                />
               </div>
             ))}
           </div>
@@ -866,6 +866,7 @@ export default function PublicView(_props: PublicViewProps) {
       <PublicProviderModal
         provider={selectedProvider}
         onClose={() => setSelectedProvider(null)}
+        currentQuarter={currentQuarter}
       />
     </div>
   );

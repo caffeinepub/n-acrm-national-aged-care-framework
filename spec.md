@@ -1,38 +1,37 @@
-# N-ACRM Public Dashboard Consistency Fix
+# N-ACRM National Aged Care Framework
 
 ## Current State
-The Public Dashboard (`PublicView.tsx`) has several data consistency issues:
-- Risk level is derived only from overall star rating, not from individual indicator analysis
-- Explanation text is hardcoded per star tier (e.g. "Excellent performance"), ignoring actual weak indicators
-- Inconsistent status labels: `getFallsStatus` returns "Low/High" while popup uses "High/Moderate/Low" for satisfaction — neither matches the required "Good/Moderate/Needs Attention" standard
-- Popup shows only 3 of 6 indicators, and does not show per-indicator status for all domains
-- No contradiction guard: a provider with poor safety can still show "Excellent Performance" label
-- `getDomains()` correctly converts 1–5 star values via `starsToPercentScore` into 0–100 for the central engine — this is correct and must be preserved
+
+The app has a centralized rating engine (`ratingEngine.ts`, `benchmarkUtils.ts`) and a unified provider registry (`UNIFIED_PROVIDERS` in `mockData.ts`). However, data is NOT fully synchronized across all modules:
+
+- `PublicView.tsx`: Uses `CITY_PROVIDERS` directly via a local `getDomains()` helper that does NOT accept a quarter parameter — always uses base Q4 indicator values regardless of selected quarter.
+- `PayForImprovement.tsx`: Reads `UNIFIED_PROVIDERS[x].overallStars` which is a static property computed once at load time (no quarter awareness).
+- `ProviderPerformance.tsx`: Calls `getUnifiedProviderIndicators(id, quarter)` — IS quarter-aware.
+- `RatingEngine.tsx`: Calculates its own rating from user-submitted indicator values — correct by design, but should display the same result as other modules for the same provider/quarter.
+- `UNIFIED_PROVIDERS` stores a single static `overallStars` computed from Q4 base values.
+
+Result: switching quarters produces different stars in ProviderPerformance but NOT in PublicView or PayForImprovement. Eligibility can also differ.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `getIndicatorStatus(starScore)` — returns `{label, chipClass}` with standardized "Good" / "Moderate" / "Needs Attention" based on indicator star value
-- `getRiskLevelFromIndicators(indicators)` — counts poor indicators (< 3.0 stars) and derives Low/Medium/High risk
-- `generateDynamicExplanation(stars, indicators)` — builds explanation text by scanning all 6 indicator scores and naming specific weak areas
-- Full 6-indicator grid in the popup card (all domain indicators)
+- `getProviderRatingForQuarter(providerId: string, quarter: string)` exported function in `mockData.ts` — the **single source of truth** for all rating and eligibility data. It calls `getUnifiedProviderDomainScores(providerId, quarter)` → `calcNewWeightedOverallScore` → `overallScoreToStars` → `calcPayForImprovementEligibility`, returns `{ domainScores, overallScore, stars, eligibility }`. All modules must call this instead of computing locally.
 
 ### Modify
-- `getFallsStatus` → replace "Low/Moderate/High" labels with "Good/Moderate/Needs Attention"
-- `getRiskLevel` → replace star-only logic with indicator-count-based logic
-- `getPlainLanguageExplanation` → replace hardcoded text with dynamic generation
-- Popup: Resident Satisfaction chip from "High/Moderate/Low" to "Good/Moderate/Needs Attention"
-- Popup: Show all 6 indicators (not just 3)
-- All status labels standardized to "Good/Moderate/Needs Attention"
+- `PublicView.tsx`: Replace local `getDomains(p)` and `getStars(p)` with calls to `getProviderRatingForQuarter(p.id, currentQuarter)`. Thread the `currentQuarter` prop (already available in app state) into PublicView so it reacts to quarter changes.
+- `PayForImprovement.tsx`: Replace `UNIFIED_PROVIDERS[x].overallStars` and the local `getProviderOverallStars()` with `getProviderRatingForQuarter(id, currentQuarter).stars`. Use quarter from app state.
+- `NationalOverview.tsx` and any other module that computes ratings independently: Ensure they all call `getProviderRatingForQuarter` or derive from `UNIFIED_PROVIDERS` computed via the same function.
+- All incentive eligibility badges: Must use `calcPayForImprovementEligibility` from the central result, not local recalculations.
 
 ### Remove
-- Hardcoded static explanation strings like "This provider consistently delivers excellent care"
-- Inconsistent label sets ("Low/High", "High/Moderate/Low")
+- Local `getDomains()` helper in `PublicView.tsx` (replace with central call).
+- Local `getProviderOverallStars()` in `PayForImprovement.tsx` (replace with central call).
+- Any local star/score recalculations in individual page components that duplicate the central engine logic.
 
 ## Implementation Plan
-1. Add `getIndicatorStatus()` helper returning standardized labels
-2. Rewrite `getRiskLevel()` to use indicator counts, not stars
-3. Rewrite `getPlainLanguageExplanation()` to generate dynamic text from actual indicator data
-4. Standardize all label chips across provider cards and popup
-5. Expand popup to show all 6 indicators with consistent status chips and explanations
-6. Ensure no UI contradiction: if any indicator is "Needs Attention", explanation must reflect it
+
+1. Add `getProviderRatingForQuarter(providerId, quarter)` to `mockData.ts` — returns `{ domainScores, overallScore, stars, eligibility }` using existing utilities.
+2. Update `PublicView.tsx`: accept `currentQuarter` prop, use `getProviderRatingForQuarter` for all provider ratings, popup data, and KPI counts.
+3. Update `PayForImprovement.tsx`: accept `currentQuarter` prop, use `getProviderRatingForQuarter` for all provider star/eligibility lookups.
+4. Check `App.tsx`/`Layout.tsx` to ensure `currentQuarter` is passed to PublicView and PayForImprovement.
+5. Validate: same provider shown in PublicView, ProviderPerformance, and PayForImprovement must show same star rating for same quarter.

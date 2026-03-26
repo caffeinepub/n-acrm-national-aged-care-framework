@@ -36,6 +36,7 @@ import {
   PAY_FOR_IMPROVEMENT_DATA,
   PAY_FOR_IMPROVEMENT_THRESHOLDS,
   UNIFIED_PROVIDERS,
+  getProviderRatingForQuarter,
   getUnifiedProviderDomainScores,
 } from "../../data/mockData";
 import {
@@ -92,7 +93,8 @@ function getProviderOverallStars(
     (p) => p.name.toLowerCase() === providerName.toLowerCase(),
   );
   if (unified) {
-    return unified.overallStars;
+    // Use quarter-aware calculation instead of static overallStars
+    return getProviderRatingForQuarter(unified.id, q).stars;
   }
 
   // Fall back to MOCK_PROVIDERS (legacy PROV-xxx based providers)
@@ -459,7 +461,10 @@ export default function PayForImprovement({
                   );
                   const aboveThreshold =
                     computedImprovementPct >= (threshold?.threshold || 0);
-                  const overallStars = getProviderOverallStars(row.provider);
+                  const overallStars = getProviderOverallStars(
+                    row.provider,
+                    currentQuarter,
+                  );
 
                   // Dynamic eligibility: must meet improvement threshold AND have eligible rating tier
                   // High-performing providers (>= 4.0 stars) are always eligible

@@ -1,6 +1,7 @@
 // Mock data for sections that don't have full backend support
 import {
   calcNewWeightedOverallScore,
+  calcPayForImprovementEligibility,
   overallScoreToStars,
   starsToPercentScore,
 } from "../utils/ratingEngine";
@@ -5394,6 +5395,33 @@ export const COHORT_DETAIL_DATA: Record<string, CohortDetail> = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * SINGLE SOURCE OF TRUTH for provider rating and eligibility.
+ * All modules must call this instead of computing locally.
+ */
+export function getProviderRatingForQuarter(
+  providerId: string,
+  quarter = "Q4-2025",
+): {
+  domainScores: {
+    safety: number;
+    preventive: number;
+    quality: number;
+    staffing: number;
+    compliance: number;
+    experience: number;
+  };
+  overallScore: number;
+  stars: number;
+  eligibility: { tier: string; eligible: boolean; estimatedPayment: number };
+} {
+  const domainScores = getUnifiedProviderDomainScores(providerId, quarter);
+  const overallScore = calcNewWeightedOverallScore(domainScores);
+  const stars = overallScoreToStars(overallScore);
+  const eligibility = calcPayForImprovementEligibility(stars, 0, 0);
+  return { domainScores, overallScore, stars, eligibility };
+}
 
 export const RISK_CRITERIA_LABELS: Record<string, string> = {
   recent_hospital_discharge: "Recent Hospital Discharge",
