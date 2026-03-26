@@ -1,9 +1,10 @@
 // Rating Engine — N-ACRM
-// New standardized 0–100 scoring model
+// Standardized 0–100 scoring model
+
+import { calcIncentiveEligibilityTier } from "./benchmarkUtils";
 
 /**
  * Maps 1–5 star values to representative 0–100 percent scores.
- * Used when only aggregate star data is available (no raw rate/benchmark).
  */
 export function starsToPercentScore(stars: number): number {
   if (stars >= 4.5) return 92;
@@ -91,8 +92,7 @@ export interface ProviderRating {
 }
 
 /**
- * Legacy wrapper — kept for backward compat.
- * Expects domain scores in 0–100 range, returns { score, stars }.
+ * Wrapper — expects domain scores in 0–100 range, returns { score, stars }.
  */
 export function calcWeightedProviderRating(
   domains: DomainScores,
@@ -102,9 +102,9 @@ export function calcWeightedProviderRating(
 }
 
 /**
- * Legacy indicator star rating — kept for backward compat where rate/benchmark unavailable.
+ * Indicator star rating.
  * Uses new 0–100 model when rate + benchmark are provided.
- * Falls back to starsToPercentScore(quintileStars) + overallScoreToStars when not.
+ * Falls back to quintile-based when not.
  */
 export function calcIndicatorStarRating(
   quintile: number,
@@ -142,7 +142,7 @@ export function calcDomainScore(indicatorScores: number[]): number {
 }
 
 /**
- * Converts an overall score (0–5 legacy scale) to a star band using old thresholds.
+ * Legacy score-to-star-band (0–5 legacy scale).
  * @deprecated Use overallScoreToStars for new model.
  */
 export function scoreToStarBand(score: number): number {
@@ -160,24 +160,61 @@ export interface EligibilityResult {
 }
 
 /**
- * Pay-for-Improvement eligibility based on overallStars and safetyImprovement %.
+ * Pay-for-Improvement eligibility.
+ *
+ * Rules (synchronized with benchmarkUtils.calcIncentiveEligibilityTier):
+ *   Stars ≥ 4.5 → Highly Eligible ($180,000) — automatically, no improvement requirement
+ *   Stars ≥ 4.0 AND improvement ≥ 10% AND screening ≥ 85% → Maximum Eligible ($180,000)
+ *   Stars ≥ 4.0 AND improvement ≥ 10% → Bonus Eligible ($120,000)
+ *   Stars ≥ 4.0 → Base Eligible ($75,000)
+ *   Stars ≥ 3.5 AND improvement ≥ 15% → Eligible ($50,000)
+ *   Otherwise → Not Eligible ($0)
+ *
+ * HIGH-PERFORMING PROVIDERS (≥ 4.0 stars) ARE NEVER "Not Eligible".
  */
 export function calcPayForImprovementEligibility(
   overallStars: number,
   safetyImprovement: number,
+  screeningCompletion = 0,
+  belowBenchmarkCount = 0,
+  totalIndicatorCount = 0,
 ): EligibilityResult {
+  // ≥ 4.5 stars → Highly Eligible (automatic, no improvement threshold needed)
   if (overallStars >= 4.5) {
     return {
-      tier: "Maximum Eligible",
+      tier: "Highly Eligible",
       eligible: true,
       estimatedPayment: 180000,
     };
   }
-  if (overallStars >= 4 && safetyImprovement >= 15) {
-    return { tier: "Bonus Eligible", eligible: true, estimatedPayment: 120000 };
-  }
-  if (overallStars >= 4) {
+  // ≥ 4.0 stars → Eligible at some tier (never Not Eligible)
+  if (overallStars >= 4.0) {
+    if (safetyImprovement >= 10 && screeningCompletion >= 85) {
+      return {
+        tier: "Maximum Eligible",
+        eligible: true,
+        estimatedPayment: 180000,
+      };
+    }
+    if (safetyImprovement >= 10) {
+      return {
+        tier: "Bonus Eligible",
+        eligible: true,
+        estimatedPayment: 120000,
+      };
+    }
+    // Base eligibility for any ≥ 4.0 star provider
     return { tier: "Base Eligible", eligible: true, estimatedPayment: 75000 };
   }
-  return { tier: "Not Eligible", eligible: false, estimatedPayment: 0 };
+  // 3.5–3.99 stars with notable improvement
+  if (overallStars >= 3.5 && safetyImprovement >= 15) {
+    return { tier: "Eligible", eligible: true, estimatedPayment: 50000 };
+  }
+  // Below 3.5 or insufficient improvement — use tier helper for consistency
+  const { tier, eligible } = calcIncentiveEligibilityTier(
+    overallStars,
+    belowBenchmarkCount,
+    totalIndicatorCount,
+  );
+  return { tier, eligible, estimatedPayment: 0 };
 }

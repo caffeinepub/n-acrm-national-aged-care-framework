@@ -33,12 +33,10 @@ export default function Layout({
   setCurrentQuarter,
 }: LayoutProps) {
   const renderPage = () => {
-    // Public role sees the dedicated public provider directory
     if (currentRole === "Public") {
       return <PublicView currentQuarter={currentQuarter} />;
     }
 
-    // Provider role: national_overview defaults to Provider Dashboard
     if (currentRole === "Provider" && activePage === "national_overview") {
       return <ProviderDashboard />;
     }
@@ -82,7 +80,7 @@ export default function Layout({
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden bg-background">
       <Header
         currentRole={currentRole}
         setCurrentRole={setCurrentRole}
@@ -97,23 +95,10 @@ export default function Layout({
             currentRole={currentRole}
           />
         )}
-        <main className="flex-1 overflow-y-auto">{renderPage()}</main>
+        <main className="flex-1 overflow-y-auto bg-background">
+          {renderPage()}
+        </main>
       </div>
-      <footer
-        className="bg-gov-navy-dark text-center py-2 text-xs"
-        style={{ color: "oklch(0.65 0.02 240)" }}
-      >
-        © {new Date().getFullYear()} Australian Government — National Aged Care
-        Reporting & Prevention Framework. Built with{" "}
-        <a
-          href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-          className="underline hover:text-white"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          caffeine.ai
-        </a>
-      </footer>
     </div>
   );
 }

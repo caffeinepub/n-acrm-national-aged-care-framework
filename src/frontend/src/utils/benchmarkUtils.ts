@@ -83,9 +83,9 @@ export function getBenchmarkStatus(
 
 /**
  * Returns a rating delta to apply based on benchmark comparison.
- * Below benchmark \u2192 -0.5
- * Above benchmark by >10% \u2192 +0.2
- * Near \u2192 0
+ * Below benchmark → -0.5
+ * Above benchmark by >10% → +0.2
+ * Near → 0
  */
 export function getBenchmarkRatingAdjustment(
   rate: number,
@@ -121,9 +121,10 @@ export function calcBenchmarkImprovement(
 }
 
 /**
- * Improvement % from baseline.
- * For lower-is-better: positive means current is lower (better) than baseline.
- * Formula: ((Baseline - Current) / Baseline) * 100
+ * Improvement % from baseline (period-over-period).
+ * Formula: ((Current − Previous) / |Previous|) × 100
+ * Direction-aware: for lower-is-better, a decrease is positive improvement.
+ * Capped at ±100% to prevent unrealistic values (e.g. 3025%).
  */
 export function calcBaselineImprovement(
   baseline: number,
@@ -131,21 +132,68 @@ export function calcBaselineImprovement(
   isLowerBetter: boolean,
 ): number {
   if (baseline === 0) return 0;
+  let pct: number;
   if (isLowerBetter) {
-    return ((baseline - current) / baseline) * 100;
+    pct = ((baseline - current) / Math.abs(baseline)) * 100;
+  } else {
+    pct = ((current - baseline) / Math.abs(baseline)) * 100;
   }
-  return ((current - baseline) / baseline) * 100;
+  // Cap to prevent unrealistic percentages (e.g. 3025%)
+  return Math.max(-100, Math.min(100, pct));
 }
 
 /**
- * Provider is eligible for incentive if overall score >= 3.5
- * AND no core indicators are below benchmark.
+ * Incentive eligibility tiers based on overall star rating.
+ *
+ * Rules:
+ *   ≥ 4.5 stars → "Highly Eligible" (automatically eligible, maximum tier)
+ *   ≥ 4.0 stars → "Eligible" (eligible regardless of benchmark)
+ *   ≥ 3.5 stars AND majority of indicators above/near benchmark → "Eligible"
+ *   ≥ 3.5 stars AND most indicators below benchmark → "Not Eligible"
+ *   < 3.5 stars → "Not Eligible"
+ *
+ * High-performing providers (≥ 4.0 stars) are NEVER marked Not Eligible.
+ */
+export function calcIncentiveEligibilityTier(
+  overallStars: number,
+  belowBenchmarkCount: number,
+  totalIndicatorCount: number,
+): { tier: string; eligible: boolean } {
+  // ≥ 4.5 stars: always Highly Eligible regardless of benchmark
+  if (overallStars >= 4.5) {
+    return { tier: "Highly Eligible", eligible: true };
+  }
+  // ≥ 4.0 stars: always Eligible regardless of benchmark
+  if (overallStars >= 4.0) {
+    return { tier: "Eligible", eligible: true };
+  }
+  // 3.5–3.99 stars: eligible only if majority of indicators are NOT below benchmark
+  if (overallStars >= 3.5) {
+    const majorityBelowBenchmark =
+      totalIndicatorCount > 0 && belowBenchmarkCount > totalIndicatorCount / 2;
+    if (majorityBelowBenchmark) {
+      return { tier: "Not Eligible", eligible: false };
+    }
+    return { tier: "Eligible", eligible: true };
+  }
+  // < 3.5 stars: not eligible
+  return { tier: "Not Eligible", eligible: false };
+}
+
+/**
+ * Legacy isEligibleForIncentive — kept for backward compat.
+ * FIXED: high-rated providers (≥ 4.0 stars) are always eligible.
+ *
+ * @deprecated Use calcIncentiveEligibilityTier for full tier information.
  */
 export function isEligibleForIncentive(
-  overallWeightedScore: number,
+  overallStars: number,
   hasBelowBenchmarkIndicators: boolean,
 ): boolean {
-  return overallWeightedScore >= 3.5 && !hasBelowBenchmarkIndicators;
+  // ≥ 4.0 stars → always eligible, regardless of any below-benchmark indicators
+  if (overallStars >= 4.0) return true;
+  // < 4.0 stars: only eligible if no indicators below benchmark
+  return overallStars >= 3.5 && !hasBelowBenchmarkIndicators;
 }
 
 export function getBenchmarkStatusColor(
@@ -167,9 +215,6 @@ export function getBenchmarkStatusBg(
 /**
  * Human-readable benchmark status labels.
  * Direction-agnostic: "Better"/"Close"/"Worse" rather than "Above"/"Below".
- * This avoids the ambiguity where "Above benchmark" sounds good but is actually
- * bad for lower-is-better indicators (e.g. a high falls rate is above the benchmark
- * but is poor performance).
  */
 export function getBenchmarkStatusLabel(
   status: "above" | "near" | "below",

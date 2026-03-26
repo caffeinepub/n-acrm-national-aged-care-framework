@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  calcIncentiveEligibilityTier,
   getBenchmarkStatus,
   getIndicatorDirection,
-  isEligibleForIncentive,
 } from "@/utils/benchmarkUtils";
 import type {
   IndicatorForAlert,
@@ -351,19 +351,27 @@ export default function ProviderPerformance({
                 </div>
                 {/* Incentive Eligibility Badge */}
                 <div className="mt-2">
-                  <IncentiveEligibilityBadge
-                    eligible={isEligibleForIncentive(
+                  {(() => {
+                    const belowCount = indicators.filter(
+                      (ind) =>
+                        getBenchmarkStatus(
+                          ind.rate,
+                          ind.nationalBenchmark,
+                          ind.isLowerBetter,
+                        ) === "below",
+                    ).length;
+                    const { tier, eligible } = calcIncentiveEligibilityTier(
                       overallStars,
-                      indicators.some(
-                        (ind) =>
-                          getBenchmarkStatus(
-                            ind.rate,
-                            ind.nationalBenchmark,
-                            ind.isLowerBetter,
-                          ) === "below",
-                      ),
-                    )}
-                  />
+                      belowCount,
+                      indicators.length,
+                    );
+                    return (
+                      <IncentiveEligibilityBadge
+                        eligible={eligible}
+                        tier={tier}
+                      />
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex items-center gap-2">

@@ -1,0 +1,366 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   DESIGN TOKENS — N-ACRM Government Health Intelligence Platform
+   Institutional Navy / White / Slate palette
+   ============================================================ */
+@layer base {
+  :root {
+    /* ── Government Brand Colours ── */
+    --gov-navy: 0.22 0.07 258;
+    --gov-navy-dark: 0.18 0.06 258;
+    --gov-navy-deeper: 0.14 0.055 258;
+    --gov-gold: 0.74 0.14 86;
+    --gov-gold-dark: 0.62 0.14 82;
+    --gov-green: 0.52 0.15 145;
+    --gov-amber: 0.65 0.15 65;
+    --gov-red: 0.5 0.2 25;
+    --gov-blue: 0.52 0.16 230;
+
+    /* ── Semantic UI Tokens ── */
+    --background: 0.978 0.005 252;
+    --foreground: 0.16 0.035 258;
+
+    --card: 1.0 0.0 0;
+    --card-foreground: 0.16 0.035 258;
+
+    --popover: 1.0 0.0 0;
+    --popover-foreground: 0.16 0.035 258;
+
+    --primary: 0.22 0.07 258;
+    --primary-foreground: 1.0 0.0 0;
+
+    --secondary: 0.93 0.012 255;
+    --secondary-foreground: 0.22 0.07 258;
+
+    --muted: 0.95 0.008 252;
+    --muted-foreground: 0.5 0.022 252;
+
+    --accent: 0.93 0.012 255;
+    --accent-foreground: 0.22 0.07 258;
+
+    --destructive: 0.5 0.2 25;
+    --destructive-foreground: 1.0 0.0 0;
+
+    --success: 0.52 0.15 145;
+    --success-foreground: 1.0 0.0 0;
+    --warning: 0.65 0.15 65;
+    --warning-foreground: 0.18 0.04 60;
+
+    --border: 0.9 0.008 252;
+    --input: 0.9 0.008 252;
+    --ring: 0.22 0.07 258;
+
+    --radius: 0.25rem;
+
+    /* ── Chart Colours ── */
+    --chart-1: 0.5 0.18 230;
+    --chart-2: 0.52 0.15 145;
+    --chart-3: 0.65 0.15 65;
+    --chart-4: 0.5 0.2 25;
+    --chart-5: 0.74 0.14 86;
+
+    /* ── Sidebar ── */
+    --sidebar: 0.17 0.055 258;
+    --sidebar-foreground: 0.9 0.012 252;
+    --sidebar-primary: 0.74 0.14 86;
+    --sidebar-primary-foreground: 0.14 0.055 258;
+    --sidebar-accent: 0.24 0.065 258;
+    --sidebar-accent-foreground: 0.9 0.012 252;
+    --sidebar-border: 0.26 0.055 258;
+    --sidebar-ring: 0.74 0.14 86;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  /* Smooth scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: oklch(0.94 0.006 252);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.78 0.018 252);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.65 0.03 252);
+  }
+}
+
+/* ============================================================
+   COMPONENT LAYER — Reusable government UI patterns
+   ============================================================ */
+@layer components {
+  /* ── Status Badges ── */
+  .badge-green {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    background: oklch(0.93 0.06 145);
+    color: oklch(0.3 0.14 145);
+  }
+  .badge-red {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    background: oklch(0.93 0.07 25);
+    color: oklch(0.33 0.18 25);
+  }
+  .badge-amber {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    background: oklch(0.94 0.07 65);
+    color: oklch(0.38 0.14 65);
+  }
+  .badge-blue {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    background: oklch(0.93 0.05 230);
+    color: oklch(0.33 0.14 230);
+  }
+  .badge-gray {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    background: oklch(0.93 0.005 252);
+    color: oklch(0.44 0.018 252);
+  }
+  .badge-navy {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    background: oklch(0.2 0.065 258);
+    color: oklch(0.92 0.01 252);
+  }
+
+  /* ── Government Table ── */
+  .gov-table {
+    @apply w-full text-xs;
+    border-collapse: collapse;
+  }
+  .gov-table thead tr {
+    background: oklch(0.965 0.008 254);
+    border-bottom: 2px solid oklch(0.86 0.025 254);
+  }
+  .gov-table th {
+    @apply px-3 py-2.5 text-left font-semibold uppercase;
+    color: oklch(0.4 0.045 254);
+    letter-spacing: 0.055em;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+  .gov-table td {
+    @apply px-3 py-2;
+    color: oklch(0.3 0.028 252);
+    border-bottom: 1px solid oklch(0.93 0.005 252);
+  }
+  .gov-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .gov-table tbody tr:nth-child(even) {
+    background: oklch(0.985 0.004 254);
+  }
+  .gov-table tbody tr:hover {
+    background: oklch(0.972 0.012 254);
+    transition: background 0.12s ease;
+  }
+
+  /* ── Mono Data Font Utility ── */
+  .font-mono-data {
+    font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Navigation Item ── */
+  .nav-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-sm text-xs font-medium transition-colors cursor-pointer;
+    color: oklch(0.76 0.025 252);
+  }
+  .nav-item:hover {
+    background: oklch(0.27 0.065 258);
+    color: oklch(0.93 0.01 252);
+  }
+  .nav-item.active {
+    background: oklch(0.27 0.065 258);
+    color: oklch(0.93 0.01 252);
+    border-left: 2px solid oklch(var(--gov-gold));
+  }
+  .nav-section-label {
+    @apply px-3 py-1 text-xs font-bold uppercase mt-3 mb-1;
+    color: oklch(0.5 0.028 255);
+    letter-spacing: 0.09em;
+    font-size: 0.64rem;
+  }
+
+  /* ── Stat Number ── */
+  .stat-number {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  /* ── KPI Card ── */
+  .kpi-card {
+    @apply relative overflow-hidden bg-card border rounded-sm;
+    box-shadow: 0 1px 3px oklch(0.15 0.035 258 / 0.08), 0 1px 2px -1px
+      oklch(0.15 0.035 258 / 0.06);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .kpi-card:hover {
+    box-shadow: 0 8px 24px oklch(0.15 0.035 258 / 0.14), 0 3px 8px -3px
+      oklch(0.15 0.035 258 / 0.1);
+    transform: translateY(-2px);
+  }
+  .kpi-card-accent {
+    @apply absolute inset-x-0 top-0;
+    height: 3px;
+  }
+
+  /* ── Section Card ── */
+  .section-card {
+    @apply bg-card border rounded-sm;
+    box-shadow: 0 1px 3px oklch(0.15 0.035 258 / 0.06);
+  }
+  .section-card-header {
+    @apply flex items-center justify-between px-4 py-3 border-b;
+    background: oklch(0.988 0.004 254);
+  }
+  .section-card-title {
+    @apply text-sm font-semibold flex items-center gap-2;
+    color: oklch(var(--gov-navy));
+  }
+
+  /* ── Insight Card ── */
+  .insight-card {
+    @apply flex items-start gap-3 p-3 rounded-sm border-l-4;
+    background: oklch(0.965 0.018 230);
+    border-color: oklch(0.5 0.18 230);
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-top-color: oklch(0.88 0.015 230);
+    border-right-color: oklch(0.88 0.015 230);
+    border-bottom-color: oklch(0.88 0.015 230);
+  }
+
+  /* ── Star Rating ── */
+  .star-rating {
+    @apply inline-flex items-center gap-0.5;
+    color: oklch(0.74 0.14 86);
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+  .star-rating .star-empty {
+    color: oklch(0.82 0.01 252);
+  }
+
+  /* ── Progress Bar Mini ── */
+  .progress-mini {
+    @apply h-1.5 rounded-full overflow-hidden;
+    background: oklch(0.91 0.007 252);
+    min-width: 48px;
+  }
+  .progress-mini-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+}
+
+/* ============================================================
+   UTILITY LAYER — Animations & micro-interactions
+   ============================================================ */
+@layer utilities {
+  .card-hover {
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  .card-hover:hover {
+    box-shadow: 0 6px 20px oklch(0.15 0.035 258 / 0.13), 0 2px 6px -2px
+      oklch(0.15 0.035 258 / 0.09);
+    transform: translateY(-1px);
+  }
+
+  /* ── Loading skeleton ── */
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .skeleton {
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+    background: oklch(0.9 0.005 252);
+    border-radius: 4px;
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  .status-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes slide-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-slide-in-up {
+    animation: slide-in-up 0.3s ease forwards;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.25s ease forwards;
+  }
+
+  /* Progress bar fill animation */
+  @keyframes grow-x {
+    from {
+      width: 0%;
+    }
+  }
+  .progress-animate {
+    animation: grow-x 0.6s ease forwards;
+  }
+}

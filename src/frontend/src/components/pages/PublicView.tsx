@@ -1,9 +1,13 @@
-import { BenchmarkStatusChip } from "@/components/ui/BenchmarkStatusChip";
-import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
-import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
-import { StarRating } from "@/components/ui/StarRating";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -11,694 +15,511 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CITY_LIST, CITY_PROVIDERS, type CityProvider } from "@/data/mockData";
-import { isEligibleForIncentive } from "@/utils/benchmarkUtils";
-import type {
-  IndicatorForAlert,
-  PerformanceAlert,
-} from "@/utils/performanceAlerts";
-import { resolveAlertToShow } from "@/utils/performanceAlerts";
+import { CITY_PROVIDERS, type CityProvider } from "@/data/mockData";
 import {
+  calcWeightedProviderRating,
+  starsToPercentScore,
+} from "@/utils/ratingEngine";
+import {
+  Activity,
   AlertTriangle,
-  ArrowLeft,
-  Award,
-  BedDouble,
+  ArrowRight,
   Building2,
-  CalendarDays,
   CheckCircle,
+  ClipboardCheck,
   MapPin,
-  Minus,
+  Shield,
+  ShieldCheck,
+  SortAsc,
+  Star,
   TrendingDown,
   TrendingUp,
+  Users,
+  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Tooltip as RechartsTooltip,
-  ReferenceLine,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  type DomainScores,
-  calcWeightedProviderRating,
-} from "../../utils/ratingEngine";
+import { useMemo, useState } from "react";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function calcOverallFromIndicators(ind: CityProvider["indicators"]): number {
-  // Map CityProvider indicator keys to domain scores using the weighted engine
-  const domains: DomainScores = {
-    safety: ind.safetyClinical,
-    preventive: ind.preventiveCare,
-    quality: ind.qualityMeasures,
-    staffing: ind.staffing,
-    compliance: ind.compliance,
-    experience: (ind.residents + ind.experience) / 2,
+function getDomains(p: CityProvider) {
+  const i = p.indicators;
+  return {
+    safety: starsToPercentScore(i.safetyClinical),
+    preventive: starsToPercentScore(i.preventiveCare),
+    quality: starsToPercentScore(i.qualityMeasures),
+    staffing: starsToPercentScore(i.staffing),
+    compliance: starsToPercentScore(i.compliance),
+    experience: starsToPercentScore(i.experience),
   };
-  return calcWeightedProviderRating(domains).score;
 }
 
-function ratingColor(score: number): string {
-  if (score >= 4.0) return "oklch(0.38 0.14 145)";
-  if (score >= 3.0) return "oklch(0.50 0.16 72)";
-  return "oklch(0.48 0.20 25)";
+function getStars(p: CityProvider): number {
+  const domains = getDomains(p);
+  const result = calcWeightedProviderRating(domains);
+  return result.stars;
 }
 
-function ratingBandLabel(score: number): string {
-  if (score >= 4.5) return "Excellent";
-  if (score >= 4.0) return "Good";
-  if (score >= 3.0) return "Moderate";
-  return "Poor";
-}
-
-function ratingBadgeClass(score: number): string {
-  if (score >= 4.0) return "badge-green";
-  if (score >= 3.0) return "badge-amber";
-  return "badge-red";
-}
-
-function typeBadge(type: string) {
-  if (type === "Residential") return <span className="badge-navy">{type}</span>;
-  if (type === "Home Care") return <span className="badge-blue">{type}</span>;
-  return <span className="badge-gray">{type}</span>;
-}
-
-function TrendArrow({
-  trend,
-}: { trend: "improving" | "declining" | "stable" }) {
-  if (trend === "improving")
-    return (
-      <TrendingUp
-        className="w-3.5 h-3.5"
-        style={{ color: "oklch(0.45 0.15 145)" }}
-      />
-    );
-  if (trend === "declining")
-    return (
-      <TrendingDown
-        className="w-3.5 h-3.5"
-        style={{ color: "oklch(0.48 0.20 25)" }}
-      />
-    );
-  return (
-    <Minus className="w-3.5 h-3.5" style={{ color: "oklch(0.55 0.02 240)" }} />
-  );
-}
-
-// ── Build alert indicators from CityProvider ──────────────────────────────────
-
-const PUBLIC_INDICATOR_KEYS: {
-  key: keyof CityProvider["indicators"];
+/** Unified indicator status — uses 1–5 star scale thresholds */
+function getIndicatorStatus(score: number): {
   label: string;
-}[] = [
-  { key: "residents", label: "Residents Experience" },
-  { key: "staffing", label: "Staffing" },
-  { key: "qualityMeasures", label: "Quality Measures" },
-  { key: "compliance", label: "Compliance" },
-  { key: "safetyClinical", label: "Safety & Clinical" },
-  { key: "preventiveCare", label: "Preventive Care" },
-  { key: "experience", label: "Experience" },
-  { key: "equity", label: "Equity" },
-];
-
-function buildPublicAlertIndicators(
-  provider: CityProvider,
-): IndicatorForAlert[] {
-  return PUBLIC_INDICATOR_KEYS.map((ind) => ({
-    label: ind.label,
-    score: provider.indicators[ind.key],
-    providerValue: provider.indicators[ind.key],
-    benchmark: 3.5,
-    isLowerBetter: false,
-  }));
+  chipClass: string;
+} {
+  if (score >= 3.5)
+    return {
+      label: "Good",
+      chipClass: "bg-green-100 text-green-700 border border-green-200",
+    };
+  if (score >= 2.5)
+    return {
+      label: "Moderate",
+      chipClass: "bg-amber-100 text-amber-700 border border-amber-200",
+    };
+  return {
+    label: "Needs Attention",
+    chipClass: "bg-red-100 text-red-700 border border-red-200",
+  };
 }
 
-// ── Indicator config for public display ───────────────────────────────────────
+/** Risk level derived from indicator performance, not just stars */
+function getRiskLevelFromIndicators(
+  indicators: CityProvider["indicators"],
+): "Low" | "Medium" | "High" {
+  const scores = [
+    indicators.safetyClinical,
+    indicators.preventiveCare,
+    indicators.qualityMeasures,
+    indicators.staffing,
+    indicators.compliance,
+    indicators.experience,
+  ];
+  const poorCount = scores.filter((s) => s < 2.5).length;
+  const moderateCount = scores.filter((s) => s >= 2.5 && s < 3.5).length;
+  if (poorCount >= 2) return "High";
+  if (poorCount === 1 || moderateCount >= 3) return "Medium";
+  return "Low";
+}
 
-const PUBLIC_INDICATORS: {
-  key: keyof CityProvider["indicators"];
-  label: string;
-}[] = [
-  { key: "residents", label: "Residents Experience" },
-  { key: "staffing", label: "Staffing" },
-  { key: "qualityMeasures", label: "Quality Measures" },
-  { key: "compliance", label: "Compliance" },
-  { key: "safetyClinical", label: "Safety & Clinical" },
-  { key: "preventiveCare", label: "Preventive Care" },
-  { key: "experience", label: "Experience" },
-  { key: "equity", label: "Equity" },
-];
+/** Data-driven explanation — no hardcoded "Excellent performance" strings */
+function generateDynamicExplanation(
+  stars: number,
+  indicators: CityProvider["indicators"],
+): string {
+  const domainNames: Record<string, string> = {
+    safetyClinical: "falls safety",
+    preventiveCare: "preventive screening",
+    qualityMeasures: "care quality",
+    staffing: "staffing",
+    compliance: "standards compliance",
+    experience: "resident satisfaction",
+  };
 
-// ── Regional Comparison Bar Chart ─────────────────────────────────────────────
+  const entries = {
+    safetyClinical: indicators.safetyClinical,
+    preventiveCare: indicators.preventiveCare,
+    qualityMeasures: indicators.qualityMeasures,
+    staffing: indicators.staffing,
+    compliance: indicators.compliance,
+    experience: indicators.experience,
+  };
 
-function RegionComparisonChart({
-  providers,
-  selectedId,
-}: {
-  providers: CityProvider[];
-  selectedId?: string;
-}) {
-  const data = providers.map((p) => ({
-    name: p.name.length > 18 ? `${p.name.slice(0, 16)}…` : p.name,
-    fullName: p.name,
-    rating: Number.parseFloat(
-      calcOverallFromIndicators(p.indicators).toFixed(2),
-    ),
-    id: p.id,
-  }));
+  const weak = Object.entries(entries)
+    .filter(([, v]) => v < 2.5)
+    .map(([k]) => domainNames[k]);
 
+  const moderate = Object.entries(entries)
+    .filter(([, v]) => v >= 2.5 && v < 3.5)
+    .map(([k]) => domainNames[k]);
+
+  const strong = Object.entries(entries)
+    .filter(([, v]) => v >= 4.0)
+    .map(([k]) => domainNames[k]);
+
+  if (weak.length >= 3) {
+    return `Low performance in ${weak.slice(0, 2).join(" and ")} is significantly affecting the overall rating. Active improvement plans are underway.`;
+  }
+  if (weak.length === 2) {
+    return `Performance issues in ${weak.join(" and ")} are reducing the overall rating. These areas require focused attention.`;
+  }
+  if (weak.length === 1 && moderate.length >= 2) {
+    return `Provider shows concern in ${weak[0]} and needs improvement in ${moderate.slice(0, 2).join(" and ")}. Overall care quality is below average.`;
+  }
+  if (weak.length === 1) {
+    const strengthText =
+      strong.length > 0 ? ` Strong performance in ${strong[0]}.` : "";
+    return `Provider performs adequately in most areas but needs improvement in ${weak[0]}.${strengthText}`;
+  }
+  if (moderate.length >= 3) {
+    return `Provider performs well overall but needs improvement in ${moderate
+      .slice(0, 2)
+      .join(" and ")} to reach higher standards.`;
+  }
+  if (moderate.length >= 1) {
+    const strengthText =
+      strong.length > 0
+        ? `Strong performance in ${strong.slice(0, 2).join(" and ")}.`
+        : "Most indicators are good.";
+    return `${strengthText} Some improvement needed in ${moderate[0]}.`;
+  }
+  if (stars >= 4.5) {
+    return "This provider consistently delivers high-quality care across all measured areas, with strong safety outcomes and resident satisfaction.";
+  }
+  return "This provider delivers good quality care with solid performance across most measured areas.";
+}
+
+function getScorePct(p: CityProvider): number {
+  return Math.round(p.indicators.preventiveCare * 20); // 1–5 → 0–100
+}
+
+function getSatisfactionPct(p: CityProvider): number {
+  return Math.round(p.indicators.experience * 20); // 1–5 → 0–100
+}
+
+function getPctColor(pct: number): string {
+  if (pct >= 70) return "bg-green-500";
+  if (pct >= 50) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function RiskBadge({ level }: { level: "Low" | "Medium" | "High" }) {
+  const styles = {
+    Low: "bg-green-100 text-green-700 border-green-200",
+    Medium: "bg-amber-100 text-amber-700 border-amber-200",
+    High: "bg-red-100 text-red-700 border-red-200",
+  };
   return (
-    <Card
-      className="rounded-none border"
-      data-ocid="public.comparison.chart_point"
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${styles[level]}`}
     >
-      <CardHeader className="pb-2 pt-4 px-4 border-b">
-        <CardTitle className="text-sm font-semibold text-gov-navy">
-          Regional Provider Rating Comparison
-        </CardTitle>
-        <p
-          className="text-xs mt-0.5"
-          style={{ color: "oklch(0.50 0.025 250)" }}
-        >
-          Weighted overall rating by provider — Benchmark at 3.5 stars
-        </p>
-      </CardHeader>
-      <CardContent className="p-4">
-        <div
-          className="flex items-center gap-4 mb-3 text-xs"
-          style={{ color: "oklch(0.50 0.025 250)" }}
-        >
-          <span className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-3 h-3 rounded-sm"
-              style={{ background: "oklch(0.52 0.15 145)" }}
-            />
-            Good (4.0+)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-3 h-3 rounded-sm"
-              style={{ background: "oklch(0.70 0.14 72)" }}
-            />
-            Moderate (3.0–3.9)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-3 h-3 rounded-sm"
-              style={{ background: "oklch(0.52 0.22 25)" }}
-            />
-            Poor (&lt;3.0)
-          </span>
-        </div>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart
-            data={data}
-            margin={{ top: 8, right: 16, left: 0, bottom: 40 }}
-            barCategoryGap="30%"
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="oklch(0.87 0.012 240)"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="name"
-              tick={{
-                fontSize: 10,
-                fill: "oklch(0.38 0.06 254)",
-                fontWeight: 600,
-              }}
-              axisLine={{ stroke: "oklch(0.82 0.04 254)" }}
-              tickLine={false}
-              angle={-30}
-              textAnchor="end"
-              interval={0}
-            />
-            <YAxis
-              domain={[0, 5]}
-              ticks={[0, 1, 2, 3, 4, 5]}
-              tick={{ fontSize: 10, fill: "oklch(0.50 0.025 250)" }}
-              axisLine={false}
-              tickLine={false}
-              width={28}
-            />
-            <RechartsTooltip
-              contentStyle={{
-                fontSize: 12,
-                fontWeight: 600,
-                border: "1px solid oklch(0.82 0.04 254)",
-                borderRadius: 0,
-                background: "#fff",
-              }}
-              formatter={(
-                value: number,
-                _: string,
-                entry: { payload?: { fullName?: string } },
-              ) => [
-                `${(value as number).toFixed(2)} / 5.0`,
-                entry?.payload?.fullName ?? "Rating",
-              ]}
-            />
-            <ReferenceLine
-              y={3.5}
-              stroke="oklch(0.28 0.09 254)"
-              strokeDasharray="5 3"
-              strokeWidth={1.5}
-              label={{
-                value: "Benchmark 3.5",
-                position: "insideTopRight",
-                fontSize: 9,
-                fontWeight: 700,
-                fill: "oklch(0.28 0.09 254)",
-              }}
-            />
-            <Bar dataKey="rating" radius={0} maxBarSize={48}>
-              {data.map((entry) => (
-                <Cell
-                  key={entry.id}
-                  fill={
-                    entry.id === selectedId
-                      ? "oklch(0.28 0.09 254)"
-                      : entry.rating >= 4.0
-                        ? "oklch(0.52 0.15 145)"
-                        : entry.rating >= 3.0
-                          ? "oklch(0.70 0.14 72)"
-                          : "oklch(0.52 0.22 25)"
-                  }
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+      {level === "Low" ? (
+        <CheckCircle className="h-3 w-3" />
+      ) : (
+        <AlertTriangle className="h-3 w-3" />
+      )}
+      {level} Risk
+    </span>
   );
 }
 
-// ── KPI Summary Cards ─────────────────────────────────────────────────────────
-
-function CityKPICards({ providers }: { providers: CityProvider[] }) {
-  const ratings = providers.map((p) => calcOverallFromIndicators(p.indicators));
-  const avgRating = ratings.reduce((s, r) => s + r, 0) / ratings.length;
-  const highest = providers.reduce((prev, curr) =>
-    calcOverallFromIndicators(curr.indicators) >
-    calcOverallFromIndicators(prev.indicators)
-      ? curr
-      : prev,
-  );
-  const highestRating = calcOverallFromIndicators(highest.indicators);
-
-  const kpiStyle = {
-    background: "#fff",
-    borderLeft: "4px solid oklch(var(--gov-navy))",
-    borderTop: "1px solid oklch(var(--border))",
-    borderRight: "1px solid oklch(var(--border))",
-    borderBottom: "1px solid oklch(var(--border))",
-  };
-
+function IndicatorBar({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div className="p-4" style={kpiStyle} data-ocid="public.kpi.highest.card">
-        <div
-          className="text-xs uppercase font-bold tracking-widest mb-2"
-          style={{ color: "oklch(0.46 0.025 250)" }}
-        >
-          Highest Rated Provider
-        </div>
-        <div className="flex items-center gap-1.5 mb-1">
-          <Award
-            className="w-4 h-4 flex-shrink-0"
-            style={{ color: "oklch(0.52 0.15 145)" }}
-          />
-          <span
-            className="text-xl font-black tabular-nums"
-            style={{ color: ratingColor(highestRating) }}
-          >
-            {highestRating.toFixed(2)}
-          </span>
-        </div>
-        <div
-          className="text-xs font-semibold truncate"
-          style={{ color: "oklch(0.35 0.06 254)" }}
-        >
-          {highest.name}
-        </div>
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-500">{label}</span>
+        <span className="font-medium text-gray-700">{value}%</span>
       </div>
-
-      <div
-        className="p-4"
-        style={{ ...kpiStyle, borderLeftColor: "oklch(0.50 0.16 72)" }}
-        data-ocid="public.kpi.average.card"
-      >
-        <div
-          className="text-xs uppercase font-bold tracking-widest mb-2"
-          style={{ color: "oklch(0.46 0.025 250)" }}
-        >
-          Average Rating
-        </div>
-        <div
-          className="text-3xl font-black tabular-nums leading-none"
-          style={{ color: ratingColor(avgRating) }}
-        >
-          {avgRating.toFixed(2)}
-        </div>
-        <div className="mt-1.5">
-          <StarRating value={avgRating} size="sm" showLabel={false} />
-        </div>
-      </div>
-
-      <div
-        className="p-4"
-        style={{ ...kpiStyle, borderLeftColor: "oklch(0.28 0.09 254)" }}
-        data-ocid="public.kpi.count.card"
-      >
-        <div
-          className="text-xs uppercase font-bold tracking-widest mb-2"
-          style={{ color: "oklch(0.46 0.025 250)" }}
-        >
-          Providers Monitored
-        </div>
-        <div className="text-3xl font-black tabular-nums leading-none text-gov-navy">
-          {providers.length}
-        </div>
-        <div className="text-xs mt-2" style={{ color: "oklch(0.55 0.02 240)" }}>
-          Registered in this region
-        </div>
-      </div>
+      <Progress value={value} className={`h-1.5 [&>div]:${color}`} />
     </div>
   );
 }
 
-// ── Provider Detail Panel ─────────────────────────────────────────────────────
+function StarRating({
+  stars,
+  size = "sm",
+}: { stars: number; size?: "sm" | "lg" }) {
+  const iconClass = size === "lg" ? "h-6 w-6" : "h-4 w-4";
+  const textClass =
+    size === "lg"
+      ? "text-lg font-bold text-gray-800"
+      : "text-sm font-semibold text-gray-700";
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          className={`${iconClass} ${
+            i <= Math.floor(stars)
+              ? "fill-amber-400 text-amber-400"
+              : i - 0.5 <= stars
+                ? "fill-amber-200 text-amber-400"
+                : "fill-gray-100 text-gray-300"
+          }`}
+        />
+      ))}
+      <span className={`ml-1 ${textClass}`}>{stars.toFixed(1)}</span>
+    </div>
+  );
+}
 
-function ProviderDetailPanel({
+function getPerformanceLabel(stars: number): { label: string; color: string } {
+  if (stars >= 4.5)
+    return { label: "Excellent Performance", color: "text-green-700" };
+  if (stars >= 4) return { label: "Good Performance", color: "text-green-600" };
+  if (stars >= 3)
+    return { label: "Satisfactory Performance", color: "text-amber-600" };
+  return { label: "Needs Improvement", color: "text-red-600" };
+}
+
+// ── Domain score helpers ──────────────────────────────────────────────────────
+
+const DOMAIN_FRIENDLY_NAMES: Record<string, string> = {
+  safetyClinical: "Falls & Safety",
+  preventiveCare: "Preventive Screening",
+  qualityMeasures: "Care Quality",
+  staffing: "Staffing & Support",
+  compliance: "Standards Compliance",
+  experience: "Resident Satisfaction",
+};
+
+function getDomainRawScores(p: CityProvider): Record<string, number> {
+  return {
+    safetyClinical: p.indicators.safetyClinical,
+    preventiveCare: p.indicators.preventiveCare,
+    qualityMeasures: p.indicators.qualityMeasures,
+    staffing: p.indicators.staffing,
+    compliance: p.indicators.compliance,
+    experience: p.indicators.experience,
+  };
+}
+
+// Per-indicator one-line descriptions (using 1–5 scale thresholds)
+function getIndicatorDescription(domain: string, score: number): string {
+  if (domain === "safetyClinical") {
+    if (score >= 3.5) return "Falls rate is better than the national average";
+    if (score >= 2.5) return "Falls rate is near the national average";
+    return "Falls rate is worse than the national average";
+  }
+  if (domain === "preventiveCare") {
+    if (score >= 3.5) return "Screening completion is above target";
+    if (score >= 2.5) return "Screening completion is near target";
+    return "Screening completion is below target";
+  }
+  if (domain === "qualityMeasures") {
+    if (score >= 3.5) return "Care quality measures meet or exceed standards";
+    if (score >= 2.5) return "Care quality is at an acceptable level";
+    return "Care quality measures need improvement";
+  }
+  if (domain === "staffing") {
+    if (score >= 3.5)
+      return "Staffing levels and nurse hours exceed requirements";
+    if (score >= 2.5) return "Staffing meets minimum requirements";
+    return "Staffing levels are below recommended standards";
+  }
+  if (domain === "compliance") {
+    if (score >= 3.5) return "Fully compliant with aged care quality standards";
+    if (score >= 2.5) return "Meets most regulatory compliance standards";
+    return "Has outstanding compliance issues";
+  }
+  if (domain === "experience") {
+    if (score >= 3.5) return "Residents report high satisfaction with care";
+    if (score >= 2.5) return "Resident satisfaction is mixed";
+    return "Resident satisfaction scores are below average";
+  }
+  return "";
+}
+
+const DOMAIN_ICONS: Record<string, React.ReactNode> = {
+  safetyClinical: <ShieldCheck className="h-4 w-4 text-[#1E3A8A]" />,
+  preventiveCare: <CheckCircle className="h-4 w-4 text-[#1E3A8A]" />,
+  qualityMeasures: <Activity className="h-4 w-4 text-[#1E3A8A]" />,
+  staffing: <Users className="h-4 w-4 text-[#1E3A8A]" />,
+  compliance: <ClipboardCheck className="h-4 w-4 text-[#1E3A8A]" />,
+  experience: <Star className="h-4 w-4 text-[#1E3A8A]" />,
+};
+
+const DOMAIN_ORDER = [
+  "safetyClinical",
+  "preventiveCare",
+  "qualityMeasures",
+  "staffing",
+  "compliance",
+  "experience",
+];
+
+// ── Public Provider Modal ─────────────────────────────────────────────────────
+
+function PublicProviderModal({
   provider,
-  allProviders,
-  onBack,
+  onClose,
 }: {
-  provider: CityProvider;
-  allProviders: CityProvider[];
-  onBack: () => void;
+  provider: CityProvider | null;
+  onClose: () => void;
 }) {
-  const overall = calcOverallFromIndicators(provider.indicators);
-  const belowThree = PUBLIC_INDICATORS.filter(
-    (ind) => provider.indicators[ind.key] < 3.0,
-  ).length;
-  const hasBelowBenchmark = PUBLIC_INDICATORS.some(
-    (ind) => provider.indicators[ind.key] < 3.5,
-  );
-  const incentiveEligible = isEligibleForIncentive(overall, hasBelowBenchmark);
+  if (!provider) return null;
 
-  const [alertOpen, setAlertOpen] = useState(false);
-  const [currentAlert, setCurrentAlert] = useState<PerformanceAlert | null>(
-    null,
-  );
+  const stars = getStars(provider);
+  const risk = getRiskLevelFromIndicators(provider.indicators);
+  const perf = getPerformanceLabel(stars);
+  const explanation = generateDynamicExplanation(stars, provider.indicators);
+  const rawScores = getDomainRawScores(provider);
 
-  useEffect(() => {
-    const indicators = buildPublicAlertIndicators(provider);
-    const alertResult = resolveAlertToShow(provider.name, overall, indicators);
-    if (alertResult) {
-      setCurrentAlert(alertResult);
-      setAlertOpen(true);
-    } else {
-      setCurrentAlert(null);
-      setAlertOpen(false);
-    }
-  }, [provider, overall]);
+  // Strengths: score >= 4.0
+  const strengths = Object.entries(rawScores).filter(([, v]) => v >= 4.0);
+  // Areas for improvement: score < 3.0
+  const improvements = Object.entries(rawScores).filter(([, v]) => v < 3.0);
 
   return (
-    <div className="space-y-6" data-ocid="public.provider.detail.panel">
-      {/* Back button and header */}
-      <div className="flex items-start gap-4 border-b pb-4">
-        <button
-          type="button"
-          data-ocid="public.provider.detail.back_button"
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 border rounded-none transition-colors hover:bg-gov-navy hover:text-white mt-0.5 flex-shrink-0"
-          style={{
-            borderColor: "oklch(var(--gov-navy))",
-            color: "oklch(var(--gov-navy))",
-          }}
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Providers
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2
-            className="text-lg font-bold"
-            style={{ color: "oklch(var(--gov-navy))" }}
-          >
-            {provider.name}
-          </h2>
-          <div
-            className="flex flex-wrap gap-3 mt-1 text-xs"
-            style={{ color: "oklch(0.48 0.025 250)" }}
-          >
-            <span className="flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" />
-              {provider.city}
-            </span>
-            <span>{typeBadge(provider.type)}</span>
-            {provider.beds && (
-              <span className="flex items-center gap-1">
-                <BedDouble className="w-3.5 h-3.5" />
-                {provider.beds} beds
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <CalendarDays className="w-3.5 h-3.5" />
-              Established {provider.established}
-            </span>
-            <IncentiveEligibilityBadge eligible={incentiveEligible} size="sm" />
+    <Dialog open={!!provider} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-w-lg p-0 overflow-hidden"
+        data-ocid="public.dialog"
+      >
+        {/* Navy header strip */}
+        <div className="bg-[#1E3A8A] px-6 py-5 text-white">
+          <div className="flex items-start justify-between gap-3">
+            <DialogHeader className="flex-1 min-w-0">
+              <DialogTitle className="text-xl font-bold text-white leading-tight">
+                {provider.name}
+              </DialogTitle>
+              <p className="flex items-center gap-1.5 text-blue-200 text-sm mt-1">
+                <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                {provider.city}, Australia
+              </p>
+            </DialogHeader>
+            <button
+              type="button"
+              onClick={onClose}
+              data-ocid="public.close_button"
+              className="rounded-full p-1.5 text-blue-200 hover:bg-white/10 hover:text-white transition-colors flex-shrink-0 mt-0.5"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Rating row */}
+          <div className="mt-4 flex items-center gap-4 flex-wrap">
+            <div>
+              <StarRating stars={stars} size="lg" />
+              <p className="text-sm font-semibold mt-0.5 text-blue-100">
+                {stars.toFixed(1)} / 5 &mdash; {perf.label}
+              </p>
+            </div>
+            <div className="ml-auto">
+              <RiskBadge level={risk} />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Indicator Scorecard Table */}
-      <Card className="rounded-none border">
-        <CardHeader className="pb-2 pt-4 px-4 border-b">
-          <CardTitle className="text-sm font-semibold text-gov-navy">
-            Quality Indicator Ratings
-          </CardTitle>
-          <p
-            className="text-xs mt-0.5"
-            style={{ color: "oklch(0.50 0.025 250)" }}
-          >
-            Star ratings across 8 care quality domains
-          </p>
-        </CardHeader>
-        <CardContent className="p-0">
-          <table className="w-full gov-table">
-            <thead>
-              <tr>
-                <th className="text-left" style={{ width: "30%" }}>
-                  Indicator
-                </th>
-                <th className="text-left" style={{ width: "28%" }}>
-                  Star Rating
-                </th>
-                <th className="text-center" style={{ width: "10%" }}>
-                  Score
-                </th>
-                <th className="text-left" style={{ width: "18%" }}>
-                  vs Benchmark
-                </th>
-                <th className="text-center" style={{ width: "14%" }}>
-                  Band
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {PUBLIC_INDICATORS.map((ind, idx) => {
-                const score = provider.indicators[ind.key];
-                const meta = provider.indicatorMeta?.[ind.key];
-                const trend = meta?.trend ?? "stable";
-                const isLow = score < 3.0;
-                const isHigh = score >= 4.5;
+        {/* Scrollable body */}
+        <div className="overflow-y-auto max-h-[65vh] px-6 py-5 space-y-5">
+          {/* Plain-language explanation */}
+          <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
+            <p className="text-sm font-semibold text-[#1E3A8A] mb-1">
+              What this means for you
+            </p>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {explanation}
+            </p>
+          </div>
 
+          {/* All 6 Performance Areas */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+              Key Performance Areas
+            </p>
+            <div className="space-y-3">
+              {DOMAIN_ORDER.map((domain) => {
+                const score = rawScores[domain];
+                const status = getIndicatorStatus(score);
+                const description = getIndicatorDescription(domain, score);
                 return (
-                  <tr
-                    key={ind.key}
-                    data-ocid={`public.indicator.row.${idx + 1}`}
+                  <div
+                    key={domain}
+                    className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
                   >
-                    <td
-                      className="font-semibold text-xs uppercase tracking-wide"
-                      style={{ color: "oklch(0.30 0.06 254)" }}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {isLow && (
-                          <AlertTriangle
-                            className="w-3.5 h-3.5 flex-shrink-0"
-                            style={{ color: "oklch(0.48 0.20 25)" }}
-                          />
-                        )}
-                        {isHigh && (
-                          <CheckCircle
-                            className="w-3.5 h-3.5 flex-shrink-0"
-                            style={{ color: "oklch(0.45 0.15 145)" }}
-                          />
-                        )}
-                        {ind.label}
+                    <div className="rounded-full bg-blue-100 p-1.5 flex-shrink-0">
+                      {DOMAIN_ICONS[domain]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-800">
+                          {DOMAIN_FRIENDLY_NAMES[domain]}
+                        </span>
+                        <span
+                          className={`text-xs font-medium rounded-full px-2 py-0.5 ${status.chipClass}`}
+                        >
+                          {status.label}
+                        </span>
                       </div>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <StarRating value={score} size="md" showLabel={false} />
-                        <TrendArrow trend={trend} />
-                      </div>
-                    </td>
-                    <td className="text-center">
-                      <span
-                        className="font-bold tabular-nums text-sm"
-                        style={{ color: ratingColor(score) }}
-                      >
-                        {score.toFixed(1)}
-                      </span>
-                    </td>
-                    <td>
-                      <BenchmarkStatusChip
-                        rate={score}
-                        benchmark={3.5}
-                        isLowerBetter={false}
-                        size="xs"
-                      />
-                    </td>
-                    <td className="text-center">
-                      <span className={ratingBadgeClass(score)}>
-                        {score >= 4.5
-                          ? "Excellent"
-                          : score >= 3.5
-                            ? "Good"
-                            : score >= 3.0
-                              ? "Moderate"
-                              : "Poor"}
-                      </span>
-                    </td>
-                  </tr>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {description}
+                      </p>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      {/* Overall Rating card */}
-      <Card
-        className="rounded-none border"
-        style={{
-          background:
-            overall >= 4.0
-              ? "oklch(0.96 0.025 145)"
-              : overall >= 3.0
-                ? "oklch(0.97 0.03 80)"
-                : "oklch(0.97 0.025 25)",
-          borderColor:
-            overall >= 4.0
-              ? "oklch(0.72 0.12 145)"
-              : overall >= 3.0
-                ? "oklch(0.75 0.12 75)"
-                : "oklch(0.68 0.18 25)",
-        }}
-        data-ocid="public.provider.overall_rating.card"
-      >
-        <CardContent className="p-5">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-            <div className="flex-1">
-              <div
-                className="text-xs uppercase font-bold tracking-widest mb-1"
-                style={{ color: "oklch(0.46 0.025 250)" }}
-              >
-                Overall Provider Rating
-              </div>
-              <div
-                className="text-xs mb-3"
-                style={{ color: "oklch(0.40 0.03 250)" }}
-              >
-                Overall rating calculated using weighted composite score of key
-                indicators.
-              </div>
-              <StarRating value={overall} size="lg" />
-              <div
-                className="mt-3 text-xs pt-3 border-t"
-                style={{
-                  color: "oklch(0.50 0.025 250)",
-                  borderColor: "oklch(0.82 0.06 145)",
-                }}
-              >
-                <span className="font-semibold">Safety 30%</span>
-                {" · "}
-                <span className="font-semibold">Preventive Care 20%</span>
-                {" · "}
-                <span className="font-semibold">Quality Measures 20%</span>
-                {" · "}
-                <span className="font-semibold">Staffing 15%</span>
-                {" · "}
-                <span className="font-semibold">Compliance 10%</span>
-                {" · "}
-                <span className="font-semibold">Experience 5%</span>
-              </div>
-            </div>
-            <div className="flex-shrink-0 text-right">
-              <div
-                className="text-5xl font-black tabular-nums leading-none"
-                style={{ color: ratingColor(overall) }}
-              >
-                {overall.toFixed(1)}
-              </div>
-              <div
-                className="text-xs font-semibold mt-1"
-                style={{ color: "oklch(0.55 0.02 240)" }}
-              >
-                out of 5.0
-              </div>
-              <div className="mt-2">
-                <span
-                  className="px-3 py-1 text-xs font-bold uppercase tracking-wide rounded-sm"
-                  style={{ background: ratingColor(overall), color: "#fff" }}
-                >
-                  {ratingBandLabel(overall)}
-                </span>
-              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Warning for low indicators */}
-      {belowThree > 0 && (
-        <div
-          className="flex items-center gap-2 px-4 py-3 text-xs font-semibold border"
-          style={{
-            background: "oklch(0.97 0.025 25)",
-            border: "1px solid oklch(0.72 0.14 25)",
-            color: "oklch(0.42 0.20 25)",
-          }}
-          data-ocid="public.provider.warning.panel"
-        >
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {belowThree} indicator{belowThree !== 1 ? "s" : ""} below acceptable
-          threshold — this provider may require improvement action.
+          {/* Strengths */}
+          <div className="rounded-lg bg-green-50 border border-green-100 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="h-4 w-4 text-green-600" />
+              <p className="text-sm font-semibold text-green-800">Strengths</p>
+            </div>
+            {strengths.length > 0 ? (
+              <ul className="space-y-1">
+                {strengths.map(([key]) => (
+                  <li
+                    key={key}
+                    className="flex items-center gap-2 text-sm text-green-700"
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                    {DOMAIN_FRIENDLY_NAMES[key] ?? key}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-green-700">
+                Performing at benchmark levels across all areas.
+              </p>
+            )}
+          </div>
+
+          {/* Areas for Improvement */}
+          <div className="rounded-lg bg-amber-50 border border-amber-100 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingDown className="h-4 w-4 text-amber-600" />
+              <p className="text-sm font-semibold text-amber-800">
+                Areas Being Improved
+              </p>
+            </div>
+            {improvements.length > 0 ? (
+              <ul className="space-y-1">
+                {improvements.map(([key]) => (
+                  <li
+                    key={key}
+                    className="flex items-center gap-2 text-sm text-amber-700"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                    Working to improve {DOMAIN_FRIENDLY_NAMES[key] ?? key}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-amber-700">
+                No major concerns identified.
+              </p>
+            )}
+          </div>
+
+          {/* Disclaimer */}
+          <p className="text-xs text-gray-400 text-center pb-1">
+            Ratings are based on national quality standards and updated
+            quarterly.
+          </p>
         </div>
-      )}
 
-      {/* Comparison chart */}
-      <RegionComparisonChart
-        providers={allProviders}
-        selectedId={provider.id}
-      />
-
-      {/* Performance Alert Modal */}
-      <PerformanceAlertModal
-        open={alertOpen}
-        onClose={() => setAlertOpen(false)}
-        alert={currentAlert}
-      />
-    </div>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
+          <Button
+            onClick={onClose}
+            data-ocid="public.cancel_button"
+            className="w-full bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
+          >
+            Close
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -706,305 +527,346 @@ function ProviderDetailPanel({
 
 function ProviderCard({
   provider,
-  index,
   onSelect,
 }: {
   provider: CityProvider;
-  index: number;
   onSelect: (p: CityProvider) => void;
 }) {
-  const overall = calcOverallFromIndicators(provider.indicators);
-  const belowThree = PUBLIC_INDICATORS.filter(
-    (ind) => provider.indicators[ind.key] < 3.0,
-  ).length;
+  const stars = getStars(provider);
+  const risk = getRiskLevelFromIndicators(provider.indicators);
+  const fallsStatus = getIndicatorStatus(provider.indicators.safetyClinical);
+  const screeningPct = getScorePct(provider);
+  const satisfactionPct = getSatisfactionPct(provider);
+
+  const accentColor =
+    stars >= 4 ? "bg-green-500" : stars >= 3 ? "bg-amber-500" : "bg-red-500";
 
   return (
-    <button
-      type="button"
-      data-ocid={`public.provider.card.${index}`}
-      className="border rounded-none bg-white hover:shadow-md transition-shadow cursor-pointer group w-full text-left"
-      style={{ borderColor: "oklch(var(--border))" }}
+    <Card
+      className="overflow-hidden border border-gray-200 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer group"
       onClick={() => onSelect(provider)}
-      aria-label={`View details for ${provider.name}`}
+      data-ocid="public.card"
     >
-      <div
-        className="px-4 py-2.5 border-b flex items-center gap-2"
-        style={{
-          background: "oklch(0.95 0.012 254)",
-          borderColor: "oklch(var(--border))",
-        }}
-      >
-        <Building2
-          className="w-4 h-4 flex-shrink-0"
-          style={{ color: "oklch(var(--gov-navy))" }}
-        />
-        <span
-          className="font-bold text-sm leading-snug flex-1"
-          style={{ color: "oklch(var(--gov-navy))" }}
-        >
-          {provider.name}
-        </span>
-        {typeBadge(provider.type)}
-      </div>
-
-      <div className="p-4 space-y-3">
-        <div
-          className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
-          style={{ color: "oklch(0.48 0.025 250)" }}
-        >
-          <span className="flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            {provider.city}
-          </span>
-          {provider.beds && (
-            <span className="flex items-center gap-1">
-              <BedDouble className="w-3 h-3" />
-              {provider.beds} beds
+      <div className={`h-1 w-full ${accentColor}`} />
+      <CardContent className="p-4 space-y-3">
+        {/* Header */}
+        <div className="space-y-1">
+          <h3 className="font-semibold text-gray-900 leading-tight group-hover:text-[#1E3A8A] transition-colors">
+            {provider.name}
+          </h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <MapPin className="h-3 w-3" />
+              {provider.city}
             </span>
-          )}
-          <span className="flex items-center gap-1">
-            <CalendarDays className="w-3 h-3" />
-            Est. {provider.established}
-          </span>
+            <Badge variant="outline" className="text-xs px-1.5 py-0">
+              {provider.type}
+            </Badge>
+          </div>
         </div>
 
-        {belowThree > 0 && (
-          <div
-            className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold"
-            style={{
-              background: "oklch(0.97 0.025 25)",
-              border: "1px solid oklch(0.72 0.14 25)",
-              color: "oklch(0.42 0.20 25)",
+        {/* Rating & Risk */}
+        <div className="flex items-center justify-between">
+          <StarRating stars={stars} />
+          <RiskBadge level={risk} />
+        </div>
+
+        {/* Indicators */}
+        <div className="space-y-2 pt-1 border-t border-gray-100">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500">Falls Safety</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${fallsStatus.chipClass}`}
+            >
+              {fallsStatus.label}
+            </span>
+          </div>
+          <IndicatorBar
+            label="Screening Completion"
+            value={screeningPct}
+            color={getPctColor(screeningPct)}
+          />
+          <IndicatorBar
+            label="Satisfaction Score"
+            value={satisfactionPct}
+            color={getPctColor(satisfactionPct)}
+          />
+        </div>
+
+        {/* View Details link */}
+        <div className="pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(provider);
             }}
+            data-ocid="public.primary_button"
+            className="flex items-center gap-1.5 text-sm font-medium text-[#1E3A8A] hover:text-blue-700 transition-colors w-full justify-center py-1 rounded-md hover:bg-blue-50"
           >
-            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-            {belowThree} indicator{belowThree !== 1 ? "s" : ""} below threshold
-          </div>
-        )}
-
-        <div>
-          <div
-            className="text-xs uppercase tracking-wide font-semibold mb-1"
-            style={{ color: "oklch(0.46 0.025 250)" }}
-          >
-            Overall Rating
-          </div>
-          <StarRating value={overall} size="md" />
+            View Details
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
-
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full rounded-none border text-xs font-semibold mt-1 group-hover:bg-gov-navy group-hover:text-white transition-colors"
-          style={{
-            borderColor: "oklch(var(--gov-navy))",
-            color: "oklch(var(--gov-navy))",
-          }}
-          data-ocid={`public.provider.view_details.button.${index}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(provider);
-          }}
-        >
-          View Provider Scorecard
-        </Button>
-      </div>
-    </button>
+      </CardContent>
+    </Card>
   );
 }
 
-// ── Main Public View ───────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 
 interface PublicViewProps {
   currentQuarter?: string;
 }
-export default function PublicView({
-  currentQuarter: _currentQuarter = "Q4-2025",
-}: PublicViewProps) {
-  const [selectedCity, setSelectedCity] = useState<string>("");
+
+export default function PublicView(_props: PublicViewProps) {
+  const cities = Object.keys(CITY_PROVIDERS);
+  const [selectedCity, setSelectedCity] = useState("Sydney");
+  const [sortBy, setSortBy] = useState<"rating" | "name">("rating");
   const [selectedProvider, setSelectedProvider] = useState<CityProvider | null>(
     null,
   );
 
-  const providers = selectedCity ? (CITY_PROVIDERS[selectedCity] ?? []) : [];
+  const providers = useMemo(() => {
+    const list = CITY_PROVIDERS[selectedCity] ?? [];
+    return [...list].sort((a, b) => {
+      if (sortBy === "rating") return getStars(b) - getStars(a);
+      return a.name.localeCompare(b.name);
+    });
+  }, [selectedCity, sortBy]);
 
-  function handleCityChange(city: string) {
-    setSelectedCity(city);
-    setSelectedProvider(null);
-  }
-
-  function handleProviderSelect(provider: CityProvider) {
-    setSelectedProvider(provider);
-  }
+  // KPI calculations
+  const kpi = useMemo(() => {
+    const stars = providers.map(getStars);
+    const avgRating =
+      stars.length > 0 ? stars.reduce((s, x) => s + x, 0) / stars.length : 0;
+    const goodOrAbove = stars.filter((s) => s >= 4).length;
+    const higherRisk = providers.filter(
+      (p) => getRiskLevelFromIndicators(p.indicators) === "High",
+    ).length;
+    return {
+      total: providers.length,
+      avgRating: avgRating.toFixed(1),
+      goodOrAbovePct:
+        providers.length > 0
+          ? Math.round((goodOrAbove / providers.length) * 100)
+          : 0,
+      higherRisk,
+    };
+  }, [providers]);
 
   return (
-    <div className="p-6 space-y-6" data-ocid="public.page">
-      {/* Page header */}
-      <div className="flex items-start justify-between border-b pb-4">
-        <div>
-          <h1 className="text-xl font-bold text-gov-navy">
-            Aged Care Provider Directory
+    <div className="min-h-screen bg-[#F8FAFC]">
+      {/* Gold strip */}
+      <div className="h-1 bg-gradient-to-r from-[#D97706] via-[#F59E0B] to-[#D97706]" />
+
+      {/* Hero band */}
+      <div className="bg-[#1E3A8A] text-white">
+        <div className="mx-auto max-w-7xl px-6 py-10">
+          <div className="flex items-center gap-2 mb-3 text-blue-300 text-sm font-medium">
+            <Shield className="h-4 w-4" />
+            Australian Government · Department of Health and Aged Care
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight mb-1">
+            Aged Care Provider Search
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Public transparency portal — View and compare aged care provider
-            quality ratings by region
+          <p className="text-blue-200 text-base">
+            Search and compare aged care providers in your region
           </p>
-        </div>
-        <div
-          className="px-3 py-1.5 text-xs font-semibold rounded border hidden sm:block"
-          style={{
-            background: "oklch(0.93 0.012 240)",
-            color: "oklch(var(--gov-navy))",
-            borderColor: "oklch(var(--border))",
-          }}
-        >
-          <MapPin className="w-3 h-3 inline mr-1" />
-          {CITY_LIST.length} Regions ·{" "}
-          {Object.values(CITY_PROVIDERS).flat().length} Providers
         </div>
       </div>
 
-      {/* Disclaimer banner */}
-      <div
-        className="flex items-start gap-3 px-4 py-3 border text-xs"
-        style={{
-          background: "oklch(0.97 0.01 254)",
-          borderColor: "oklch(0.82 0.05 254)",
-          color: "oklch(0.40 0.04 254)",
-        }}
-      >
-        <CheckCircle
-          className="w-4 h-4 flex-shrink-0 mt-0.5"
-          style={{ color: "oklch(0.45 0.15 145)" }}
-        />
-        <div>
-          <span className="font-bold">Public View — Quality Ratings Only.</span>{" "}
-          Resident data, regulatory actions, cohort information, and operational
-          details are not displayed in the public portal. Ratings are based on
-          nationally standardized quality indicators.
-        </div>
-      </div>
+      <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
+        {/* Filter bar */}
+        <Card className="border border-gray-200 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-600">
+                  Region
+                </span>
+                <Select value={selectedCity} onValueChange={setSelectedCity}>
+                  <SelectTrigger className="w-44" data-ocid="public.select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cities.map((city) => (
+                      <SelectItem key={city} value={city}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-      {/* City selector */}
-      <div className="max-w-xs">
-        <div
-          className="block text-xs font-bold uppercase tracking-wide mb-1.5"
-          style={{ color: "oklch(0.46 0.025 250)" }}
-        >
-          Select Region / City
-        </div>
-        <Select value={selectedCity} onValueChange={handleCityChange}>
-          <SelectTrigger
-            className="rounded-none border w-full"
-            style={{ borderColor: "oklch(var(--border))" }}
-            data-ocid="public.region.select"
-          >
-            <SelectValue placeholder="Select a region..." />
-          </SelectTrigger>
-          <SelectContent className="rounded-none">
-            {CITY_LIST.map((city, idx) => (
-              <SelectItem
-                key={city}
-                value={city}
-                data-ocid={`public.city.item.${idx + 1}`}
-              >
-                {city}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-600">
+                  Sort by
+                </span>
+                <div className="flex rounded-md border border-gray-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("rating")}
+                    data-ocid="public.toggle"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${
+                      sortBy === "rating"
+                        ? "bg-[#1E3A8A] text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                    Rating
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("name")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border-l border-gray-200 transition-colors ${
+                      sortBy === "name"
+                        ? "bg-[#1E3A8A] text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <SortAsc className="h-3.5 w-3.5" />
+                    Name
+                  </button>
+                </div>
+              </div>
 
-      {/* Empty state */}
-      {!selectedCity && (
-        <div
-          className="border rounded-none py-16 text-center"
-          data-ocid="public.empty_state"
-          style={{
-            borderColor: "oklch(var(--border))",
-            background: "oklch(0.97 0.005 240)",
-          }}
-        >
-          <MapPin
-            className="w-10 h-10 mx-auto mb-3"
-            style={{ color: "oklch(0.72 0.04 254)" }}
-          />
-          <p
-            className="text-sm font-semibold"
-            style={{ color: "oklch(var(--gov-navy))" }}
-          >
-            Select a region to view providers
-          </p>
-          <p className="text-xs mt-1" style={{ color: "oklch(0.55 0.02 240)" }}>
-            Choose from {CITY_LIST.length} regions to compare aged care quality
-            ratings
-          </p>
-        </div>
-      )}
-
-      {/* Provider list view */}
-      {selectedCity && !selectedProvider && (
-        <>
-          <div
-            className="flex items-center justify-between px-4 py-2.5 border rounded-none"
-            style={{
-              background: "oklch(0.95 0.012 254)",
-              borderColor: "oklch(0.82 0.05 254)",
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <MapPin
-                className="w-4 h-4"
-                style={{ color: "oklch(var(--gov-navy))" }}
-              />
-              <span
-                className="font-bold text-sm"
-                style={{ color: "oklch(var(--gov-navy))" }}
-              >
-                {selectedCity}
-              </span>
-              <span
-                className="text-xs"
-                style={{ color: "oklch(0.48 0.025 250)" }}
-              >
-                — {providers.length} registered provider
-                {providers.length !== 1 ? "s" : ""}
+              <span className="ml-auto text-sm text-gray-500">
+                Showing{" "}
+                <strong className="text-gray-800">{providers.length}</strong>{" "}
+                providers in {selectedCity}
               </span>
             </div>
-            <span className="badge-navy">{providers.length} Providers</span>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* KPI Cards */}
-          <CityKPICards providers={providers} />
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-lg bg-blue-50 p-2.5">
+                <Building2 className="h-5 w-5 text-[#1E3A8A]" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{kpi.total}</p>
+                <p className="text-xs text-gray-500">Providers in Region</p>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Comparison chart */}
-          <RegionComparisonChart providers={providers} />
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-lg bg-amber-50 p-2.5">
+                <Star className="h-5 w-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {kpi.avgRating}
+                </p>
+                <p className="text-xs text-gray-500">Average Rating</p>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Provider grid */}
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-lg bg-green-50 p-2.5">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {kpi.goodOrAbovePct}%
+                </p>
+                <p className="text-xs text-gray-500">Good or Above (4★+)</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-lg bg-red-50 p-2.5">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {kpi.higherRisk}
+                </p>
+                <p className="text-xs text-gray-500">High Risk Providers</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Provider grid */}
+        {providers.length > 0 ? (
           <div
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            data-ocid="public.provider.list"
+            data-ocid="public.list"
           >
-            {providers.map((provider, idx) => (
-              <ProviderCard
-                key={provider.id}
-                provider={provider}
-                index={idx + 1}
-                onSelect={handleProviderSelect}
-              />
+            {providers.map((p, idx) => (
+              <div key={p.id} data-ocid={`public.item.${idx + 1}`}>
+                <ProviderCard provider={p} onSelect={setSelectedProvider} />
+              </div>
             ))}
           </div>
-        </>
-      )}
+        ) : (
+          <Card
+            className="border border-gray-200 shadow-sm"
+            data-ocid="public.empty_state"
+          >
+            <CardContent className="py-12 text-center space-y-4">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
+                <Building2 className="h-7 w-7 text-gray-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-700">
+                  No providers found
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  No aged care providers are listed for this region.
+                </p>
+              </div>
+              {/* Rating tier legend */}
+              <div className="inline-flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-5 py-3 text-sm">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded-full bg-green-500" />
+                  Good (4–5★)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded-full bg-amber-500" />
+                  Moderate (3–4★)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded-full bg-red-500" />
+                  Needs Attention (&lt;3★)
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Provider detail */}
-      {selectedCity && selectedProvider && (
-        <ProviderDetailPanel
-          provider={selectedProvider}
-          allProviders={providers}
-          onBack={() => setSelectedProvider(null)}
-        />
-      )}
+        {/* Footer */}
+        <footer className="border-t border-gray-200 pt-6 pb-4 text-center text-sm text-gray-400">
+          © {new Date().getFullYear()} Australian Government · Department of
+          Health and Aged Care. Built with love using{" "}
+          <a
+            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-gray-600"
+          >
+            caffeine.ai
+          </a>
+          .
+        </footer>
+      </div>
+
+      {/* Provider detail modal */}
+      <PublicProviderModal
+        provider={selectedProvider}
+        onClose={() => setSelectedProvider(null)}
+      />
     </div>
   );
 }

@@ -4,8 +4,8 @@ import { StarRating } from "@/components/ui/StarRating";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  calcBaselineImprovement,
   calcBenchmarkImprovement,
+  calcIncentiveEligibilityTier,
 } from "@/utils/benchmarkUtils";
 import type {
   IndicatorForAlert,
@@ -56,6 +56,30 @@ const METRIC_BENCHMARKS: Record<
   "Screening Completion": { benchmarkValue: 85.0, isLowerBetter: false },
   "Social Participation": { benchmarkValue: 55.0, isLowerBetter: false },
 };
+
+// ── Improvement % calculator (correct formula) ───────────────────────────────
+// Formula: ((Current − Previous) / |Previous|) × 100
+// Direction-aware: for lower-is-better metrics, a decrease is positive improvement.
+// Capped at ±100% to prevent unrealistic values from edge-case data.
+const MAX_IMPROVEMENT_PCT = 100;
+
+function computeImprovementPct(
+  baseline: number,
+  current: number,
+  isLowerBetter: boolean,
+): number {
+  if (baseline === 0) return 0;
+  let pct: number;
+  if (isLowerBetter) {
+    // Improvement = reduction from baseline
+    pct = ((baseline - current) / Math.abs(baseline)) * 100;
+  } else {
+    // Improvement = increase from baseline
+    pct = ((current - baseline) / Math.abs(baseline)) * 100;
+  }
+  // Cap to prevent unrealistic percentages (e.g. 3025%)
+  return Math.max(-MAX_IMPROVEMENT_PCT, Math.min(MAX_IMPROVEMENT_PCT, pct));
+}
 
 // ── Provider star rating lookup ───────────────────────────────────────────────
 
@@ -142,9 +166,16 @@ export default function PayForImprovement({
     }
   }
 
-  const eligibleCount = PAY_FOR_IMPROVEMENT_DATA.filter(
-    (d) => d.eligible,
-  ).length;
+  const eligibleCount = PAY_FOR_IMPROVEMENT_DATA.filter((d) => {
+    const mb = METRIC_BENCHMARKS[d.metric];
+    const threshold = PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
+      (t) => t.metric === d.metric,
+    );
+    const imp = mb
+      ? computeImprovementPct(d.baseline, d.current, mb.isLowerBetter)
+      : computeImprovementPct(d.baseline, d.current, false);
+    return imp >= (threshold?.threshold ?? 0);
+  }).length;
   const totalFunding = PAY_FOR_IMPROVEMENT_DATA.reduce(
     (sum, d) => sum + d.funding,
     0,
@@ -154,9 +185,17 @@ export default function PayForImprovement({
     const records = PAY_FOR_IMPROVEMENT_DATA.filter(
       (d) => d.metric === threshold.metric,
     );
+    const mb = METRIC_BENCHMARKS[threshold.metric];
     const avgImprovement =
       records.length > 0
-        ? records.reduce((sum, r) => sum + r.improvement, 0) / records.length
+        ? records.reduce((sum, r) => {
+            const imp = computeImprovementPct(
+              r.baseline,
+              r.current,
+              mb?.isLowerBetter ?? false,
+            );
+            return sum + imp;
+          }, 0) / records.length
         : 0;
     return {
       metric: threshold.metric,
@@ -410,12 +449,29 @@ export default function PayForImprovement({
                     (t) => t.metric === row.metric,
                   );
                   const metricBenchmark = METRIC_BENCHMARKS[row.metric];
+
+                  // Compute improvement using correct formula:
+                  // ((Current − Previous) / |Previous|) × 100, capped at ±100%
+                  const computedImprovementPct = computeImprovementPct(
+                    row.baseline,
+                    row.current,
+                    metricBenchmark?.isLowerBetter ?? false,
+                  );
                   const aboveThreshold =
-                    row.improvement >= (threshold?.threshold || 0);
+                    computedImprovementPct >= (threshold?.threshold || 0);
                   const overallStars = getProviderOverallStars(row.provider);
 
-                  // Dynamic eligibility based on improvement threshold
-                  const dynamicEligible = aboveThreshold;
+                  // Dynamic eligibility: must meet improvement threshold AND have eligible rating tier
+                  // High-performing providers (>= 4.0 stars) are always eligible
+                  const ratingEligible =
+                    overallStars !== null
+                      ? calcIncentiveEligibilityTier(overallStars, 0, 1)
+                          .eligible
+                      : false;
+                  const dynamicEligible =
+                    ratingEligible &&
+                    (aboveThreshold ||
+                      (overallStars !== null && overallStars >= 4.5));
 
                   // Benchmark improvement %
                   let vsBenchmarkPct: number | null = null;
@@ -427,12 +483,8 @@ export default function PayForImprovement({
                     );
                   }
 
-                  // Baseline improvement %
-                  const vsBaselinePct = calcBaselineImprovement(
-                    row.baseline,
-                    row.current,
-                    metricBenchmark?.isLowerBetter ?? true,
-                  );
+                  // Baseline improvement % (same as computedImprovementPct, shown separately)
+                  const vsBaselinePct = computedImprovementPct;
 
                   const benchmarkColor = (pct: number) =>
                     pct >= 0
@@ -491,6 +543,11 @@ export default function PayForImprovement({
                       <td>
                         <IncentiveEligibilityBadge
                           eligible={dynamicEligible}
+                          tier={
+                            overallStars !== null && overallStars >= 4.5
+                              ? "Highly Eligible"
+                              : undefined
+                          }
                           size="sm"
                         />
                       </td>

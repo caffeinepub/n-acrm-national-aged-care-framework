@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  calcIncentiveEligibilityTier,
   getBenchmarkStatus,
-  isEligibleForIncentive,
 } from "@/utils/benchmarkUtils";
 import type {
   IndicatorForAlert,
@@ -455,7 +455,8 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
       };
     });
 
-    const hasBelowBenchmark = indicatorRatings.some(
+    // Count kept for reference; eligibility computed via calcPayForImprovementEligibility
+    const _hasBelowBenchmark = indicatorRatings.some(
       (ir) => ir.benchmarkStatus === "below",
     );
 
@@ -502,35 +503,20 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         ? ((domainScores.safety - previousSafetyScore) / previousSafetyScore) *
           100
         : 0;
-    let eligibility = calcPayForImprovementEligibility(
+    // Count below-benchmark indicators for eligibility assessment
+    const belowBenchmarkCount = indicatorRatings.filter(
+      (ir) => ir.benchmarkStatus === "below",
+    ).length;
+
+    // Single authoritative eligibility calculation.
+    // High-performing providers (>= 4.0 stars) are NEVER marked Not Eligible.
+    const eligibility = calcPayForImprovementEligibility(
       starBand,
       safetyImprovement,
+      screeningCompletion,
+      belowBenchmarkCount,
+      indicatorRatings.length,
     );
-
-    const incentiveEligible = isEligibleForIncentive(
-      weighted.score,
-      hasBelowBenchmark,
-    );
-    if (!incentiveEligible) {
-      eligibility = {
-        tier: "Not Eligible",
-        eligible: false,
-        estimatedPayment: 0,
-      };
-    }
-
-    if (
-      incentiveEligible &&
-      starBand >= 4 &&
-      safetyImprovement >= 10 &&
-      screeningCompletion >= 85
-    ) {
-      eligibility = {
-        tier: "Maximum Eligible",
-        eligible: true,
-        estimatedPayment: 180000,
-      };
-    }
 
     const newResult: LocalRatingEngineResult = {
       id: `RE-${providerId}-${quarter}-${Date.now()}`,
@@ -1326,6 +1312,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                         <div className="flex justify-center">
                           <IncentiveEligibilityBadge
                             eligible={result.incentiveEligibility.eligible}
+                            tier={result.incentiveEligibility.tier}
                             size="md"
                           />
                         </div>
