@@ -20,29 +20,47 @@ import {
   type CityProvider,
   getProviderRatingForQuarter,
 } from "@/data/mockData";
+import {
+  Bar,
+  BarChart,
+  Legend,
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  Award,
+  BarChart2,
   Building2,
   CheckCircle,
   ClipboardCheck,
+  Info,
   MapPin,
   Shield,
   ShieldCheck,
   SortAsc,
+  Sparkles,
   Star,
+  ThumbsUp,
   TrendingDown,
   TrendingUp,
   Users,
   X,
+  XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Unified indicator status — uses 1–5 star scale thresholds */
 function getIndicatorStatus(score: number): {
   label: string;
   chipClass: string;
@@ -63,7 +81,6 @@ function getIndicatorStatus(score: number): {
   };
 }
 
-/** Risk level derived from indicator performance, not just stars */
 function getRiskLevelFromIndicators(
   indicators: CityProvider["indicators"],
 ): "Low" | "Medium" | "High" {
@@ -82,7 +99,6 @@ function getRiskLevelFromIndicators(
   return "Low";
 }
 
-/** Data-driven explanation — no hardcoded "Excellent performance" strings */
 function generateDynamicExplanation(
   stars: number,
   indicators: CityProvider["indicators"],
@@ -108,34 +124,26 @@ function generateDynamicExplanation(
   const weak = Object.entries(entries)
     .filter(([, v]) => v < 2.5)
     .map(([k]) => domainNames[k]);
-
   const moderate = Object.entries(entries)
     .filter(([, v]) => v >= 2.5 && v < 3.5)
     .map(([k]) => domainNames[k]);
-
   const strong = Object.entries(entries)
     .filter(([, v]) => v >= 4.0)
     .map(([k]) => domainNames[k]);
 
-  if (weak.length >= 3) {
+  if (weak.length >= 3)
     return `Low performance in ${weak.slice(0, 2).join(" and ")} is significantly affecting the overall rating. Active improvement plans are underway.`;
-  }
-  if (weak.length === 2) {
+  if (weak.length === 2)
     return `Performance issues in ${weak.join(" and ")} are reducing the overall rating. These areas require focused attention.`;
-  }
-  if (weak.length === 1 && moderate.length >= 2) {
+  if (weak.length === 1 && moderate.length >= 2)
     return `Provider shows concern in ${weak[0]} and needs improvement in ${moderate.slice(0, 2).join(" and ")}. Overall care quality is below average.`;
-  }
   if (weak.length === 1) {
     const strengthText =
       strong.length > 0 ? ` Strong performance in ${strong[0]}.` : "";
     return `Provider performs adequately in most areas but needs improvement in ${weak[0]}.${strengthText}`;
   }
-  if (moderate.length >= 3) {
-    return `Provider performs well overall but needs improvement in ${moderate
-      .slice(0, 2)
-      .join(" and ")} to reach higher standards.`;
-  }
+  if (moderate.length >= 3)
+    return `Provider performs well overall but needs improvement in ${moderate.slice(0, 2).join(" and ")} to reach higher standards.`;
   if (moderate.length >= 1) {
     const strengthText =
       strong.length > 0
@@ -143,20 +151,78 @@ function generateDynamicExplanation(
         : "Most indicators are good.";
     return `${strengthText} Some improvement needed in ${moderate[0]}.`;
   }
-  if (stars >= 4.5) {
+  if (stars >= 4.5)
     return "This provider consistently delivers high-quality care across all measured areas, with strong safety outcomes and resident satisfaction.";
-  }
   return "This provider delivers good quality care with solid performance across most measured areas.";
 }
 
+/** Trust Score badge — single clear label for public users */
+function getTrustScore(stars: number): {
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+  icon: React.ReactNode;
+} {
+  if (stars >= 4.0)
+    return {
+      label: "Trusted",
+      color: "text-green-700",
+      bg: "bg-green-50",
+      border: "border-green-200",
+      icon: <ShieldCheck className="h-3.5 w-3.5" />,
+    };
+  if (stars >= 3.0)
+    return {
+      label: "Average",
+      color: "text-amber-700",
+      bg: "bg-amber-50",
+      border: "border-amber-200",
+      icon: <Info className="h-3.5 w-3.5" />,
+    };
+  return {
+    label: "Needs Improvement",
+    color: "text-red-700",
+    bg: "bg-red-50",
+    border: "border-red-200",
+    icon: <AlertTriangle className="h-3.5 w-3.5" />,
+  };
+}
+
+/** Simple performance tags — plain language chips */
+function getPerformanceTags(
+  indicators: CityProvider["indicators"],
+): { text: string; positive: boolean }[] {
+  const tags: { text: string; positive: boolean }[] = [];
+  if (indicators.safetyClinical >= 3.5)
+    tags.push({ text: "Low falls", positive: true });
+  else if (indicators.safetyClinical < 2.5)
+    tags.push({ text: "High falls", positive: false });
+
+  if (indicators.experience >= 3.5)
+    tags.push({ text: "High satisfaction", positive: true });
+  else if (indicators.experience < 2.5)
+    tags.push({ text: "Low satisfaction", positive: false });
+
+  if (indicators.preventiveCare >= 3.5)
+    tags.push({ text: "Good screening", positive: true });
+  else if (indicators.preventiveCare < 2.5)
+    tags.push({ text: "Low screening", positive: false });
+
+  if (indicators.staffing >= 3.5)
+    tags.push({ text: "Strong staffing", positive: true });
+  else if (indicators.staffing < 2.5)
+    tags.push({ text: "Low staffing", positive: false });
+
+  return tags.slice(0, 3);
+}
+
 function getScorePct(p: CityProvider): number {
-  return Math.round(p.indicators.preventiveCare * 20); // 1–5 → 0–100
+  return Math.round(p.indicators.preventiveCare * 20);
 }
-
 function getSatisfactionPct(p: CityProvider): number {
-  return Math.round(p.indicators.experience * 20); // 1–5 → 0–100
+  return Math.round(p.indicators.experience * 20);
 }
-
 function getPctColor(pct: number): string {
   if (pct >= 70) return "bg-green-500";
   if (pct >= 50) return "bg-amber-500";
@@ -240,8 +306,6 @@ function getPerformanceLabel(stars: number): { label: string; color: string } {
   return { label: "Needs Improvement", color: "text-red-600" };
 }
 
-// ── Domain score helpers ──────────────────────────────────────────────────────
-
 const DOMAIN_FRIENDLY_NAMES: Record<string, string> = {
   safetyClinical: "Falls & Safety",
   preventiveCare: "Preventive Screening",
@@ -249,6 +313,15 @@ const DOMAIN_FRIENDLY_NAMES: Record<string, string> = {
   staffing: "Staffing & Support",
   compliance: "Standards Compliance",
   experience: "Resident Satisfaction",
+};
+
+const DOMAIN_SHORT: Record<string, string> = {
+  safetyClinical: "Safety",
+  preventiveCare: "Screening",
+  qualityMeasures: "Care",
+  staffing: "Staffing",
+  compliance: "Compliance",
+  experience: "Satisfaction",
 };
 
 function getDomainRawScores(p: CityProvider): Record<string, number> {
@@ -262,7 +335,6 @@ function getDomainRawScores(p: CityProvider): Record<string, number> {
   };
 }
 
-// Per-indicator one-line descriptions (using 1–5 scale thresholds)
 function getIndicatorDescription(domain: string, score: number): string {
   if (domain === "safetyClinical") {
     if (score >= 3.5) return "Falls rate is better than the national average";
@@ -316,6 +388,368 @@ const DOMAIN_ORDER = [
   "experience",
 ];
 
+const COMPARE_COLORS = ["#1E3A8A", "#16A34A", "#D97706"];
+
+// ── Trust Score Badge Component ───────────────────────────────────────────────
+function TrustScoreBadge({ stars }: { stars: number }) {
+  const trust = getTrustScore(stars);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${trust.color} ${trust.bg} ${trust.border}`}
+    >
+      {trust.icon}
+      {trust.label}
+    </span>
+  );
+}
+
+// ── Performance Tags Component ────────────────────────────────────────────────
+function PerformanceTags({
+  indicators,
+}: { indicators: CityProvider["indicators"] }) {
+  const tags = getPerformanceTags(indicators);
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((tag) => (
+        <span
+          key={tag.text}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+            tag.positive
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-red-50 text-red-600 border border-red-200"
+          }`}
+        >
+          {tag.positive ? (
+            <ThumbsUp className="h-2.5 w-2.5" />
+          ) : (
+            <TrendingDown className="h-2.5 w-2.5" />
+          )}
+          {tag.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Smart Recommendation Banner ───────────────────────────────────────────────
+function SmartRecommendation({
+  providers,
+  onSelect,
+  currentQuarter,
+}: {
+  providers: CityProvider[];
+  onSelect: (p: CityProvider) => void;
+  currentQuarter: string;
+}) {
+  const top = useMemo(() => {
+    return [...providers]
+      .sort(
+        (a, b) =>
+          getProviderRatingForQuarter(b.id, currentQuarter).stars -
+          getProviderRatingForQuarter(a.id, currentQuarter).stars,
+      )
+      .slice(0, 3);
+  }, [providers, currentQuarter]);
+
+  if (top.length === 0) return null;
+
+  return (
+    <Card className="border border-blue-200 bg-blue-50 shadow-sm">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="rounded-lg bg-[#1E3A8A] p-2">
+            <Sparkles className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-[#1E3A8A] text-sm">
+              Recommended Providers
+            </h2>
+            <p className="text-xs text-blue-600">
+              Top-rated providers in your selected region
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {top.map((p, idx) => {
+            const stars = getProviderRatingForQuarter(
+              p.id,
+              currentQuarter,
+            ).stars;
+            const trust = getTrustScore(stars);
+            const tags = getPerformanceTags(p.indicators);
+            const positiveTags = tags
+              .filter((t) => t.positive)
+              .slice(0, 2)
+              .map((t) => t.text);
+            return (
+              <button
+                type="button"
+                key={p.id}
+                onClick={() => onSelect(p)}
+                className="text-left rounded-xl bg-white border border-blue-100 p-4 hover:border-[#1E3A8A] hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5">
+                    {idx === 0 && (
+                      <Award className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                    )}
+                    <span className="font-semibold text-gray-900 text-sm leading-tight group-hover:text-[#1E3A8A]">
+                      {p.name}
+                    </span>
+                  </div>
+                  <span
+                    className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${trust.color} ${trust.bg} ${trust.border}`}
+                  >
+                    {trust.icon}
+                    {trust.label}
+                  </span>
+                </div>
+                <StarRating stars={stars} />
+                {positiveTags.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    {positiveTags.join(" · ")}
+                  </p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Comparison Tool ───────────────────────────────────────────────────────────
+function ComparisonTool({
+  providers,
+  selectedIds,
+  onClear,
+  currentQuarter,
+}: {
+  providers: CityProvider[];
+  selectedIds: string[];
+  onClear: () => void;
+  currentQuarter: string;
+}) {
+  if (selectedIds.length < 2) return null;
+
+  const compared = selectedIds
+    .map((id) => providers.find((p) => p.id === id))
+    .filter(Boolean) as CityProvider[];
+
+  // Recharts bar chart data per domain
+  const barData = DOMAIN_ORDER.map((domain) => {
+    const row: Record<string, string | number> = {
+      domain: DOMAIN_SHORT[domain],
+    };
+    for (const p of compared) {
+      row[p.name] = Math.round((getDomainRawScores(p)[domain] / 5) * 100);
+    }
+    return row;
+  });
+
+  // Radar chart data
+  const radarData = DOMAIN_ORDER.map((domain) => {
+    const row: Record<string, string | number> = {
+      domain: DOMAIN_SHORT[domain],
+    };
+    for (const p of compared) {
+      row[p.name] = Math.round((getDomainRawScores(p)[domain] / 5) * 100);
+    }
+    return row;
+  });
+
+  return (
+    <Card
+      className="border border-gray-200 shadow-sm"
+      data-ocid="public.compare_panel"
+    >
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="rounded-lg bg-[#1E3A8A] p-2">
+              <BarChart2 className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900 text-sm">
+                Provider Comparison
+              </h2>
+              <p className="text-xs text-gray-500">
+                Comparing {compared.length} providers side by side
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1"
+          >
+            <X className="h-3.5 w-3.5" /> Clear comparison
+          </button>
+        </div>
+
+        {/* Provider summary row */}
+        <div
+          className={`grid gap-4 mb-6 ${
+            compared.length === 3 ? "grid-cols-3" : "grid-cols-2"
+          }`}
+        >
+          {compared.map((p, idx) => {
+            const stars = getProviderRatingForQuarter(
+              p.id,
+              currentQuarter,
+            ).stars;
+            const trust = getTrustScore(stars);
+            return (
+              <div
+                key={p.id}
+                className="rounded-xl border-2 p-4 space-y-2"
+                style={{ borderColor: `${COMPARE_COLORS[idx]}40` }}
+              >
+                <div
+                  className="h-1 w-full rounded-full mb-3"
+                  style={{ backgroundColor: COMPARE_COLORS[idx] }}
+                />
+                <p className="font-semibold text-gray-900 text-sm leading-tight">
+                  {p.name}
+                </p>
+                <StarRating stars={stars} />
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${trust.color} ${trust.bg} ${trust.border}`}
+                >
+                  {trust.icon} {trust.label}
+                </span>
+                <PerformanceTags indicators={p.indicators} />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bar chart */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+            Performance by Area (% of maximum)
+          </p>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart
+              data={barData}
+              margin={{ top: 4, right: 8, left: -20, bottom: 4 }}
+            >
+              <XAxis
+                dataKey="domain"
+                tick={{ fontSize: 11, fill: "#6B7280" }}
+              />
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fontSize: 10, fill: "#9CA3AF" }}
+              />
+              <Tooltip
+                formatter={(v: number) => `${v}%`}
+                contentStyle={{
+                  borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  fontSize: 12,
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+              {compared.map((p, idx) => (
+                <Bar
+                  key={p.id}
+                  dataKey={p.name}
+                  fill={COMPARE_COLORS[idx]}
+                  radius={[3, 3, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Radar chart */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+            Performance Radar
+          </p>
+          <ResponsiveContainer width="100%" height={240}>
+            <RadarChart data={radarData}>
+              <PolarGrid stroke="#E5E7EB" />
+              <PolarAngleAxis
+                dataKey="domain"
+                tick={{ fontSize: 11, fill: "#6B7280" }}
+              />
+              {compared.map((p, idx) => (
+                <Radar
+                  key={p.id}
+                  name={p.name}
+                  dataKey={p.name}
+                  stroke={COMPARE_COLORS[idx]}
+                  fill={COMPARE_COLORS[idx]}
+                  fillOpacity={0.15}
+                />
+              ))}
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+              <Tooltip
+                formatter={(v: number) => `${v}%`}
+                contentStyle={{
+                  borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  fontSize: 12,
+                }}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Domain detail table */}
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider py-2 pr-4">
+                  Area
+                </th>
+                {compared.map((p, idx) => (
+                  <th
+                    key={p.id}
+                    className="text-center text-xs font-semibold py-2 px-2"
+                    style={{ color: COMPARE_COLORS[idx] }}
+                  >
+                    {p.name.split(" ").slice(0, 2).join(" ")}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DOMAIN_ORDER.map((domain, i) => (
+                <tr
+                  key={domain}
+                  className={i % 2 === 0 ? "bg-gray-50" : "bg-white"}
+                >
+                  <td className="text-xs text-gray-600 py-2 pr-4 font-medium">
+                    {DOMAIN_FRIENDLY_NAMES[domain]}
+                  </td>
+                  {compared.map((p) => {
+                    const score = getDomainRawScores(p)[domain];
+                    const status = getIndicatorStatus(score);
+                    return (
+                      <td key={p.id} className="text-center py-2 px-2">
+                        <span
+                          className={`text-xs font-medium rounded-full px-2 py-0.5 ${status.chipClass}`}
+                        >
+                          {status.label}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Public Provider Modal ─────────────────────────────────────────────────────
 
 function PublicProviderModal({
@@ -334,10 +768,7 @@ function PublicProviderModal({
   const perf = getPerformanceLabel(stars);
   const explanation = generateDynamicExplanation(stars, provider.indicators);
   const rawScores = getDomainRawScores(provider);
-
-  // Strengths: score >= 4.0
   const strengths = Object.entries(rawScores).filter(([, v]) => v >= 4.0);
-  // Areas for improvement: score < 3.0
   const improvements = Object.entries(rawScores).filter(([, v]) => v < 3.0);
 
   return (
@@ -346,7 +777,7 @@ function PublicProviderModal({
         className="max-w-lg p-0 overflow-hidden"
         data-ocid="public.dialog"
       >
-        {/* Navy header strip */}
+        {/* Navy header */}
         <div className="bg-[#1E3A8A] px-6 py-5 text-white">
           <div className="flex items-start justify-between gap-3">
             <DialogHeader className="flex-1 min-w-0">
@@ -368,8 +799,6 @@ function PublicProviderModal({
               <X className="h-5 w-5" />
             </button>
           </div>
-
-          {/* Rating row */}
           <div className="mt-4 flex items-center gap-4 flex-wrap">
             <div>
               <StarRating stars={stars} size="lg" />
@@ -377,13 +806,17 @@ function PublicProviderModal({
                 {stars.toFixed(1)} / 5 &mdash; {perf.label}
               </p>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-col items-end gap-2">
               <RiskBadge level={risk} />
+              <TrustScoreBadge stars={stars} />
             </div>
+          </div>
+          {/* Performance tags in modal header */}
+          <div className="mt-3">
+            <PerformanceTags indicators={provider.indicators} />
           </div>
         </div>
 
-        {/* Scrollable body */}
         <div className="overflow-y-auto max-h-[65vh] px-6 py-5 space-y-5">
           {/* Plain-language explanation */}
           <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
@@ -424,7 +857,11 @@ function PublicProviderModal({
                           {status.label}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <Progress
+                        value={Math.round(score * 20)}
+                        className="h-1.5 mt-1.5"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
                         {description}
                       </p>
                     </div>
@@ -486,14 +923,12 @@ function PublicProviderModal({
             )}
           </div>
 
-          {/* Disclaimer */}
           <p className="text-xs text-gray-400 text-center pb-1">
             Ratings are based on national quality standards and updated
             quarterly.
           </p>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
           <Button
             onClick={onClose}
@@ -513,10 +948,14 @@ function PublicProviderModal({
 function ProviderCard({
   provider,
   onSelect,
+  isComparing,
+  onToggleCompare,
   currentQuarter = "Q4-2025",
 }: {
   provider: CityProvider;
   onSelect: (p: CityProvider) => void;
+  isComparing: boolean;
+  onToggleCompare: (id: string) => void;
   currentQuarter?: string;
 }) {
   const stars = getProviderRatingForQuarter(provider.id, currentQuarter).stars;
@@ -530,7 +969,11 @@ function ProviderCard({
 
   return (
     <Card
-      className="overflow-hidden border border-gray-200 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer group"
+      className={`overflow-hidden border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer group ${
+        isComparing
+          ? "border-[#1E3A8A] ring-2 ring-[#1E3A8A]/20"
+          : "border-gray-200"
+      }`}
       onClick={() => onSelect(provider)}
       data-ocid="public.card"
     >
@@ -538,9 +981,12 @@ function ProviderCard({
       <CardContent className="p-4 space-y-3">
         {/* Header */}
         <div className="space-y-1">
-          <h3 className="font-semibold text-gray-900 leading-tight group-hover:text-[#1E3A8A] transition-colors">
-            {provider.name}
-          </h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-semibold text-gray-900 leading-tight group-hover:text-[#1E3A8A] transition-colors">
+              {provider.name}
+            </h3>
+            <TrustScoreBadge stars={stars} />
+          </div>
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1 text-xs text-gray-500">
               <MapPin className="h-3 w-3" />
@@ -557,6 +1003,9 @@ function ProviderCard({
           <StarRating stars={stars} />
           <RiskBadge level={risk} />
         </div>
+
+        {/* Performance tags */}
+        <PerformanceTags indicators={provider.indicators} />
 
         {/* Indicators */}
         <div className="space-y-2 pt-1 border-t border-gray-100">
@@ -580,8 +1029,8 @@ function ProviderCard({
           />
         </div>
 
-        {/* View Details link */}
-        <div className="pt-2 border-t border-gray-100">
+        {/* Actions */}
+        <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
           <button
             type="button"
             onClick={(e) => {
@@ -589,10 +1038,32 @@ function ProviderCard({
               onSelect(provider);
             }}
             data-ocid="public.primary_button"
-            className="flex items-center gap-1.5 text-sm font-medium text-[#1E3A8A] hover:text-blue-700 transition-colors w-full justify-center py-1 rounded-md hover:bg-blue-50"
+            className="flex items-center gap-1.5 text-sm font-medium text-[#1E3A8A] hover:text-blue-700 transition-colors py-1 rounded-md hover:bg-blue-50 px-2"
           >
             View Details
             <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCompare(provider.id);
+            }}
+            className={`flex items-center gap-1 text-xs font-medium py-1 px-2 rounded-md border transition-colors ${
+              isComparing
+                ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
+                : "text-gray-500 border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A]"
+            }`}
+          >
+            {isComparing ? (
+              <>
+                <XCircle className="h-3 w-3" /> Remove
+              </>
+            ) : (
+              <>
+                <BarChart2 className="h-3 w-3" /> Compare
+              </>
+            )}
           </button>
         </div>
       </CardContent>
@@ -612,10 +1083,10 @@ export default function PublicView({
   const cities = Object.keys(CITY_PROVIDERS);
   const [selectedCity, setSelectedCity] = useState("Sydney");
   const [sortBy, setSortBy] = useState<"rating" | "name">("rating");
-
   const [selectedProvider, setSelectedProvider] = useState<CityProvider | null>(
     null,
   );
+  const [compareIds, setCompareIds] = useState<string[]>([]);
 
   const providers = useMemo(() => {
     const list = CITY_PROVIDERS[selectedCity] ?? [];
@@ -629,7 +1100,6 @@ export default function PublicView({
     });
   }, [selectedCity, sortBy, currentQuarter]);
 
-  // KPI calculations
   const kpi = useMemo(() => {
     const stars = providers.map(
       (p) => getProviderRatingForQuarter(p.id, currentQuarter).stars,
@@ -640,6 +1110,9 @@ export default function PublicView({
     const higherRisk = providers.filter(
       (p) => getRiskLevelFromIndicators(p.indicators) === "High",
     ).length;
+    const trusted = providers.filter(
+      (p) => getProviderRatingForQuarter(p.id, currentQuarter).stars >= 4,
+    ).length;
     return {
       total: providers.length,
       avgRating: avgRating.toFixed(1),
@@ -648,12 +1121,26 @@ export default function PublicView({
           ? Math.round((goodOrAbove / providers.length) * 100)
           : 0,
       higherRisk,
+      trusted,
     };
   }, [providers, currentQuarter]);
 
+  function toggleCompare(id: string) {
+    setCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) return prev; // max 3
+      return [...prev, id];
+    });
+  }
+
+  // Reset compare when city changes
+  function handleCityChange(city: string) {
+    setSelectedCity(city);
+    setCompareIds([]);
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Gold strip */}
       <div className="h-1 bg-gradient-to-r from-[#D97706] via-[#F59E0B] to-[#D97706]" />
 
       {/* Hero band */}
@@ -667,7 +1154,8 @@ export default function PublicView({
             Aged Care Provider Search
           </h1>
           <p className="text-blue-200 text-base">
-            Search and compare aged care providers in your region
+            Search, compare, and choose the best aged care provider for you or
+            your family
           </p>
         </div>
       </div>
@@ -681,7 +1169,7 @@ export default function PublicView({
                 <span className="text-sm font-medium text-gray-600">
                   Region
                 </span>
-                <Select value={selectedCity} onValueChange={setSelectedCity}>
+                <Select value={selectedCity} onValueChange={handleCityChange}>
                   <SelectTrigger className="w-44" data-ocid="public.select">
                     <SelectValue />
                   </SelectTrigger>
@@ -728,7 +1216,25 @@ export default function PublicView({
                 </div>
               </div>
 
-              <span className="ml-auto text-sm text-gray-500">
+              {compareIds.length > 0 && (
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-xs text-gray-500">
+                    {compareIds.length} selected for comparison
+                    {compareIds.length < 2 && " (select 1 more to compare)"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCompareIds([])}
+                    className="text-xs text-red-500 hover:text-red-700"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
+              <span
+                className={`text-sm text-gray-500 ${compareIds.length === 0 ? "ml-auto" : ""}`}
+              >
                 Showing{" "}
                 <strong className="text-gray-800">{providers.length}</strong>{" "}
                 providers in {selectedCity}
@@ -768,13 +1274,13 @@ export default function PublicView({
           <Card className="border border-gray-200 shadow-sm">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="rounded-lg bg-green-50 p-2.5">
-                <CheckCircle className="h-5 w-5 text-green-600" />
+                <ShieldCheck className="h-5 w-5 text-green-600" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {kpi.goodOrAbovePct}%
+                  {kpi.trusted}
                 </p>
-                <p className="text-xs text-gray-500">Good or Above (4★+)</p>
+                <p className="text-xs text-gray-500">Trusted Providers (4★+)</p>
               </div>
             </CardContent>
           </Card>
@@ -794,6 +1300,45 @@ export default function PublicView({
           </Card>
         </div>
 
+        {/* Smart Recommendation */}
+        <SmartRecommendation
+          providers={providers}
+          onSelect={setSelectedProvider}
+          currentQuarter={currentQuarter}
+        />
+
+        {/* Comparison panel (shows when 2+ selected) */}
+        {compareIds.length >= 2 && (
+          <ComparisonTool
+            providers={providers}
+            selectedIds={compareIds}
+            onClear={() => setCompareIds([])}
+            currentQuarter={currentQuarter}
+          />
+        )}
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+          <span className="font-medium text-gray-600">Trust Score:</span>
+          <span className="flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+            <span className="text-green-700 font-medium">Trusted</span> = 4★ and
+            above
+          </span>
+          <span className="flex items-center gap-1">
+            <Info className="h-3.5 w-3.5 text-amber-500" />
+            <span className="text-amber-700 font-medium">Average</span> = 3–4★
+          </span>
+          <span className="flex items-center gap-1">
+            <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+            <span className="text-red-700 font-medium">Needs Improvement</span>{" "}
+            = below 3★
+          </span>
+          <span className="ml-auto text-gray-400 italic">
+            Click Compare on up to 3 providers to compare side-by-side
+          </span>
+        </div>
+
         {/* Provider grid */}
         {providers.length > 0 ? (
           <div
@@ -805,6 +1350,8 @@ export default function PublicView({
                 <ProviderCard
                   provider={p}
                   onSelect={setSelectedProvider}
+                  isComparing={compareIds.includes(p.id)}
+                  onToggleCompare={toggleCompare}
                   currentQuarter={currentQuarter}
                 />
               </div>
@@ -827,21 +1374,6 @@ export default function PublicView({
                   No aged care providers are listed for this region.
                 </p>
               </div>
-              {/* Rating tier legend */}
-              <div className="inline-flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-5 py-3 text-sm">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-full bg-green-500" />
-                  Good (4–5★)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-full bg-amber-500" />
-                  Moderate (3–4★)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-full bg-red-500" />
-                  Needs Attention (&lt;3★)
-                </span>
-              </div>
             </CardContent>
           </Card>
         )}
@@ -862,7 +1394,6 @@ export default function PublicView({
         </footer>
       </div>
 
-      {/* Provider detail modal */}
       <PublicProviderModal
         provider={selectedProvider}
         onClose={() => setSelectedProvider(null)}
