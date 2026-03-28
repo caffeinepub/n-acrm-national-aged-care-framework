@@ -52,58 +52,20 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
+import {
+  UNIFIED_PROVIDERS,
+  getUnifiedProviderIndicators,
+} from "../../data/mockData";
 import { getBenchmarkStatus } from "../../utils/benchmarkUtils";
 import {
-  calcDomainScore,
   calcIndicatorPerformanceScore,
   calcPayForImprovementEligibility,
   calcWeightedProviderRating,
   scoreToFractionalStars,
 } from "../../utils/ratingEngine";
 
-// ── Provider registry ──────────────────────────────────────────────────────────
-const PROVIDERS = [
-  {
-    id: "SYD-001",
-    name: "Bondi Aged Care",
-    city: "Sydney",
-    state: "NSW",
-    type: "Residential",
-    beds: 120,
-  },
-  {
-    id: "MEL-001",
-    name: "Southbank Care Centre",
-    city: "Melbourne",
-    state: "VIC",
-    type: "Residential",
-    beds: 98,
-  },
-  {
-    id: "BNE-001",
-    name: "Riverview Aged Care",
-    city: "Brisbane",
-    state: "QLD",
-    type: "Residential",
-    beds: 85,
-  },
-  {
-    id: "PER-001",
-    name: "Swan Valley Care",
-    city: "Perth",
-    state: "WA",
-    type: "Residential",
-    beds: 110,
-  },
-  {
-    id: "ADL-001",
-    name: "Torrens Aged Care",
-    city: "Adelaide",
-    state: "SA",
-    type: "Residential",
-    beds: 76,
-  },
-];
+// ── Provider registry — sourced from central PROVIDER_MASTER ──────────────────
+const PROVIDERS = UNIFIED_PROVIDERS;
 
 // ── Indicator definitions ──────────────────────────────────────────────────────
 interface IndicatorDef {
@@ -188,21 +150,43 @@ const INDICATOR_DEFS: IndicatorDef[] = [
   },
 ];
 
-const DEFAULT_VALUES: Record<string, number[]> = {
-  "SYD-001": [4.2, 2.8, 87, 84, 1.8, 82, 92, 91],
-  "MEL-001": [6.1, 3.8, 78, 76, 3.1, 71, 82, 79],
-  "BNE-001": [3.9, 2.4, 91, 88, 1.4, 86, 95, 93],
-  "PER-001": [5.6, 3.5, 82, 79, 2.8, 74, 84, 82],
-  "ADL-001": [7.2, 4.1, 72, 71, 3.6, 68, 76, 74],
-};
+// Maps central indicator data to the 8 INDICATOR_DEFS by code
+function getProviderDefaultValues(
+  providerId: string,
+  quarter = "Q4-2025",
+): number[] {
+  const inds = getUnifiedProviderIndicators(providerId, quarter);
+  const find = (code: string, fallback: number) =>
+    inds.find((i) => i.indicatorCode === code)?.rate ?? fallback;
+  return [
+    find("SAF-001", 4.2), // Falls with Harm Rate
+    find("SAF-002", 2.8), // Medication-Related Harm
+    find("PRV-001", 87), // Screening Completion (Falls Risk)
+    inds.find((i) => i.indicatorCode === "STF-001")?.rate ??
+      inds.find((i) => i.dimension === "Staffing")?.rate ??
+      84, // Staff Retention
+    find("SAF-005", 1.8), // Pressure Injuries Stage 2–4
+    inds.find((i) => i.indicatorCode === "QUA-001")?.rate ??
+      inds.find((i) => i.dimension === "Quality")?.rate ??
+      82, // Resident Satisfaction
+    inds.find((i) => i.indicatorCode === "QUA-002")?.rate ??
+      inds.filter((i) => i.dimension === "Quality")[1]?.rate ??
+      92, // Care Plan Compliance
+    inds.find((i) => i.indicatorCode === "COM-001")?.rate ??
+      inds.find((i) => i.dimension === "Compliance")?.rate ??
+      91, // Regulatory Compliance
+  ];
+}
 
-const PREV_VALUES: Record<string, number[]> = {
-  "SYD-001": [5.1, 3.2, 82, 80, 2.3, 78, 88, 87],
-  "MEL-001": [6.8, 4.2, 73, 72, 3.6, 67, 78, 75],
-  "BNE-001": [4.4, 2.8, 87, 85, 1.8, 82, 93, 91],
-  "PER-001": [6.2, 3.9, 78, 75, 3.2, 70, 80, 78],
-  "ADL-001": [7.8, 4.5, 68, 67, 4.0, 64, 72, 70],
-};
+function getPrevQuarter(quarter: string): string {
+  const map: Record<string, string> = {
+    "Q4-2025": "Q3-2025",
+    "Q3-2025": "Q2-2025",
+    "Q2-2025": "Q1-2025",
+    "Q1-2025": "Q4-2025",
+  };
+  return map[quarter] ?? "Q3-2025";
+}
 
 // Quarterly trend data per provider
 const TREND_DATA: Record<
@@ -775,17 +759,32 @@ export default function ProviderDashboard() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  const CURRENT_QUARTER = "Q4-2025";
   const provider =
     PROVIDERS.find((p) => p.id === selectedProviderId) ?? PROVIDERS[0];
-  const defaultVals =
-    DEFAULT_VALUES[selectedProviderId] ?? DEFAULT_VALUES["SYD-001"];
-  const prevVals = PREV_VALUES[selectedProviderId] ?? PREV_VALUES["SYD-001"];
+  const _defaultVals = getProviderDefaultValues(
+    selectedProviderId,
+    CURRENT_QUARTER,
+  );
+  const prevVals = getProviderDefaultValues(
+    selectedProviderId,
+    getPrevQuarter(CURRENT_QUARTER),
+  );
 
-  const [indicatorValues, setIndicatorValues] = useState<number[]>(defaultVals);
+  // Validate provider exists in master
+  const providerInMaster = UNIFIED_PROVIDERS.find(
+    (p) => p.id === selectedProviderId,
+  );
+  if (!providerInMaster)
+    console.error(`Provider ${selectedProviderId} not in PROVIDER_MASTER`);
+
+  const [indicatorValues, setIndicatorValues] = useState<number[]>(() =>
+    getProviderDefaultValues("SYD-001", "Q4-2025"),
+  );
 
   const resetForProvider = (pid: string) => {
     setSelectedProviderId(pid);
-    setIndicatorValues(DEFAULT_VALUES[pid] ?? DEFAULT_VALUES["SYD-001"]);
+    setIndicatorValues(getProviderDefaultValues(pid, CURRENT_QUARTER));
     setEditingIdx(null);
   };
 

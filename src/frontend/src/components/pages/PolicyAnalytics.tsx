@@ -50,7 +50,13 @@ import {
   YAxis,
 } from "recharts";
 
+import { IncentiveEligibilityBadge } from "@/components/ui/IncentiveEligibilityBadge";
+import { StarRating } from "@/components/ui/StarRating";
 import { generateEnhancedInsights } from "@/utils/policyInsightEngine";
+import {
+  UNIFIED_PROVIDERS,
+  getProviderRatingForQuarter,
+} from "../../data/mockData";
 
 // ─── AGGREGATED SECTOR DATA (NO individual provider names) ────────────────────
 
@@ -1095,7 +1101,23 @@ function TrendAnalysisTab() {
 
 // ─── TAB 6: PAY-FOR-IMPROVEMENT ANALYSIS ─────────────────────────────────────
 
-function PayForImprovementTab() {
+function PayForImprovementTab({ currentQuarter }: { currentQuarter: string }) {
+  const providerRows = useMemo(() => {
+    return [...UNIFIED_PROVIDERS]
+      .map((p) => {
+        const rating = getProviderRatingForQuarter(p.id, currentQuarter);
+        return {
+          id: p.id,
+          name: p.name,
+          state: p.state,
+          stars: rating.stars,
+          score: rating.overallScore,
+          eligibility: rating.eligibility,
+        };
+      })
+      .sort((a, b) => b.stars - a.stars);
+  }, [currentQuarter]);
+
   const eligibilityData = useMemo(() => {
     const highly = STATE_DATA.filter((s) => s.avgRating >= 4.5).reduce(
       (a, s) => a + s.eligibleCount,
@@ -1337,6 +1359,80 @@ function PayForImprovementTab() {
                     </tr>
                   );
                 })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Provider-Level Pay-for-Improvement Report */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <span className="section-card-title">
+            <Shield className="h-4 w-4" />
+            Provider-Level Pay-for-Improvement Report
+          </span>
+          <span
+            className="flex items-center gap-1.5 text-xs font-medium"
+            style={{ color: "oklch(0.45 0.14 145)" }}
+          >
+            <CheckCircle className="h-3.5 w-3.5" />
+            All ratings sourced from central rating engine · {currentQuarter}
+          </span>
+        </div>
+        <div className="p-0">
+          <table className="gov-table">
+            <thead>
+              <tr>
+                <th>Provider Name</th>
+                <th>State</th>
+                <th>Rating</th>
+                <th>Score</th>
+                <th>Eligibility</th>
+                <th>Est. Payment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {providerRows.map((row, idx) => (
+                <tr
+                  key={row.id}
+                  className={idx % 2 === 0 ? "" : "bg-slate-50/60"}
+                >
+                  <td className="font-semibold text-sm">{row.name}</td>
+                  <td>
+                    <span className="badge-navy">{row.state}</span>
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-1.5">
+                      <StarRating value={row.stars} size="sm" />
+                      <span className="font-mono-data text-xs text-slate-500">
+                        {row.stars.toFixed(1)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="font-mono-data text-xs">
+                    {row.score.toFixed(1)}
+                  </td>
+                  <td>
+                    <IncentiveEligibilityBadge
+                      eligible={row.eligibility.eligible}
+                      tier={row.eligibility.tier}
+                      size="sm"
+                    />
+                  </td>
+                  <td
+                    className="font-mono-data text-xs font-semibold"
+                    style={{
+                      color: row.eligibility.eligible
+                        ? "oklch(0.45 0.14 145)"
+                        : "oklch(0.5 0.03 252)",
+                    }}
+                  >
+                    {row.eligibility.eligible
+                      ? `$${(row.eligibility.estimatedPayment / 1000).toFixed(0)}k`
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -3828,7 +3924,7 @@ export default function PolicyAnalytics({
           <TrendAnalysisTab />
         </TabsContent>
         <TabsContent value="pfi">
-          <PayForImprovementTab />
+          <PayForImprovementTab currentQuarter={currentQuarter} />
         </TabsContent>
       </Tabs>
     </div>

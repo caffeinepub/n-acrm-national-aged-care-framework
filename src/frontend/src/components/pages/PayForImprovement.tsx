@@ -3,14 +3,8 @@ import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  calcBenchmarkImprovement,
-  calcIncentiveEligibilityTier,
-} from "@/utils/benchmarkUtils";
-import type {
-  IndicatorForAlert,
-  PerformanceAlert,
-} from "@/utils/performanceAlerts";
+import { calcIncentiveEligibilityTier } from "@/utils/benchmarkUtils";
+import type { PerformanceAlert } from "@/utils/performanceAlerts";
 import { resolveAlertToShow } from "@/utils/performanceAlerts";
 import {
   AlertTriangle,
@@ -19,95 +13,82 @@ import {
   TrendingUp,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import {
-  MOCK_PROVIDERS,
-  PAY_FOR_IMPROVEMENT_DATA,
-  PAY_FOR_IMPROVEMENT_THRESHOLDS,
-  UNIFIED_PROVIDERS,
+  PROVIDER_MASTER,
   getProviderRatingForQuarter,
-  getUnifiedProviderDomainScores,
+  getUnifiedProviderIndicators,
 } from "../../data/mockData";
-import {
-  calcWeightedProviderRating,
-  overallScoreToStars,
-  scoreToStarBand,
-} from "../../utils/ratingEngine";
 
-// ── Benchmark values for each P4I metric ─────────────────────────────────────
-
-const METRIC_BENCHMARKS: Record<
-  string,
-  { benchmarkValue: number; isLowerBetter: boolean }
-> = {
-  "ED Reduction 90-Day": { benchmarkValue: 11.2, isLowerBetter: true },
-  "Hospitalization Reduction": { benchmarkValue: 9.0, isLowerBetter: true },
-  "Deprescribing Rate": { benchmarkValue: 20.0, isLowerBetter: false },
-  "Screening Completion": { benchmarkValue: 85.0, isLowerBetter: false },
-  "Social Participation": { benchmarkValue: 55.0, isLowerBetter: false },
+// ── Tier → funding map ───────────────────────────────────────────────────────
+const TIER_FUNDING: Record<string, number> = {
+  "Highly Eligible": 180000,
+  Eligible: 75000,
+  "Not Eligible": 0,
 };
 
-// ── Improvement % calculator (correct formula) ───────────────────────────────
-// Formula: ((Current − Previous) / |Previous|) × 100
-// Direction-aware: for lower-is-better metrics, a decrease is positive improvement.
-// Capped at ±100% to prevent unrealistic values from edge-case data.
-const MAX_IMPROVEMENT_PCT = 100;
-
-function computeImprovementPct(
-  baseline: number,
-  current: number,
-  isLowerBetter: boolean,
+// ── Improvement % from indicator scores across quarters ──────────────────────
+function deriveImprovementPct(
+  providerId: string,
+  currentQuarter: string,
 ): number {
-  if (baseline === 0) return 0;
-  let pct: number;
-  if (isLowerBetter) {
-    // Improvement = reduction from baseline
-    pct = ((baseline - current) / Math.abs(baseline)) * 100;
-  } else {
-    // Improvement = increase from baseline
-    pct = ((current - baseline) / Math.abs(baseline)) * 100;
+  const BASELINE_QUARTER = "Q1-2025";
+  if (currentQuarter === BASELINE_QUARTER) return 0;
+
+  const currentInds = getUnifiedProviderIndicators(providerId, currentQuarter);
+  const baselineInds = getUnifiedProviderIndicators(
+    providerId,
+    BASELINE_QUARTER,
+  );
+
+  if (currentInds.length === 0 || baselineInds.length === 0) return 0;
+
+  function indicatorScore(ind: {
+    rate: number;
+    nationalBenchmark: number;
+    isLowerBetter: boolean;
+  }): number {
+    if (ind.nationalBenchmark === 0) return 50;
+    if (ind.isLowerBetter) {
+      return Math.min(100, (ind.nationalBenchmark / ind.rate) * 100);
+    }
+    return Math.min(100, (ind.rate / ind.nationalBenchmark) * 100);
   }
-  // Cap to prevent unrealistic percentages (e.g. 3025%)
-  return Math.max(-MAX_IMPROVEMENT_PCT, Math.min(MAX_IMPROVEMENT_PCT, pct));
+
+  const avgCurrent =
+    currentInds.reduce((s, i) => s + indicatorScore(i), 0) / currentInds.length;
+  const avgBaseline =
+    baselineInds.reduce((s, i) => s + indicatorScore(i), 0) /
+    baselineInds.length;
+
+  if (avgBaseline === 0) return 0;
+  const pct = ((avgCurrent - avgBaseline) / Math.abs(avgBaseline)) * 100;
+  // Cap at ±50% to prevent edge-case extremes
+  const capped = Math.max(-50, Math.min(50, pct));
+  return Math.round(capped * 10) / 10;
 }
 
-// ── Provider star rating lookup ───────────────────────────────────────────────
-
-function getProviderOverallStars(
-  providerName: string,
-  q = "Q4-2025",
-): number | null {
-  // First try UNIFIED_PROVIDERS (covers all city-based providers)
-  const unified = UNIFIED_PROVIDERS.find(
-    (p) => p.name.toLowerCase() === providerName.toLowerCase(),
-  );
-  if (unified) {
-    // Use quarter-aware calculation instead of static overallStars
-    return getProviderRatingForQuarter(unified.id, q).stars;
-  }
-
-  // Fall back to MOCK_PROVIDERS (legacy PROV-xxx based providers)
-  const legacy = MOCK_PROVIDERS.find(
-    (p) => p.name.toLowerCase() === providerName.toLowerCase(),
-  );
-  if (legacy) {
-    const domains = getUnifiedProviderDomainScores(legacy.id, q);
-    const { stars } = calcWeightedProviderRating(domains);
-    return stars;
-  }
-
-  return null;
+// ── Types ────────────────────────────────────────────────────────────────────
+interface ProviderRow {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  stars: number;
+  tier: string;
+  eligible: boolean;
+  improvementPct: number;
+  estimatedFunding: number;
 }
 
 interface PayForImprovementProps {
@@ -122,104 +103,111 @@ export default function PayForImprovement({
     null,
   );
 
-  function handleViewAlert(providerName: string) {
-    const overallStars = getProviderOverallStars(providerName, currentQuarter);
-    if (overallStars === null) return;
-    // Build minimal indicator set from domain scores for the provider
-    const unified = UNIFIED_PROVIDERS.find(
-      (p) => p.name.toLowerCase() === providerName.toLowerCase(),
-    );
-    const alertIndicators: IndicatorForAlert[] = unified
-      ? [
-          {
-            label: "Safety & Clinical",
-            score: overallScoreToStars(unified.domainScores.safety),
-          },
-          {
-            label: "Preventive Care",
-            score: overallScoreToStars(unified.domainScores.preventive),
-          },
-          {
-            label: "Staffing",
-            score: overallScoreToStars(unified.domainScores.staffing),
-          },
-          {
-            label: "Compliance",
-            score: overallScoreToStars(unified.domainScores.compliance),
-          },
-          {
-            label: "Residents Experience",
-            score: overallScoreToStars(unified.domainScores.experience),
-          },
-          {
-            label: "Quality Measures",
-            score: overallScoreToStars(unified.domainScores.quality),
-          },
-        ]
-      : [{ label: "Overall Performance", score: overallStars }];
-    const alert = resolveAlertToShow(
-      providerName,
-      overallStars,
-      alertIndicators,
-    );
+  // ── Build rows from PROVIDER_MASTER ─────────────────────────────────────
+  const providerRows = useMemo<ProviderRow[]>(() => {
+    return PROVIDER_MASTER.map((provider) => {
+      const rating = getProviderRatingForQuarter(provider.id, currentQuarter);
+      const stars = rating.stars;
+      const { tier: rawTier, eligible } = calcIncentiveEligibilityTier(
+        stars,
+        0,
+        1,
+      );
+      const finalTier = stars >= 4.5 ? "Highly Eligible" : rawTier;
+      // VALIDATION: Not Eligible → funding MUST be $0
+      const estimatedFunding = eligible
+        ? (TIER_FUNDING[finalTier] ?? 75000)
+        : 0;
+      const improvementPct = deriveImprovementPct(provider.id, currentQuarter);
+      return {
+        id: provider.id,
+        name: provider.name,
+        city: provider.city,
+        state: provider.state,
+        stars,
+        tier: finalTier,
+        eligible,
+        improvementPct,
+        estimatedFunding,
+      };
+    });
+  }, [currentQuarter]);
+
+  // ── KPI summary ──────────────────────────────────────────────────────────
+  const eligibleCount = useMemo(
+    () => providerRows.filter((r) => r.eligible).length,
+    [providerRows],
+  );
+  const notEligibleCount = useMemo(
+    () => providerRows.filter((r) => !r.eligible).length,
+    [providerRows],
+  );
+  const totalFunding = useMemo(
+    () => providerRows.reduce((s, r) => s + r.estimatedFunding, 0),
+    [providerRows],
+  );
+
+  // ── Chart data ───────────────────────────────────────────────────────────
+  const chartData = useMemo(() => {
+    const tiers = ["Highly Eligible", "Eligible", "Not Eligible"];
+    return tiers.map((tier) => ({
+      tier:
+        tier === "Highly Eligible"
+          ? "Highly\nEligible"
+          : tier === "Not Eligible"
+            ? "Not\nEligible"
+            : tier,
+      label: tier,
+      count: providerRows.filter((r) => r.tier === tier).length,
+    }));
+  }, [providerRows]);
+
+  // ── Funding summary table ────────────────────────────────────────────────
+  const fundingSummary = useMemo(() => {
+    const tiers = ["Highly Eligible", "Eligible", "Not Eligible"];
+    return tiers.map((tier) => {
+      const rows = providerRows.filter((r) => r.tier === tier);
+      const perProvider = TIER_FUNDING[tier] ?? 0;
+      return {
+        tier,
+        count: rows.length,
+        perProvider,
+        totalFunding: rows.reduce((s, r) => s + r.estimatedFunding, 0),
+      };
+    });
+  }, [providerRows]);
+
+  // ── Alert handler ────────────────────────────────────────────────────────
+  function handleViewAlert(row: ProviderRow) {
+    const alert = resolveAlertToShow(row.name, row.stars, [
+      { label: "Overall Performance", score: row.stars },
+    ]);
     if (alert) {
       setCurrentAlert(alert);
       setAlertOpen(true);
     }
   }
 
-  const eligibleCount = PAY_FOR_IMPROVEMENT_DATA.filter((d) => {
-    const mb = METRIC_BENCHMARKS[d.metric];
-    const threshold = PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
-      (t) => t.metric === d.metric,
-    );
-    const imp = mb
-      ? computeImprovementPct(d.baseline, d.current, mb.isLowerBetter)
-      : computeImprovementPct(d.baseline, d.current, false);
-    return imp >= (threshold?.threshold ?? 0);
-  }).length;
-  const totalFunding = PAY_FOR_IMPROVEMENT_DATA.reduce(
-    (sum, d) => sum + d.funding,
-    0,
-  );
-
-  const chartData = PAY_FOR_IMPROVEMENT_THRESHOLDS.map((threshold) => {
-    const records = PAY_FOR_IMPROVEMENT_DATA.filter(
-      (d) => d.metric === threshold.metric,
-    );
-    const mb = METRIC_BENCHMARKS[threshold.metric];
-    const avgImprovement =
-      records.length > 0
-        ? records.reduce((sum, r) => {
-            const imp = computeImprovementPct(
-              r.baseline,
-              r.current,
-              mb?.isLowerBetter ?? false,
-            );
-            return sum + imp;
-          }, 0) / records.length
-        : 0;
-    return {
-      metric: threshold.metric,
-      improvement: Number.parseFloat(avgImprovement.toFixed(1)),
-      threshold: threshold.threshold,
-      eligible: avgImprovement >= threshold.threshold,
-    };
-  });
+  const chartFill = (label: string) => {
+    if (label === "Highly Eligible") return "oklch(0.72 0.14 72)";
+    if (label === "Eligible") return "oklch(0.52 0.15 145)";
+    return "oklch(0.52 0.22 25)";
+  };
 
   return (
     <div className="p-6 space-y-5">
+      {/* Page header */}
       <div className="border-b pb-4">
         <h1 className="text-xl font-bold text-gov-navy">
           Pay-for-Improvement Tracker
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {currentQuarter} Eligibility Report — Improvement metrics and funding
-          eligibility assessment
+          {currentQuarter} Eligibility Report — Provider funding eligibility
+          based on centralized rating engine
         </p>
       </div>
 
-      {/* Eligibility Logic Explanation */}
+      {/* Eligibility logic cards */}
       <Card className="rounded-none border">
         <CardHeader className="pb-2 pt-4 px-4 border-b">
           <CardTitle className="text-sm font-semibold text-gov-navy">
@@ -227,32 +215,28 @@ export default function PayForImprovement({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div
               className="border p-3"
               style={{
-                background: "oklch(0.95 0.04 145)",
-                borderColor: "oklch(0.62 0.18 145)",
+                background: "oklch(0.96 0.06 80)",
+                borderColor: "oklch(0.72 0.14 72)",
               }}
-              data-ocid="pfi.eligibility.maximum.card"
+              data-ocid="pfi.eligibility.highly.card"
             >
               <div
                 className="text-xs font-bold uppercase tracking-wide mb-1"
-                style={{ color: "oklch(0.22 0.18 145)" }}
+                style={{ color: "oklch(0.38 0.14 72)" }}
               >
-                Maximum Eligible
+                ⭐ Highly Eligible
               </div>
-              <div
-                className="text-xs space-y-0.5"
-                style={{ color: "oklch(0.30 0.06 254)" }}
-              >
-                <p>Overall rating ≥ 4 stars</p>
-                <p>AND Safety improvement ≥ 10%</p>
-                <p>AND Screening ≥ 85%</p>
+              <div className="text-xs space-y-0.5 text-muted-foreground">
+                <p>Overall rating ≥ 4.5 stars</p>
+                <p>Automatic — no threshold required</p>
               </div>
               <div
                 className="mt-2 font-bold text-sm"
-                style={{ color: "oklch(var(--gov-gold-dark))" }}
+                style={{ color: "oklch(0.38 0.14 72)" }}
               >
                 Est. $180,000
               </div>
@@ -260,55 +244,24 @@ export default function PayForImprovement({
             <div
               className="border p-3"
               style={{
-                background: "oklch(0.96 0.025 145)",
+                background: "oklch(0.93 0.07 145)",
                 borderColor: "oklch(0.72 0.12 145)",
               }}
-              data-ocid="pfi.eligibility.bonus.card"
+              data-ocid="pfi.eligibility.eligible.card"
             >
               <div
                 className="text-xs font-bold uppercase tracking-wide mb-1"
                 style={{ color: "oklch(0.28 0.14 145)" }}
               >
-                Bonus Eligible
+                ✅ Eligible
               </div>
-              <div
-                className="text-xs space-y-0.5"
-                style={{ color: "oklch(0.30 0.06 254)" }}
-              >
-                <p>Overall rating ≥ 4 stars</p>
-                <p>AND Safety improvement ≥ 10%</p>
+              <div className="text-xs space-y-0.5 text-muted-foreground">
+                <p>Overall rating ≥ 4.0 stars</p>
+                <p>Standard incentive payment</p>
               </div>
               <div
                 className="mt-2 font-bold text-sm"
-                style={{ color: "oklch(var(--gov-gold-dark))" }}
-              >
-                Est. $120,000
-              </div>
-            </div>
-            <div
-              className="border p-3"
-              style={{
-                background: "oklch(0.97 0.03 80)",
-                borderColor: "oklch(0.75 0.12 75)",
-              }}
-              data-ocid="pfi.eligibility.base.card"
-            >
-              <div
-                className="text-xs font-bold uppercase tracking-wide mb-1"
-                style={{ color: "oklch(0.43 0.14 72)" }}
-              >
-                Base Eligible
-              </div>
-              <div
-                className="text-xs space-y-0.5"
-                style={{ color: "oklch(0.30 0.06 254)" }}
-              >
-                <p>Overall rating ≥ 4 stars</p>
-                <p>Safety improvement any %</p>
-              </div>
-              <div
-                className="mt-2 font-bold text-sm"
-                style={{ color: "oklch(var(--gov-gold-dark))" }}
+                style={{ color: "oklch(0.28 0.14 145)" }}
               >
                 Est. $75,000
               </div>
@@ -325,19 +278,13 @@ export default function PayForImprovement({
                 className="text-xs font-bold uppercase tracking-wide mb-1"
                 style={{ color: "oklch(0.48 0.02 240)" }}
               >
-                Not Eligible
+                ✗ Not Eligible
               </div>
-              <div
-                className="text-xs space-y-0.5"
-                style={{ color: "oklch(0.30 0.06 254)" }}
-              >
-                <p>Overall rating &lt; 4 stars</p>
-                <p>Improvement below threshold</p>
+              <div className="text-xs space-y-0.5 text-muted-foreground">
+                <p>Overall rating &lt; 3.5 stars</p>
+                <p>No incentive payment issued</p>
               </div>
-              <div
-                className="mt-2 font-bold text-sm"
-                style={{ color: "oklch(0.55 0.02 240)" }}
-              >
+              <div className="mt-2 font-bold text-sm text-muted-foreground">
                 $0
               </div>
             </div>
@@ -345,45 +292,45 @@ export default function PayForImprovement({
         </CardContent>
       </Card>
 
-      {/* Summary */}
+      {/* KPI summary row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="rounded-none border">
+        <Card className="rounded-none border" data-ocid="pfi.total.card">
           <CardContent className="p-3 flex items-center gap-3">
             <TrendingUp className="w-6 h-6 text-gov-navy flex-shrink-0" />
             <div>
               <div className="text-xs text-muted-foreground uppercase font-semibold">
-                Total Records
+                Total Providers
               </div>
               <div className="text-2xl font-bold text-gov-navy">
-                {PAY_FOR_IMPROVEMENT_DATA.length}
+                {providerRows.length}
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="rounded-none border">
+        <Card className="rounded-none border" data-ocid="pfi.eligible.card">
           <CardContent className="p-3 flex items-center gap-3">
             <CheckCircle2
               className="w-6 h-6 flex-shrink-0"
-              style={{ color: "oklch(var(--gov-green))" }}
+              style={{ color: "oklch(0.52 0.15 145)" }}
             />
             <div>
               <div className="text-xs text-muted-foreground uppercase font-semibold">
-                Eligible
+                Eligible (incl. Highly)
               </div>
               <div
                 className="text-2xl font-bold"
-                style={{ color: "oklch(var(--gov-green))" }}
+                style={{ color: "oklch(0.52 0.15 145)" }}
               >
                 {eligibleCount}
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="rounded-none border">
+        <Card className="rounded-none border" data-ocid="pfi.not_eligible.card">
           <CardContent className="p-3 flex items-center gap-3">
             <XCircle
               className="w-6 h-6 flex-shrink-0"
-              style={{ color: "oklch(var(--gov-red))" }}
+              style={{ color: "oklch(0.52 0.22 25)" }}
             />
             <div>
               <div className="text-xs text-muted-foreground uppercase font-semibold">
@@ -391,18 +338,18 @@ export default function PayForImprovement({
               </div>
               <div
                 className="text-2xl font-bold"
-                style={{ color: "oklch(var(--gov-red))" }}
+                style={{ color: "oklch(0.52 0.22 25)" }}
               >
-                {PAY_FOR_IMPROVEMENT_DATA.length - eligibleCount}
+                {notEligibleCount}
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="rounded-none border">
+        <Card className="rounded-none border" data-ocid="pfi.funding.card">
           <CardContent className="p-3 flex items-center gap-3">
             <DollarSign
               className="w-6 h-6 flex-shrink-0"
-              style={{ color: "oklch(var(--gov-gold-dark))" }}
+              style={{ color: "oklch(0.60 0.14 72)" }}
             />
             <div>
               <div className="text-xs text-muted-foreground uppercase font-semibold">
@@ -410,256 +357,239 @@ export default function PayForImprovement({
               </div>
               <div
                 className="text-xl font-bold"
-                style={{ color: "oklch(var(--gov-gold-dark))" }}
+                style={{ color: "oklch(0.38 0.14 72)" }}
               >
-                ${(totalFunding / 1000).toFixed(0)}k
+                ${(totalFunding / 1_000_000).toFixed(2)}M
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main table */}
+      {/* Provider eligibility table */}
       <Card className="rounded-none border">
         <CardHeader className="pb-2 pt-4 px-4 border-b">
           <CardTitle className="text-sm font-semibold text-gov-navy">
-            {currentQuarter} Pay-for-Improvement Eligibility Report
+            {currentQuarter} Provider Eligibility Report — All{" "}
+            {providerRows.length} Providers
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full gov-table">
+            <table className="w-full gov-table" data-ocid="pfi.table">
               <thead>
                 <tr>
                   <th className="text-left">Provider</th>
-                  <th className="text-left">Metric Type</th>
-                  <th className="text-right">Benchmark</th>
-                  <th className="text-right">Baseline</th>
-                  <th className="text-right">Current</th>
-                  <th className="text-right">vs Benchmark %</th>
-                  <th className="text-right">vs Baseline %</th>
-                  <th className="text-right">Threshold</th>
+                  <th className="text-left">Location</th>
                   <th className="text-left">Overall Rating</th>
-                  <th className="text-left">Funding Eligible</th>
+                  <th className="text-right">Improvement %</th>
+                  <th className="text-left">Eligibility Status</th>
                   <th className="text-right">Est. Funding</th>
                   <th className="text-center">Alert</th>
                 </tr>
               </thead>
               <tbody>
-                {PAY_FOR_IMPROVEMENT_DATA.map((row) => {
-                  const threshold = PAY_FOR_IMPROVEMENT_THRESHOLDS.find(
-                    (t) => t.metric === row.metric,
-                  );
-                  const metricBenchmark = METRIC_BENCHMARKS[row.metric];
-
-                  // Compute improvement using correct formula:
-                  // ((Current − Previous) / |Previous|) × 100, capped at ±100%
-                  const computedImprovementPct = computeImprovementPct(
-                    row.baseline,
-                    row.current,
-                    metricBenchmark?.isLowerBetter ?? false,
-                  );
-                  const aboveThreshold =
-                    computedImprovementPct >= (threshold?.threshold || 0);
-                  const overallStars = getProviderOverallStars(
-                    row.provider,
-                    currentQuarter,
-                  );
-
-                  // Dynamic eligibility: must meet improvement threshold AND have eligible rating tier
-                  // High-performing providers (>= 4.0 stars) are always eligible
-                  const ratingEligible =
-                    overallStars !== null
-                      ? calcIncentiveEligibilityTier(overallStars, 0, 1)
-                          .eligible
-                      : false;
-                  const dynamicEligible =
-                    ratingEligible &&
-                    (aboveThreshold ||
-                      (overallStars !== null && overallStars >= 4.5));
-
-                  // Benchmark improvement %
-                  let vsBenchmarkPct: number | null = null;
-                  if (metricBenchmark) {
-                    vsBenchmarkPct = calcBenchmarkImprovement(
-                      row.current,
-                      metricBenchmark.benchmarkValue,
-                      metricBenchmark.isLowerBetter,
-                    );
-                  }
-
-                  // Baseline improvement % (same as computedImprovementPct, shown separately)
-                  const vsBaselinePct = computedImprovementPct;
-
-                  const benchmarkColor = (pct: number) =>
-                    pct >= 0
-                      ? "oklch(var(--gov-green))"
-                      : "oklch(var(--gov-red))";
-
-                  return (
-                    <tr key={row.id}>
-                      <td className="font-medium">{row.provider}</td>
-                      <td>{row.metric}</td>
-                      <td className="text-right text-muted-foreground text-xs">
-                        {metricBenchmark
-                          ? `${metricBenchmark.benchmarkValue}${metricBenchmark.isLowerBetter ? "" : "%"}`
-                          : "—"}
-                      </td>
-                      <td className="text-right">{row.baseline.toFixed(1)}%</td>
-                      <td className="text-right">{row.current.toFixed(1)}%</td>
-                      <td className="text-right">
-                        {vsBenchmarkPct !== null ? (
-                          <span
-                            className="font-bold text-xs"
-                            style={{ color: benchmarkColor(vsBenchmarkPct) }}
-                          >
-                            {vsBenchmarkPct >= 0 ? "+" : ""}
-                            {vsBenchmarkPct.toFixed(1)}%
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td
-                        className="text-right font-bold"
+                {providerRows.map((row, idx) => (
+                  <tr key={row.id} data-ocid={`pfi.item.${idx + 1}`}>
+                    <td className="font-medium">{row.name}</td>
+                    <td className="text-muted-foreground text-xs">
+                      {row.city}, {row.state}
+                    </td>
+                    <td>
+                      <StarRating
+                        value={row.stars}
+                        size="sm"
+                        showLabel={false}
+                      />
+                      <span className="text-xs text-muted-foreground ml-1">
+                        {row.stars.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <span
+                        className="font-bold text-xs"
                         style={{
-                          color: aboveThreshold
-                            ? "oklch(var(--gov-green))"
-                            : "oklch(var(--gov-red))",
+                          color:
+                            row.improvementPct >= 0
+                              ? "oklch(0.45 0.15 145)"
+                              : "oklch(0.52 0.22 25)",
                         }}
                       >
-                        {vsBaselinePct >= 0 ? "+" : ""}
-                        {vsBaselinePct.toFixed(1)}%
-                      </td>
-                      <td className="text-right text-muted-foreground">
-                        {threshold?.threshold ?? "—"}%
-                      </td>
-                      <td>
-                        {overallStars !== null ? (
-                          <StarRating
-                            value={overallStars}
-                            size="sm"
-                            showLabel={false}
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <IncentiveEligibilityBadge
-                          eligible={dynamicEligible}
-                          tier={
-                            overallStars !== null && overallStars >= 4.5
-                              ? "Highly Eligible"
-                              : undefined
-                          }
-                          size="sm"
-                        />
-                      </td>
-                      <td className="text-right font-semibold">
-                        {row.funding > 0
-                          ? `$${row.funding.toLocaleString()}`
-                          : "—"}
-                      </td>
-                      <td className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 rounded-none"
-                          title={`View performance alert for ${row.provider}`}
-                          onClick={() => handleViewAlert(row.provider)}
-                          data-ocid="pfi.alert.button"
+                        {row.improvementPct >= 0 ? "+" : ""}
+                        {row.improvementPct.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td>
+                      <IncentiveEligibilityBadge
+                        eligible={row.eligible}
+                        tier={row.tier}
+                        size="sm"
+                      />
+                    </td>
+                    <td className="text-right">
+                      {row.eligible ? (
+                        <span
+                          className="font-semibold text-sm"
+                          style={{ color: "oklch(0.38 0.14 72)" }}
                         >
-                          <AlertTriangle
-                            className="w-3.5 h-3.5"
-                            style={{
-                              color:
-                                overallStars !== null && overallStars >= 5
-                                  ? "oklch(0.45 0.15 145)"
-                                  : overallStars !== null && overallStars <= 2
-                                    ? "oklch(0.48 0.20 25)"
-                                    : "oklch(0.60 0.08 72)",
-                            }}
-                          />
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                          ${row.estimatedFunding.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">
+                          $0
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 rounded-none"
+                        title={`View alert for ${row.name}`}
+                        onClick={() => handleViewAlert(row)}
+                        data-ocid={`pfi.alert.button.${idx + 1}`}
+                      >
+                        <AlertTriangle
+                          className="w-3.5 h-3.5"
+                          style={{
+                            color:
+                              row.stars >= 4.5
+                                ? "oklch(0.45 0.15 145)"
+                                : row.stars <= 2
+                                  ? "oklch(0.48 0.20 25)"
+                                  : "oklch(0.60 0.08 72)",
+                          }}
+                        />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
 
-      {/* Chart */}
-      <Card className="rounded-none border">
-        <CardHeader className="pb-2 pt-4 px-4 border-b">
-          <CardTitle className="text-sm font-semibold text-gov-navy">
-            Average Improvement % by Metric Type vs Threshold
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Dashed line indicates minimum eligibility threshold
-          </p>
-        </CardHeader>
-        <CardContent className="p-4">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart
-              data={chartData}
-              margin={{ top: 5, right: 20, bottom: 60, left: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                vertical={false}
-                stroke="oklch(0.90 0.01 240)"
-              />
-              <XAxis
-                dataKey="metric"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                angle={-30}
-                textAnchor="end"
-                interval={0}
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  fontSize: "12px",
-                  borderRadius: "2px",
-                  border: "1px solid oklch(0.87 0.012 240)",
-                }}
-                formatter={(value: number, name: string) => [`${value}%`, name]}
-              />
-              <ReferenceLine
-                y={15}
-                stroke="oklch(0.52 0.22 25)"
-                strokeDasharray="6 3"
-                label={{ value: "Min. 15%", position: "right", fontSize: 10 }}
-              />
-              <Bar
-                dataKey="improvement"
-                name="Avg. Improvement %"
-                radius={[2, 2, 0, 0]}
+      {/* Funding distribution section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Bar chart */}
+        <Card className="rounded-none border">
+          <CardHeader className="pb-2 pt-4 px-4 border-b">
+            <CardTitle className="text-sm font-semibold text-gov-navy">
+              Funding Distribution by Eligibility Tier
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Provider count per eligibility tier
+            </p>
+          </CardHeader>
+          <CardContent className="p-4">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={chartData}
+                margin={{ top: 5, right: 20, bottom: 10, left: 0 }}
               >
-                {chartData.map((entry) => (
-                  <Cell
-                    key={`cell-${entry.metric}`}
-                    fill={
-                      entry.eligible
-                        ? "oklch(0.52 0.15 145)"
-                        : "oklch(0.52 0.22 25)"
-                    }
-                  />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="oklch(0.90 0.01 240)"
+                />
+                <XAxis
+                  dataKey="tier"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    fontSize: "12px",
+                    borderRadius: "2px",
+                    border: "1px solid oklch(0.87 0.012 240)",
+                  }}
+                  formatter={(value: number) => [`${value} providers`, "Count"]}
+                />
+                <Bar dataKey="count" name="Providers" radius={[2, 2, 0, 0]}>
+                  {chartData.map((entry) => (
+                    <Cell
+                      key={`cell-${entry.label}`}
+                      fill={chartFill(entry.label)}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Funding summary table */}
+        <Card className="rounded-none border">
+          <CardHeader className="pb-2 pt-4 px-4 border-b">
+            <CardTitle className="text-sm font-semibold text-gov-navy">
+              Tier Funding Summary
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Aggregate payment per tier
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="w-full gov-table" data-ocid="pfi.funding.table">
+              <thead>
+                <tr>
+                  <th className="text-left">Tier</th>
+                  <th className="text-right">Providers</th>
+                  <th className="text-right">Per Provider</th>
+                  <th className="text-right">Total Funding</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fundingSummary.map((row) => (
+                  <tr key={row.tier}>
+                    <td>
+                      <IncentiveEligibilityBadge
+                        eligible={row.tier !== "Not Eligible"}
+                        tier={row.tier}
+                        size="sm"
+                      />
+                    </td>
+                    <td className="text-right font-semibold">{row.count}</td>
+                    <td className="text-right text-muted-foreground text-xs">
+                      {row.perProvider > 0
+                        ? `$${row.perProvider.toLocaleString()}`
+                        : "$0"}
+                    </td>
+                    <td
+                      className="text-right font-semibold"
+                      style={{
+                        color:
+                          row.totalFunding > 0
+                            ? "oklch(0.38 0.14 72)"
+                            : "oklch(0.55 0.02 240)",
+                      }}
+                    >
+                      {row.totalFunding > 0
+                        ? `$${(row.totalFunding / 1000).toFixed(0)}k`
+                        : "$0"}
+                    </td>
+                  </tr>
                 ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+                <tr style={{ borderTop: "2px solid oklch(0.87 0.012 240)" }}>
+                  <td className="font-bold text-gov-navy" colSpan={2}>
+                    Total
+                  </td>
+                  <td />
+                  <td className="text-right font-bold text-gov-navy">
+                    ${(totalFunding / 1_000_000).toFixed(2)}M
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Performance Alert Modal */}
       <PerformanceAlertModal
@@ -667,47 +597,6 @@ export default function PayForImprovement({
         onClose={() => setAlertOpen(false)}
         alert={currentAlert}
       />
-
-      {/* Threshold configuration */}
-      <Card className="rounded-none border">
-        <CardHeader className="pb-2 pt-4 px-4 border-b">
-          <CardTitle className="text-sm font-semibold text-gov-navy">
-            Configurable Eligibility Thresholds
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Current threshold configuration for {currentQuarter}
-          </p>
-        </CardHeader>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {PAY_FOR_IMPROVEMENT_THRESHOLDS.map((t) => (
-              <div
-                key={t.metric}
-                className="border p-3 rounded-none"
-                style={{ background: "oklch(0.97 0.01 254)" }}
-              >
-                <div className="font-semibold text-sm text-gov-navy mb-0.5">
-                  {t.metric}
-                </div>
-                <div className="text-xs text-muted-foreground mb-1">
-                  {t.description}
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span
-                    className="text-xl font-bold"
-                    style={{ color: "oklch(var(--gov-gold-dark))" }}
-                  >
-                    {t.threshold}%
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t.unit}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

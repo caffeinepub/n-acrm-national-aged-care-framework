@@ -3538,7 +3538,15 @@ export function getUnifiedProviderDomainScores(
   if (quarter === "Q4-2025") {
     const unified = UNIFIED_PROVIDERS.find((p) => p.id === providerId);
     if (unified) return unified.domainScores;
-    return getProviderDomainStarScores(providerId);
+    const starScores = getProviderDomainStarScores(providerId);
+    return {
+      safety: starsToPercentScore(starScores.safety),
+      preventive: starsToPercentScore(starScores.preventive),
+      quality: starsToPercentScore(starScores.quality),
+      staffing: starsToPercentScore(starScores.staffing),
+      compliance: starsToPercentScore(starScores.compliance),
+      experience: starsToPercentScore(starScores.experience),
+    };
   }
   // For non-base quarters, recalculate from quarter-specific indicator data
   const inds = getUnifiedProviderIndicators(providerId, quarter);
@@ -5441,3 +5449,6 @@ export const SCREENING_TYPE_LABELS: Record<string, string> = {
   behavioral_assessment: "Behavioral Assessment",
   advance_care_planning: "Advance Care Planning Review",
 };
+
+// Canonical provider master — all modules must import from this
+export const PROVIDER_MASTER = UNIFIED_PROVIDERS;
