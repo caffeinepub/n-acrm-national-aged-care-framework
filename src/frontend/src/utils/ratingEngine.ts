@@ -40,18 +40,19 @@ export function scoreToFractionalStars(score: number): number {
 }
 
 /**
- * Converts a 0–100 overall score to a 1–5 star rating band:
- * 90–100 → 5 stars
- * 80–89  → 4 stars
- * 70–79  → 3 stars
- * 60–69  → 2 stars
- * < 60   → 1 star
+ * Converts a 0–100 overall score to a 1–5 star rating band.
+ * Thresholds per N-ACRM specification:
+ *   90–100 → 5 stars
+ *   75–89  → 4 stars
+ *   60–74  → 3 stars
+ *   40–59  → 2 stars
+ *   < 40   → 1 star
  */
 export function overallScoreToStars(score: number): number {
   if (score >= 90) return 5;
-  if (score >= 80) return 4;
-  if (score >= 70) return 3;
-  if (score >= 60) return 2;
+  if (score >= 75) return 4;
+  if (score >= 60) return 3;
+  if (score >= 40) return 2;
   return 1;
 }
 
@@ -127,7 +128,7 @@ export function calcIndicatorStarRating(
   const baseRatings: Record<number, number> = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 };
   const base = baseRatings[quintile] ?? 3;
   const trendAdj =
-    trend === "improving" ? 0.2 : trend === "declining" ? -0.2 : 0;
+    trend === "improving" ? 0.15 : trend === "declining" ? -0.15 : 0;
   return Math.min(5, Math.max(1, base + trendAdj));
 }
 
@@ -135,10 +136,38 @@ export function calcIndicatorStarRating(
  * Calculates domain score (0–100) from array of indicator performance scores (0–100).
  */
 export function calcDomainScore(indicatorScores: number[]): number {
-  if (indicatorScores.length === 0) return 75;
+  if (indicatorScores.length === 0) return 50;
   return (
     indicatorScores.reduce((sum, s) => sum + s, 0) / indicatorScores.length
   );
+}
+
+/**
+ * Applies trend adjustment to a 0–100 domain or overall score.
+ * Declining: −5 points. Improving: +2 points. Stable: 0.
+ * Result clamped to [0, 100].
+ */
+export function applyTrendAdjustment(
+  score: number,
+  trend: "improving" | "declining" | "stable",
+): number {
+  const adj = trend === "declining" ? -5 : trend === "improving" ? 2 : 0;
+  return Math.max(0, Math.min(100, score + adj));
+}
+
+/**
+ * Computes the dominant trend across all indicators.
+ * Returns 'declining' if majority are declining, 'improving' if majority improving, else 'stable'.
+ */
+export function computeDominantTrend(
+  trends: Array<"improving" | "stable" | "declining">,
+): "improving" | "declining" | "stable" {
+  if (trends.length === 0) return "stable";
+  const declining = trends.filter((t) => t === "declining").length;
+  const improving = trends.filter((t) => t === "improving").length;
+  if (declining > trends.length * 0.5) return "declining";
+  if (improving > trends.length * 0.5) return "improving";
+  return "stable";
 }
 
 /**
@@ -160,17 +189,19 @@ export interface EligibilityResult {
 }
 
 /**
- * Pay-for-Improvement eligibility.
+ * Pay-for-Improvement eligibility — STRICT data-driven rules.
  *
- * Rules (synchronized with benchmarkUtils.calcIncentiveEligibilityTier):
- *   Stars ≥ 4.5 → Highly Eligible ($180,000) — automatically, no improvement requirement
- *   Stars ≥ 4.0 AND improvement ≥ 10% AND screening ≥ 85% → Maximum Eligible ($180,000)
- *   Stars ≥ 4.0 AND improvement ≥ 10% → Bonus Eligible ($120,000)
- *   Stars ≥ 4.0 → Base Eligible ($75,000)
- *   Stars ≥ 3.5 AND improvement ≥ 15% → Eligible ($50,000)
+ * HARD DISQUALIFIERS (any one → Not Eligible):
+ *   - Majority of indicators below benchmark (> 50%)
+ *   - Overall rating < 3 stars
+ *   - Dominant trend is declining
+ *
+ * ELIGIBILITY TIERS:
+ *   Stars ≥ 4.5 AND strong performance → Highly Eligible ($180,000)
+ *   Stars ≥ 4.0 AND improvement > 0 AND majority above benchmark → Eligible ($75,000–$180,000)
  *   Otherwise → Not Eligible ($0)
  *
- * HIGH-PERFORMING PROVIDERS (≥ 4.0 stars) ARE NEVER "Not Eligible".
+ * VALIDATION RULE: If performance is poor → MUST NOT show Eligible.
  */
 export function calcPayForImprovementEligibility(
   overallStars: number,
@@ -178,8 +209,27 @@ export function calcPayForImprovementEligibility(
   screeningCompletion = 0,
   belowBenchmarkCount = 0,
   totalIndicatorCount = 0,
+  dominantTrend: "improving" | "declining" | "stable" = "stable",
 ): EligibilityResult {
-  // ≥ 4.5 stars → Highly Eligible (automatic, no improvement threshold needed)
+  const majorityBelow =
+    totalIndicatorCount > 0 && belowBenchmarkCount > totalIndicatorCount * 0.5;
+
+  // ── HARD DISQUALIFIERS ────────────────────────────────────────────────────
+  // Rule 1: Majority indicators below benchmark → Not Eligible
+  if (majorityBelow) {
+    return { tier: "Not Eligible", eligible: false, estimatedPayment: 0 };
+  }
+  // Rule 2: Rating < 3 stars → Not Eligible
+  if (overallStars < 3) {
+    return { tier: "Not Eligible", eligible: false, estimatedPayment: 0 };
+  }
+  // Rule 3: Dominant trend is declining → Not Eligible
+  if (dominantTrend === "declining") {
+    return { tier: "Not Eligible", eligible: false, estimatedPayment: 0 };
+  }
+
+  // ── ELIGIBILITY TIERS ─────────────────────────────────────────────────────
+  // Highly Eligible: ≥ 4.5 stars + strong domain performance
   if (overallStars >= 4.5) {
     return {
       tier: "Highly Eligible",
@@ -187,34 +237,40 @@ export function calcPayForImprovementEligibility(
       estimatedPayment: 180000,
     };
   }
-  // ≥ 4.0 stars → Eligible at some tier (never Not Eligible)
-  if (overallStars >= 4.0) {
-    if (safetyImprovement >= 10 && screeningCompletion >= 85) {
-      return {
-        tier: "Maximum Eligible",
-        eligible: true,
-        estimatedPayment: 180000,
-      };
-    }
-    if (safetyImprovement >= 10) {
-      return {
-        tier: "Bonus Eligible",
-        eligible: true,
-        estimatedPayment: 120000,
-      };
-    }
-    // Base eligibility for any ≥ 4.0 star provider
+  // Maximum Eligible: ≥ 4.0 stars + notable improvement + high screening
+  if (
+    overallStars >= 4.0 &&
+    safetyImprovement >= 10 &&
+    screeningCompletion >= 85
+  ) {
+    return {
+      tier: "Maximum Eligible",
+      eligible: true,
+      estimatedPayment: 180000,
+    };
+  }
+  // Bonus Eligible: ≥ 4.0 stars + notable improvement
+  if (overallStars >= 4.0 && safetyImprovement >= 10) {
+    return {
+      tier: "Bonus Eligible",
+      eligible: true,
+      estimatedPayment: 120000,
+    };
+  }
+  // Base Eligible: ≥ 4.0 stars + positive improvement
+  if (overallStars >= 4.0 && safetyImprovement > 0) {
     return { tier: "Base Eligible", eligible: true, estimatedPayment: 75000 };
   }
-  // 3.5–3.99 stars with notable improvement
-  if (overallStars >= 3.5 && safetyImprovement >= 15) {
-    return { tier: "Eligible", eligible: true, estimatedPayment: 50000 };
+  // ≥ 4.0 stars but no improvement → Not Eligible
+  if (overallStars >= 4.0) {
+    return { tier: "Not Eligible", eligible: false, estimatedPayment: 0 };
   }
-  // Below 3.5 or insufficient improvement — use tier helper for consistency
+  // < 4.0 stars → use tier helper for consistency
   const { tier, eligible } = calcIncentiveEligibilityTier(
     overallStars,
     belowBenchmarkCount,
     totalIndicatorCount,
+    dominantTrend,
   );
   return { tier, eligible, estimatedPayment: 0 };
 }

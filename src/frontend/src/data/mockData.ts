@@ -1,3 +1,7 @@
+import {
+  calcIncentiveEligibilityTier,
+  getBenchmarkStatus,
+} from "../utils/benchmarkUtils";
 // Mock data for sections that don't have full backend support
 import {
   calcNewWeightedOverallScore,
@@ -5424,11 +5428,40 @@ export function getProviderRatingForQuarter(
   stars: number;
   eligibility: { tier: string; eligible: boolean; estimatedPayment: number };
 } {
-  const domainScores = getUnifiedProviderDomainScores(providerId, quarter);
+  // Use trend-aware domain scores for distinct per-quarter data
+  const domainScores = getProviderDomainScoresForQuarter(providerId, quarter);
   const overallScore = calcNewWeightedOverallScore(domainScores);
   const stars = overallScoreToStars(overallScore);
-  const eligibility = calcPayForImprovementEligibility(stars, 0, 0);
-  return { domainScores, overallScore, stars, eligibility };
+
+  // Count below-benchmark indicators for proper eligibility calculation
+  const inds = getUnifiedProviderIndicators(providerId, quarter);
+  const totalCount = inds.length;
+  const belowCount = inds.filter((ind) => {
+    if (ind.nationalBenchmark === 0 || ind.rate === 0) return false;
+    return (
+      getBenchmarkStatus(ind.rate, ind.nationalBenchmark, ind.isLowerBetter) ===
+      "below"
+    );
+  }).length;
+
+  // Determine dominant trend for this provider+quarter combination
+  const providerTrend = getProviderQuarterTrend(providerId, quarter);
+
+  const { tier, eligible } = calcIncentiveEligibilityTier(
+    stars,
+    belowCount,
+    totalCount,
+    providerTrend,
+  );
+  const estimatedPayment =
+    tier === "Highly Eligible" ? 180000 : tier === "Eligible" ? 75000 : 0;
+
+  return {
+    domainScores,
+    overallScore,
+    stars,
+    eligibility: { tier, eligible, estimatedPayment },
+  };
 }
 
 export const RISK_CRITERIA_LABELS: Record<string, string> = {
@@ -5452,3 +5485,147 @@ export const SCREENING_TYPE_LABELS: Record<string, string> = {
 
 // Canonical provider master — all modules must import from this
 export const PROVIDER_MASTER = UNIFIED_PROVIDERS;
+
+// ── Per-provider trend patterns ───────────────────────────────────────────────
+// Deterministic assignment based on provider ID — no randomness
+const PROVIDER_TREND_PATTERNS: Record<
+  string,
+  "improving" | "declining" | "stable"
+> = {
+  "SYD-001": "improving",
+  "SYD-002": "declining",
+  "SYD-003": "stable",
+  "MEL-001": "improving",
+  "MEL-002": "declining",
+  "BRI-001": "improving",
+  "BRI-002": "stable",
+  "PER-001": "declining",
+  "PER-002": "improving",
+  "PER-003": "stable",
+  "PER-004": "declining",
+  "ADL-001": "improving",
+  "ADL-002": "stable",
+  "ADL-003": "declining",
+  "ADL-004": "improving",
+  "CAN-001": "stable",
+  "CAN-002": "improving",
+  "CAN-003": "declining",
+  "CAN-004": "stable",
+  "HOB-001": "improving",
+  "HOB-002": "stable",
+  "HOB-003": "declining",
+  "HOB-004": "improving",
+  "DAR-001": "declining",
+  "DAR-002": "stable",
+  "DAR-003": "improving",
+  "DAR-004": "declining",
+};
+
+/**
+ * Returns the overall trend pattern for a provider.
+ * "improving" = provider is getting better toward Q4
+ * "declining" = provider is getting worse toward Q4
+ * "stable"    = provider performance is mostly flat
+ */
+export function getProviderTrendPattern(
+  providerId: string,
+): "improving" | "declining" | "stable" {
+  // Named lookup first
+  if (providerId in PROVIDER_TREND_PATTERNS) {
+    return PROVIDER_TREND_PATTERNS[providerId];
+  }
+  // Deterministic fallback based on hash of ID
+  const code = providerId
+    .split("")
+    .reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const patterns: ("improving" | "declining" | "stable")[] = [
+    "improving",
+    "declining",
+    "stable",
+  ];
+  return patterns[code % 3];
+}
+
+/**
+ * Returns the quarter-over-quarter trend for a provider at a given quarter.
+ * This is what shows as ↑/↓/→ in tables.
+ */
+export function getProviderQuarterTrend(
+  providerId: string,
+  currentQuarter: string,
+): "improving" | "declining" | "stable" {
+  const pattern = getProviderTrendPattern(providerId);
+  // Map pattern + quarter to per-quarter direction
+  // improving pattern: Q1→Q2 = improving, Q2→Q3 = improving, Q3→Q4 = improving
+  // declining pattern: Q1→Q2 = declining, Q2→Q3 = declining, Q3→Q4 = declining
+  // stable: mostly stable with minor fluctuations
+  if (pattern === "stable") {
+    // Stable providers have minor up/down fluctuations
+    const stableMap: Record<string, "improving" | "declining" | "stable"> = {
+      "Q1-2025": "stable",
+      "Q2-2025": "improving",
+      "Q3-2025": "stable",
+      "Q4-2025": "stable",
+    };
+    return stableMap[currentQuarter] ?? "stable";
+  }
+  return pattern;
+}
+
+// ── Trend-aware domain score multipliers ─────────────────────────────────────
+const TREND_QUARTER_MULTIPLIERS: Record<
+  "improving" | "declining" | "stable",
+  Record<string, number>
+> = {
+  improving: {
+    "Q1-2025": 0.87,
+    "Q2-2025": 0.92,
+    "Q3-2025": 0.97,
+    "Q4-2025": 1.0,
+  },
+  declining: {
+    "Q1-2025": 1.13,
+    "Q2-2025": 1.06,
+    "Q3-2025": 0.97,
+    "Q4-2025": 0.9,
+  },
+  stable: {
+    "Q1-2025": 0.96,
+    "Q2-2025": 1.02,
+    "Q3-2025": 0.98,
+    "Q4-2025": 1.0,
+  },
+};
+
+/**
+ * Returns domain scores for a provider for the given quarter,
+ * using per-provider trend patterns for distinct quarterly variation.
+ */
+export function getProviderDomainScoresForQuarter(
+  providerId: string,
+  quarter = "Q4-2025",
+): {
+  safety: number;
+  preventive: number;
+  quality: number;
+  staffing: number;
+  compliance: number;
+  experience: number;
+} {
+  // Get Q4 base
+  const base = getUnifiedProviderDomainScores(providerId, "Q4-2025");
+  if (quarter === "Q4-2025") return base;
+
+  const pattern = getProviderTrendPattern(providerId);
+  const mult = TREND_QUARTER_MULTIPLIERS[pattern][quarter] ?? 1.0;
+
+  const clamp = (v: number) => Math.min(100, Math.max(5, v));
+  return {
+    safety: clamp(base.safety * mult),
+    preventive: clamp(base.preventive * mult),
+    quality: clamp(base.quality * mult),
+    staffing: clamp(base.staffing * mult),
+    compliance: clamp(base.compliance * mult),
+    experience: clamp(base.experience * mult),
+  };
+}

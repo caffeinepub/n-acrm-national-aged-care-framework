@@ -3,7 +3,6 @@ import { PerformanceAlertModal } from "@/components/ui/PerformanceAlertModal";
 import { StarRating } from "@/components/ui/StarRating";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { calcIncentiveEligibilityTier } from "@/utils/benchmarkUtils";
 import type { PerformanceAlert } from "@/utils/performanceAlerts";
 import { resolveAlertToShow } from "@/utils/performanceAlerts";
 import {
@@ -26,6 +25,7 @@ import {
 } from "recharts";
 import {
   PROVIDER_MASTER,
+  getProviderQuarterTrend,
   getProviderRatingForQuarter,
   getUnifiedProviderIndicators,
 } from "../../data/mockData";
@@ -108,12 +108,7 @@ export default function PayForImprovement({
     return PROVIDER_MASTER.map((provider) => {
       const rating = getProviderRatingForQuarter(provider.id, currentQuarter);
       const stars = rating.stars;
-      const { tier: rawTier, eligible } = calcIncentiveEligibilityTier(
-        stars,
-        0,
-        1,
-      );
-      const finalTier = stars >= 4.5 ? "Highly Eligible" : rawTier;
+      const { tier: finalTier, eligible } = rating.eligibility;
       // VALIDATION: Not Eligible → funding MUST be $0
       const estimatedFunding = eligible
         ? (TIER_FUNDING[finalTier] ?? 75000)
@@ -382,6 +377,7 @@ export default function PayForImprovement({
                   <th className="text-left">Provider</th>
                   <th className="text-left">Location</th>
                   <th className="text-left">Overall Rating</th>
+                  <th className="text-left">Trend</th>
                   <th className="text-right">Improvement %</th>
                   <th className="text-left">Eligibility Status</th>
                   <th className="text-right">Est. Funding</th>
@@ -394,6 +390,34 @@ export default function PayForImprovement({
                     <td className="font-medium">{row.name}</td>
                     <td className="text-muted-foreground text-xs">
                       {row.city}, {row.state}
+                    </td>
+                    <td>
+                      {(() => {
+                        const t = getProviderQuarterTrend(
+                          row.id,
+                          currentQuarter,
+                        );
+                        return (
+                          <span
+                            style={{
+                              color:
+                                t === "improving"
+                                  ? "oklch(0.45 0.15 145)"
+                                  : t === "declining"
+                                    ? "oklch(0.52 0.22 25)"
+                                    : "oklch(0.55 0.02 252)",
+                              fontWeight: 700,
+                              fontSize: "0.8rem",
+                            }}
+                          >
+                            {t === "improving"
+                              ? "↑"
+                              : t === "declining"
+                                ? "↓"
+                                : "→"}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td>
                       <StarRating

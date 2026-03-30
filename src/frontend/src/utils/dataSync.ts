@@ -33,7 +33,13 @@ export function getAuthorativeProviderRating(
 export function validateEligibility(
   stars: number,
   estimatedFunding: number,
+  dominantTrend: "improving" | "declining" | "stable" = "stable",
+  majorityBelowBenchmark = false,
 ): { eligible: boolean; correctedFunding: number; tier: string } {
+  // HARD DISQUALIFIERS — must show Not Eligible regardless of stars
+  if (stars < 3 || dominantTrend === "declining" || majorityBelowBenchmark) {
+    return { eligible: false, correctedFunding: 0, tier: "Not Eligible" };
+  }
   if (stars >= 4.5) {
     return {
       eligible: true,
@@ -48,15 +54,8 @@ export function validateEligibility(
       tier: "Eligible",
     };
   }
-  if (stars < 3.5) {
-    return { eligible: false, correctedFunding: 0, tier: "Not Eligible" };
-  }
-  // 3.5–3.99
-  return {
-    eligible: true,
-    correctedFunding: estimatedFunding,
-    tier: "Eligible",
-  };
+  // 3.0–3.99 → Not Eligible (must reach ≥ 4.0 to qualify)
+  return { eligible: false, correctedFunding: 0, tier: "Not Eligible" };
 }
 
 /**
@@ -84,4 +83,43 @@ export function assertRatingConsistency(
  */
 export function getQuarterEligibility(providerId: string, quarter: string) {
   return getProviderRatingForQuarter(providerId, quarter).eligibility;
+}
+
+/**
+ * Validation engine — cross-checks data consistency and auto-corrects known violations.
+ * Rule: rating < 3 → cannot be Low Risk
+ * Rule: improvement > 100% → auto-clamp
+ */
+export function runValidationEngine(
+  stars: number,
+  riskLevel: string,
+  improvementPct: number,
+  belowBenchmarkCount: number,
+  totalIndicators: number,
+): { correctedRisk: string; correctedImprovement: number; warnings: string[] } {
+  const warnings: string[] = [];
+
+  // Rule: rating < 3 → cannot be Low Risk
+  let correctedRisk = riskLevel;
+  if (stars < 3 && riskLevel === "Low") {
+    correctedRisk = "Medium";
+    warnings.push("Risk level upgraded: rating < 3 cannot be Low Risk");
+  }
+
+  // Rule: below benchmark majority → cannot be Eligible (handled in eligibility engine)
+  if (belowBenchmarkCount > totalIndicators * 0.6 && stars < 4.0) {
+    warnings.push(
+      `Majority of indicators (${belowBenchmarkCount}/${totalIndicators}) are below benchmark`,
+    );
+  }
+
+  // Rule: improvement > 100% → auto-clamp
+  const correctedImprovement = Math.max(-100, Math.min(100, improvementPct));
+  if (Math.abs(improvementPct) > 100) {
+    warnings.push(
+      `Improvement % clamped from ${improvementPct.toFixed(1)}% to ${correctedImprovement.toFixed(1)}%`,
+    );
+  }
+
+  return { correctedRisk, correctedImprovement, warnings };
 }

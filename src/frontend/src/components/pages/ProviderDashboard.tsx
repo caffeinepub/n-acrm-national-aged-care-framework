@@ -32,6 +32,7 @@ import {
   DollarSign,
   Edit2,
   Save,
+  Search,
   ShieldCheck,
   TrendingUp,
   X,
@@ -755,6 +756,7 @@ const DOMAIN_WEIGHTS: Record<string, number> = {
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function ProviderDashboard() {
   const [selectedProviderId, setSelectedProviderId] = useState("SYD-001");
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -943,6 +945,17 @@ export default function ProviderDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-blue-200 text-sm">Viewing facility:</span>
+            <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded px-2">
+              <Search className="w-3.5 h-3.5 text-blue-200 flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Search provider..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent text-white placeholder-blue-300 text-sm outline-none w-36"
+                data-ocid="provider.search.input"
+              />
+            </div>
             <Select value={selectedProviderId} onValueChange={resetForProvider}>
               <SelectTrigger
                 className="w-56 bg-white/10 border-white/20 text-white"
@@ -951,7 +964,15 @@ export default function ProviderDashboard() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDERS.map((p) => (
+                {PROVIDERS.filter((p) => {
+                  if (!searchQuery) return true;
+                  const q = searchQuery.toLowerCase();
+                  return (
+                    p.name.toLowerCase().includes(q) ||
+                    p.city.toLowerCase().includes(q) ||
+                    p.state.toLowerCase().includes(q)
+                  );
+                }).map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name} ({p.state})
                   </SelectItem>

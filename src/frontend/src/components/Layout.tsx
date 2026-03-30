@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ActivePage, AppRole } from "../App";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
@@ -33,6 +34,8 @@ export default function Layout({
   currentQuarter,
   setCurrentQuarter,
 }: LayoutProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   const renderPage = () => {
     if (currentRole === "Public") {
       return <PublicView currentQuarter={currentQuarter} />;
@@ -63,7 +66,7 @@ export default function Layout({
       case "data_quality":
         return <DataQuality />;
       case "audit_governance":
-        return <AuditGovernance />;
+        return <AuditGovernance currentRole={currentRole} />;
       case "regional_provider":
         return <RegionalProviderDrillDown currentQuarter={currentQuarter} />;
       case "policy_analytics":
@@ -96,6 +99,8 @@ export default function Layout({
             activePage={activePage}
             setActivePage={setActivePage}
             currentRole={currentRole}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
           />
         )}
         <main className="flex-1 overflow-y-auto bg-background">

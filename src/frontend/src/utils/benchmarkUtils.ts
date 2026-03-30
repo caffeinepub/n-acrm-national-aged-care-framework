@@ -158,25 +158,35 @@ export function calcIncentiveEligibilityTier(
   overallStars: number,
   belowBenchmarkCount: number,
   totalIndicatorCount: number,
+  dominantTrend: "improving" | "declining" | "stable" = "stable",
 ): { tier: string; eligible: boolean } {
-  // ≥ 4.5 stars: always Highly Eligible regardless of benchmark
+  const majorityBelow =
+    totalIndicatorCount > 0 && belowBenchmarkCount > totalIndicatorCount * 0.5;
+
+  // ── HARD DISQUALIFIERS ────────────────────────────────────────────────────
+  // Rule 1: Majority of indicators worse than benchmark → Not Eligible
+  if (majorityBelow) {
+    return { tier: "Not Eligible", eligible: false };
+  }
+  // Rule 2: Rating < 3 stars → Not Eligible (poor performance)
+  if (overallStars < 3) {
+    return { tier: "Not Eligible", eligible: false };
+  }
+  // Rule 3: Declining trend → Not Eligible (performance is worsening)
+  if (dominantTrend === "declining") {
+    return { tier: "Not Eligible", eligible: false };
+  }
+
+  // ── ELIGIBILITY TIERS ─────────────────────────────────────────────────────
+  // Highly Eligible: ≥ 4.5 stars + not majority below + not declining
   if (overallStars >= 4.5) {
     return { tier: "Highly Eligible", eligible: true };
   }
-  // ≥ 4.0 stars: always Eligible regardless of benchmark
+  // Eligible: ≥ 4.0 stars + majority above/near benchmark + not declining
   if (overallStars >= 4.0) {
     return { tier: "Eligible", eligible: true };
   }
-  // 3.5–3.99 stars: eligible only if majority of indicators are NOT below benchmark
-  if (overallStars >= 3.5) {
-    const majorityBelowBenchmark =
-      totalIndicatorCount > 0 && belowBenchmarkCount > totalIndicatorCount / 2;
-    if (majorityBelowBenchmark) {
-      return { tier: "Not Eligible", eligible: false };
-    }
-    return { tier: "Eligible", eligible: true };
-  }
-  // < 3.5 stars: not eligible
+  // 3.0–3.99 stars: Not Eligible (must reach ≥ 4.0 to qualify)
   return { tier: "Not Eligible", eligible: false };
 }
 
@@ -190,10 +200,9 @@ export function isEligibleForIncentive(
   overallStars: number,
   hasBelowBenchmarkIndicators: boolean,
 ): boolean {
-  // ≥ 4.0 stars → always eligible, regardless of any below-benchmark indicators
-  if (overallStars >= 4.0) return true;
-  // < 4.0 stars: only eligible if no indicators below benchmark
-  return overallStars >= 3.5 && !hasBelowBenchmarkIndicators;
+  // Strict rule: ≥ 4.0 stars AND no majority below benchmark
+  if (overallStars >= 4.0 && !hasBelowBenchmarkIndicators) return true;
+  return false;
 }
 
 export function getBenchmarkStatusColor(
