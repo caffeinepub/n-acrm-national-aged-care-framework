@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&display=swap");
+@import "./styles/design-system.css";
 
 @tailwind base;
 @tailwind components;
@@ -56,7 +57,7 @@
     --input: 0.9 0.008 252;
     --ring: 0.22 0.07 258;
 
-    --radius: 0.25rem;
+    --radius: 0.5rem;
 
     /* ── Chart Colours ── */
     --chart-1: 0.5 0.18 230;
@@ -124,34 +125,40 @@
 @layer components {
   /* ── Status Badges ── */
   .badge-green {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
-    background: oklch(0.93 0.06 145);
-    color: oklch(0.3 0.14 145);
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background: oklch(0.94 0.06 145);
+    color: oklch(0.28 0.14 145);
+    border: 1px solid oklch(0.84 0.1 145);
   }
   .badge-red {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
-    background: oklch(0.93 0.07 25);
-    color: oklch(0.33 0.18 25);
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background: oklch(0.95 0.06 25);
+    color: oklch(0.3 0.18 25);
+    border: 1px solid oklch(0.86 0.1 25);
   }
   .badge-amber {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
-    background: oklch(0.94 0.07 65);
-    color: oklch(0.38 0.14 65);
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background: oklch(0.95 0.06 78);
+    color: oklch(0.38 0.14 72);
+    border: 1px solid oklch(0.86 0.1 78);
   }
   .badge-blue {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
-    background: oklch(0.93 0.05 230);
-    color: oklch(0.33 0.14 230);
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background: oklch(0.94 0.05 230);
+    color: oklch(0.28 0.14 230);
+    border: 1px solid oklch(0.84 0.08 230);
   }
   .badge-gray {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
-    background: oklch(0.93 0.005 252);
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background: oklch(0.94 0.006 252);
     color: oklch(0.44 0.018 252);
+    border: 1px solid oklch(0.86 0.008 252);
   }
   .badge-navy {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold;
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
     background: oklch(0.2 0.065 258);
     color: oklch(0.92 0.01 252);
+    border: 1px solid oklch(0.26 0.065 258);
   }
 
   /* ── Government Table ── */
@@ -194,7 +201,7 @@
 
   /* ── Navigation Item ── */
   .nav-item {
-    @apply flex items-center gap-2.5 px-3 py-2 rounded-sm text-xs font-medium transition-colors cursor-pointer;
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer;
     color: oklch(0.76 0.025 252);
   }
   .nav-item:hover {
@@ -222,15 +229,15 @@
 
   /* ── KPI Card ── */
   .kpi-card {
-    @apply relative overflow-hidden bg-card border rounded-sm;
-    box-shadow: 0 1px 3px oklch(0.15 0.035 258 / 0.08), 0 1px 2px -1px
-      oklch(0.15 0.035 258 / 0.06);
+    @apply relative overflow-hidden bg-card border rounded-lg;
+    box-shadow: 0 1px 4px oklch(0.15 0.035 258 / 0.09), 0 1px 2px -1px
+      oklch(0.15 0.035 258 / 0.07);
     transition: box-shadow 0.2s ease, transform 0.2s ease;
   }
   .kpi-card:hover {
-    box-shadow: 0 8px 24px oklch(0.15 0.035 258 / 0.14), 0 3px 8px -3px
-      oklch(0.15 0.035 258 / 0.1);
-    transform: translateY(-2px);
+    box-shadow: 0 8px 28px oklch(0.15 0.035 258 / 0.16), 0 3px 8px -3px
+      oklch(0.15 0.035 258 / 0.12);
+    transform: translateY(-3px);
   }
   .kpi-card-accent {
     @apply absolute inset-x-0 top-0;
@@ -239,12 +246,13 @@
 
   /* ── Section Card ── */
   .section-card {
-    @apply bg-card border rounded-sm;
+    @apply bg-card border rounded-lg;
     box-shadow: 0 1px 3px oklch(0.15 0.035 258 / 0.06);
   }
   .section-card-header {
     @apply flex items-center justify-between px-4 py-3 border-b;
     background: oklch(0.988 0.004 254);
+    border-radius: 0.5rem 0.5rem 0 0;
   }
   .section-card-title {
     @apply text-sm font-semibold flex items-center gap-2;
@@ -253,7 +261,7 @@
 
   /* ── Insight Card ── */
   .insight-card {
-    @apply flex items-start gap-3 p-3 rounded-sm border-l-4;
+    @apply flex items-start gap-3 p-3 rounded-lg border-l-4;
     background: oklch(0.965 0.018 230);
     border-color: oklch(0.5 0.18 230);
     border-top-width: 1px;
@@ -267,7 +275,7 @@
   /* ── Star Rating ── */
   .star-rating {
     @apply inline-flex items-center gap-0.5;
-    color: oklch(0.74 0.14 86);
+    color: oklch(0.76 0.17 86);
     font-size: 0.85rem;
     line-height: 1;
   }
@@ -296,7 +304,7 @@
   .card-hover:hover {
     box-shadow: 0 6px 20px oklch(0.15 0.035 258 / 0.13), 0 2px 6px -2px
       oklch(0.15 0.035 258 / 0.09);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
   }
 
   /* ── Loading skeleton ── */

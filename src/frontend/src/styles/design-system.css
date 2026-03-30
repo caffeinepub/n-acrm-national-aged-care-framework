@@ -1,0 +1,240 @@
+/* ============================================================
+   N-ACRM CENTRALIZED DESIGN SYSTEM
+   Figma-level token system for all modules
+   ============================================================ */
+
+:root {
+  /* ── Navy Palette (primary brand) ── */
+  --ds-navy-950: oklch(13% 0.045 258);
+  --ds-navy-900: oklch(18% 0.055 258);
+  --ds-navy-800: oklch(24% 0.065 258);
+  --ds-navy-700: oklch(30% 0.07 258);
+  --ds-navy-600: oklch(38% 0.075 258);
+  --ds-navy-500: oklch(48% 0.08 258);
+  --ds-navy-400: oklch(60% 0.07 258);
+  --ds-navy-300: oklch(72% 0.05 258);
+  --ds-navy-200: oklch(84% 0.03 258);
+  --ds-navy-100: oklch(93% 0.015 258);
+  --ds-navy-50: oklch(97% 0.008 258);
+
+  /* ── Gold Accent ── */
+  --ds-gold-700: oklch(58% 0.15 82);
+  --ds-gold-600: oklch(68% 0.16 85);
+  --ds-gold-500: oklch(76% 0.17 86);
+  --ds-gold-400: oklch(84% 0.14 88);
+  --ds-gold-100: oklch(96% 0.05 90);
+
+  /* ── Semantic Status ── */
+  --ds-success: oklch(52% 0.16 145);
+  --ds-success-light: oklch(94% 0.06 145);
+  --ds-success-text: oklch(28% 0.14 145);
+  --ds-warning: oklch(70% 0.17 75);
+  --ds-warning-light: oklch(95% 0.06 78);
+  --ds-warning-text: oklch(38% 0.14 72);
+  --ds-danger: oklch(52% 0.22 25);
+  --ds-danger-light: oklch(95% 0.06 25);
+  --ds-danger-text: oklch(30% 0.18 25);
+  --ds-info: oklch(54% 0.18 230);
+  --ds-info-light: oklch(94% 0.05 230);
+  --ds-info-text: oklch(28% 0.14 230);
+
+  /* ── Surface Tokens ── */
+  --ds-bg: oklch(97.5% 0.006 252);
+  --ds-bg-muted: oklch(96% 0.008 252);
+  --ds-surface: oklch(100% 0 0);
+  --ds-surface-raised: oklch(99% 0.004 252);
+  --ds-border: oklch(90% 0.01 252);
+  --ds-border-strong: oklch(82% 0.022 254);
+
+  /* ── Typography ── */
+  --ds-font-sans: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --ds-font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── Type Scale ── */
+  --ds-text-xs: 0.72rem;
+  --ds-text-sm: 0.8125rem;
+  --ds-text-base: 0.9375rem;
+  --ds-text-lg: 1.0625rem;
+  --ds-text-xl: 1.1875rem;
+  --ds-text-2xl: 1.4375rem;
+  --ds-text-3xl: 1.75rem;
+  --ds-text-4xl: 2.125rem;
+
+  /* ── Spacing (4-point grid) ── */
+  --ds-space-1: 0.25rem;
+  --ds-space-2: 0.5rem;
+  --ds-space-3: 0.75rem;
+  --ds-space-4: 1rem;
+  --ds-space-5: 1.25rem;
+  --ds-space-6: 1.5rem;
+  --ds-space-8: 2rem;
+  --ds-space-10: 2.5rem;
+  --ds-space-12: 3rem;
+  --ds-space-16: 4rem;
+
+  /* ── Elevation / Shadows ── */
+  --ds-shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.05);
+  --ds-shadow-sm: 0 1px 3px oklch(0% 0 0 / 0.08), 0 1px 2px oklch(0% 0 0 / 0.05);
+  --ds-shadow-md: 0 4px 8px oklch(0% 0 0 / 0.08), 0 2px 4px oklch(0% 0 0 / 0.05);
+  --ds-shadow-lg: 0 10px 20px oklch(0% 0 0 / 0.09), 0 4px 8px
+    oklch(0% 0 0 / 0.06);
+  --ds-shadow-xl: 0 20px 40px oklch(0% 0 0 / 0.11), 0 8px 16px
+    oklch(0% 0 0 / 0.07);
+  --ds-shadow-glow-blue: 0 0 20px oklch(55% 0.18 250 / 0.22);
+  --ds-shadow-glow-gold: 0 0 20px oklch(76% 0.17 86 / 0.28);
+  --ds-shadow-glow-green: 0 0 16px oklch(52% 0.16 145 / 0.25);
+  --ds-shadow-glow-red: 0 0 16px oklch(52% 0.22 25 / 0.25);
+
+  /* ── Border Radius ── */
+  --ds-radius-xs: 0.25rem;
+  --ds-radius-sm: 0.375rem;
+  --ds-radius-md: 0.5rem;
+  --ds-radius-lg: 0.75rem;
+  --ds-radius-xl: 1rem;
+  --ds-radius-2xl: 1.5rem;
+  --ds-radius-full: 9999px;
+
+  /* ── Transitions ── */
+  --ds-transition-fast: 120ms ease;
+  --ds-transition-base: 200ms ease;
+  --ds-transition-slow: 300ms ease;
+  --ds-transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── DS Component Patterns ── */
+.ds-card {
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-sm);
+  transition: box-shadow var(--ds-transition-base), transform
+    var(--ds-transition-base);
+}
+.ds-card:hover {
+  box-shadow: var(--ds-shadow-md);
+  transform: translateY(-1px);
+}
+.ds-card-glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--ds-radius-lg);
+  transition: background var(--ds-transition-base), box-shadow
+    var(--ds-transition-base);
+}
+.ds-card-glass:hover {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.ds-btn-primary {
+  background: oklch(22% 0.07 258);
+  color: #fff;
+  border: none;
+  border-radius: var(--ds-radius-md);
+  font-family: var(--ds-font-sans);
+  font-weight: 600;
+  font-size: var(--ds-text-sm);
+  padding: var(--ds-space-2) var(--ds-space-4);
+  cursor: pointer;
+  transition: background var(--ds-transition-fast), transform
+    var(--ds-transition-fast), box-shadow var(--ds-transition-fast);
+}
+.ds-btn-primary:hover {
+  background: oklch(28% 0.08 258);
+  box-shadow: var(--ds-shadow-md);
+}
+.ds-btn-primary:active {
+  transform: scale(0.96);
+}
+
+.ds-btn-secondary {
+  background: transparent;
+  color: oklch(22% 0.07 258);
+  border: 1.5px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-md);
+  font-family: var(--ds-font-sans);
+  font-weight: 600;
+  font-size: var(--ds-text-sm);
+  padding: var(--ds-space-2) var(--ds-space-4);
+  cursor: pointer;
+  transition: background var(--ds-transition-fast), border-color
+    var(--ds-transition-fast);
+}
+.ds-btn-secondary:hover {
+  background: var(--ds-bg-muted);
+  border-color: oklch(60% 0.07 258);
+}
+.ds-btn-secondary:active {
+  transform: scale(0.96);
+}
+
+/* ── DS Shimmer animation ── */
+@keyframes ds-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.ds-skeleton {
+  background: linear-gradient(
+    90deg,
+    oklch(92% 0.008 252) 25%,
+    oklch(96% 0.004 252) 50%,
+    oklch(92% 0.008 252) 75%
+  );
+  background-size: 200% 100%;
+  animation: ds-shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--ds-radius-sm);
+}
+
+/* ── DS Slide-up modal ── */
+@keyframes ds-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.ds-animate-slide-up {
+  animation: ds-slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ── DS Fade-in ── */
+@keyframes ds-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.ds-animate-fade-in {
+  animation: ds-fade-in 0.2s ease forwards;
+}
+
+/* ── DS Stagger utilities ── */
+.ds-stagger-1 {
+  animation-delay: 0.05s;
+}
+.ds-stagger-2 {
+  animation-delay: 0.10s;
+}
+.ds-stagger-3 {
+  animation-delay: 0.15s;
+}
+.ds-stagger-4 {
+  animation-delay: 0.20s;
+}
+.ds-stagger-5 {
+  animation-delay: 0.25s;
+}
+.ds-stagger-6 {
+  animation-delay: 0.30s;
+}
