@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  CITY_LIST,
   CITY_PROVIDERS,
   type CityProvider,
   getProviderRatingForQuarter,
@@ -27,6 +28,8 @@ import {
   Bar,
   BarChart,
   Legend,
+  Line,
+  LineChart,
   PolarAngleAxis,
   PolarGrid,
   Radar,
@@ -44,723 +47,91 @@ import {
   Award,
   BarChart2,
   Bell,
+  Bot,
   Building2,
   Calendar,
   CheckCircle,
+  ChevronRight,
   ClipboardCheck,
   Clock,
+  Edit2,
+  Heart,
   Info,
   MapPin,
+  MessageCircle,
   Phone,
+  Search,
+  Send,
   Shield,
   ShieldCheck,
-  SortAsc,
   Sparkles,
   Star,
   ThumbsUp,
+  Trash2,
   TrendingDown,
   TrendingUp,
   Users,
   X,
-  XCircle,
+  Zap,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
+const ALL_QUARTERS = ["Q1-2025", "Q2-2025", "Q3-2025", "Q4-2025"];
 
-function getIndicatorStatus(score: number): {
-  label: string;
-  chipClass: string;
-} {
-  if (score >= 3.5)
-    return {
-      label: "Good",
-      chipClass: "bg-green-100 text-green-700 border border-green-200",
-    };
-  if (score >= 2.5)
-    return {
-      label: "Moderate",
-      chipClass: "bg-amber-100 text-amber-700 border border-amber-200",
-    };
-  return {
-    label: "Needs Attention",
-    chipClass: "bg-red-100 text-red-700 border border-red-200",
-  };
-}
-
-function getRiskLevelFromIndicators(
-  indicators: CityProvider["indicators"],
-): "Low" | "Medium" | "High" {
-  const scores = [
-    indicators.safetyClinical,
-    indicators.preventiveCare,
-    indicators.qualityMeasures,
-    indicators.staffing,
-    indicators.compliance,
-    indicators.experience,
-  ];
-  const poorCount = scores.filter((s) => s < 2.5).length;
-  const moderateCount = scores.filter((s) => s >= 2.5 && s < 3.5).length;
-  if (poorCount >= 2) return "High";
-  if (poorCount === 1 || moderateCount >= 3) return "Medium";
-  return "Low";
-}
-
-function generateDynamicExplanation(
-  stars: number,
-  indicators: CityProvider["indicators"],
-): string {
-  const domainNames: Record<string, string> = {
-    safetyClinical: "falls safety",
-    preventiveCare: "preventive screening",
-    qualityMeasures: "care quality",
-    staffing: "staffing",
-    compliance: "standards compliance",
-    experience: "resident satisfaction",
-  };
-
-  const entries = {
-    safetyClinical: indicators.safetyClinical,
-    preventiveCare: indicators.preventiveCare,
-    qualityMeasures: indicators.qualityMeasures,
-    staffing: indicators.staffing,
-    compliance: indicators.compliance,
-    experience: indicators.experience,
-  };
-
-  const weak = Object.entries(entries)
-    .filter(([, v]) => v < 2.5)
-    .map(([k]) => domainNames[k]);
-  const moderate = Object.entries(entries)
-    .filter(([, v]) => v >= 2.5 && v < 3.5)
-    .map(([k]) => domainNames[k]);
-  const strong = Object.entries(entries)
-    .filter(([, v]) => v >= 4.0)
-    .map(([k]) => domainNames[k]);
-
-  if (weak.length >= 3)
-    return `Low performance in ${weak.slice(0, 2).join(" and ")} is significantly affecting the overall rating. Active improvement plans are underway.`;
-  if (weak.length === 2)
-    return `Performance issues in ${weak.join(" and ")} are reducing the overall rating. These areas require focused attention.`;
-  if (weak.length === 1 && moderate.length >= 2)
-    return `Provider shows concern in ${weak[0]} and needs improvement in ${moderate.slice(0, 2).join(" and ")}. Overall care quality is below average.`;
-  if (weak.length === 1) {
-    const strengthText =
-      strong.length > 0 ? ` Strong performance in ${strong[0]}.` : "";
-    return `Provider performs adequately in most areas but needs improvement in ${weak[0]}.${strengthText}`;
-  }
-  if (moderate.length >= 3)
-    return `Provider performs well overall but needs improvement in ${moderate.slice(0, 2).join(" and ")} to reach higher standards.`;
-  if (moderate.length >= 1) {
-    const strengthText =
-      strong.length > 0
-        ? `Strong performance in ${strong.slice(0, 2).join(" and ")}.`
-        : "Most indicators are good.";
-    return `${strengthText} Some improvement needed in ${moderate[0]}.`;
-  }
-  if (stars >= 4.5)
-    return "This provider consistently delivers high-quality care across all measured areas, with strong safety outcomes and resident satisfaction.";
-  return "This provider delivers good quality care with solid performance across most measured areas.";
-}
-
-/** Trust Score badge — single clear label for public users */
-function getTrustScore(stars: number): {
-  label: string;
-  color: string;
-  bg: string;
-  border: string;
-  icon: React.ReactNode;
-} {
-  if (stars >= 4.0)
-    return {
-      label: "Trusted",
-      color: "text-green-700",
-      bg: "bg-green-50",
-      border: "border-green-200",
-      icon: <ShieldCheck className="h-3.5 w-3.5" />,
-    };
-  if (stars >= 3.0)
-    return {
-      label: "Average",
-      color: "text-amber-700",
-      bg: "bg-amber-50",
-      border: "border-amber-200",
-      icon: <Info className="h-3.5 w-3.5" />,
-    };
-  return {
-    label: "Needs Improvement",
-    color: "text-red-700",
-    bg: "bg-red-50",
-    border: "border-red-200",
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
-  };
-}
-
-/** Simple performance tags — plain language chips */
-function getPerformanceTags(
-  indicators: CityProvider["indicators"],
-): { text: string; positive: boolean }[] {
-  const tags: { text: string; positive: boolean }[] = [];
-  if (indicators.safetyClinical >= 3.5)
-    tags.push({ text: "Low falls", positive: true });
-  else if (indicators.safetyClinical < 2.5)
-    tags.push({ text: "High falls", positive: false });
-
-  if (indicators.experience >= 3.5)
-    tags.push({ text: "High satisfaction", positive: true });
-  else if (indicators.experience < 2.5)
-    tags.push({ text: "Low satisfaction", positive: false });
-
-  if (indicators.preventiveCare >= 3.5)
-    tags.push({ text: "Good screening", positive: true });
-  else if (indicators.preventiveCare < 2.5)
-    tags.push({ text: "Low screening", positive: false });
-
-  if (indicators.staffing >= 3.5)
-    tags.push({ text: "Strong staffing", positive: true });
-  else if (indicators.staffing < 2.5)
-    tags.push({ text: "Low staffing", positive: false });
-
-  return tags.slice(0, 3);
-}
-
-function getScorePct(p: CityProvider): number {
-  return Math.round(p.indicators.preventiveCare * 20);
-}
-function getSatisfactionPct(p: CityProvider): number {
-  return Math.round(p.indicators.experience * 20);
-}
-function getPctColor(pct: number): string {
-  if (pct >= 70) return "bg-green-500";
-  if (pct >= 50) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-function RiskBadge({ level }: { level: "Low" | "Medium" | "High" }) {
-  const styles = {
-    Low: "bg-green-100 text-green-700 border-green-200",
-    Medium: "bg-amber-100 text-amber-700 border-amber-200",
-    High: "bg-red-100 text-red-700 border-red-200",
-  };
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${styles[level]}`}
-    >
-      {level === "Low" ? (
-        <CheckCircle className="h-3 w-3" />
-      ) : (
-        <AlertTriangle className="h-3 w-3" />
-      )}
-      {level} Risk
-    </span>
-  );
-}
-
-function IndicatorBar({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500">{label}</span>
-        <span className="font-medium text-gray-700">{value}%</span>
-      </div>
-      <Progress value={value} className={`h-1.5 [&>div]:${color}`} />
-    </div>
-  );
-}
-
-function StarRating({
-  stars,
-  size = "sm",
-}: { stars: number; size?: "sm" | "lg" }) {
-  const iconClass = size === "lg" ? "h-6 w-6" : "h-4 w-4";
-  const textClass =
-    size === "lg"
-      ? "text-lg font-bold text-gray-800"
-      : "text-sm font-semibold text-gray-700";
-  return (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={`${iconClass} ${
-            i <= Math.floor(stars)
-              ? "fill-amber-400 text-amber-400"
-              : i - 0.5 <= stars
-                ? "fill-amber-200 text-amber-400"
-                : "fill-gray-100 text-gray-300"
-          }`}
-        />
-      ))}
-      <span className={`ml-1 ${textClass}`}>{stars.toFixed(1)}</span>
-    </div>
-  );
-}
-
-function getPerformanceLabel(stars: number): { label: string; color: string } {
-  if (stars >= 4.5)
-    return { label: "Excellent Performance", color: "text-green-700" };
-  if (stars >= 4) return { label: "Good Performance", color: "text-green-600" };
-  if (stars >= 3)
-    return { label: "Satisfactory Performance", color: "text-amber-600" };
-  return { label: "Needs Improvement", color: "text-red-600" };
-}
-
-const DOMAIN_FRIENDLY_NAMES: Record<string, string> = {
-  safetyClinical: "Falls & Safety",
-  preventiveCare: "Preventive Screening",
-  qualityMeasures: "Care Quality",
-  staffing: "Staffing & Support",
-  compliance: "Standards Compliance",
-  experience: "Resident Satisfaction",
-};
-
-const DOMAIN_SHORT: Record<string, string> = {
-  safetyClinical: "Safety",
-  preventiveCare: "Screening",
-  qualityMeasures: "Care",
-  staffing: "Staffing",
-  compliance: "Compliance",
-  experience: "Satisfaction",
-};
-
-function getDomainRawScores(p: CityProvider): Record<string, number> {
-  return {
-    safetyClinical: p.indicators.safetyClinical,
-    preventiveCare: p.indicators.preventiveCare,
-    qualityMeasures: p.indicators.qualityMeasures,
-    staffing: p.indicators.staffing,
-    compliance: p.indicators.compliance,
-    experience: p.indicators.experience,
-  };
-}
-
-function getIndicatorDescription(domain: string, score: number): string {
-  if (domain === "safetyClinical") {
-    if (score >= 3.5) return "Falls rate is better than the national average";
-    if (score >= 2.5) return "Falls rate is near the national average";
-    return "Falls rate is worse than the national average";
-  }
-  if (domain === "preventiveCare") {
-    if (score >= 3.5) return "Screening completion is above target";
-    if (score >= 2.5) return "Screening completion is near target";
-    return "Screening completion is below target";
-  }
-  if (domain === "qualityMeasures") {
-    if (score >= 3.5) return "Care quality measures meet or exceed standards";
-    if (score >= 2.5) return "Care quality is at an acceptable level";
-    return "Care quality measures need improvement";
-  }
-  if (domain === "staffing") {
-    if (score >= 3.5)
-      return "Staffing levels and nurse hours exceed requirements";
-    if (score >= 2.5) return "Staffing meets minimum requirements";
-    return "Staffing levels are below recommended standards";
-  }
-  if (domain === "compliance") {
-    if (score >= 3.5) return "Fully compliant with aged care quality standards";
-    if (score >= 2.5) return "Meets most regulatory compliance standards";
-    return "Has outstanding compliance issues";
-  }
-  if (domain === "experience") {
-    if (score >= 3.5) return "Residents report high satisfaction with care";
-    if (score >= 2.5) return "Resident satisfaction is mixed";
-    return "Resident satisfaction scores are below average";
-  }
-  return "";
-}
-
-const DOMAIN_ICONS: Record<string, React.ReactNode> = {
-  safetyClinical: <ShieldCheck className="h-4 w-4 text-[#1E3A8A]" />,
-  preventiveCare: <CheckCircle className="h-4 w-4 text-[#1E3A8A]" />,
-  qualityMeasures: <Activity className="h-4 w-4 text-[#1E3A8A]" />,
-  staffing: <Users className="h-4 w-4 text-[#1E3A8A]" />,
-  compliance: <ClipboardCheck className="h-4 w-4 text-[#1E3A8A]" />,
-  experience: <Star className="h-4 w-4 text-[#1E3A8A]" />,
-};
-
-const DOMAIN_ORDER = [
-  "safetyClinical",
-  "preventiveCare",
-  "qualityMeasures",
-  "staffing",
-  "compliance",
-  "experience",
+const SERVICES = [
+  {
+    name: "General Care",
+    description: "Comprehensive daily care and support",
+    availability: "Mon–Fri, 8am–6pm",
+    icon: "🏥",
+  },
+  {
+    name: "Physiotherapy",
+    description: "Physical therapy and rehabilitation",
+    availability: "Tue, Thu, 9am–4pm",
+    icon: "🦾",
+  },
+  {
+    name: "Medication Review",
+    description: "Medication management and review",
+    availability: "Mon–Wed, 10am–3pm",
+    icon: "💊",
+  },
+  {
+    name: "Home Care",
+    description: "In-home assistance and support services",
+    availability: "Daily, 7am–7pm",
+    icon: "🏠",
+  },
+  {
+    name: "Mental Health Support",
+    description: "Counselling and mental wellness programs",
+    availability: "Mon, Wed, Fri, 9am–5pm",
+    icon: "🧠",
+  },
 ];
 
-const COMPARE_COLORS = ["#1E3A8A", "#16A34A", "#D97706"];
+const TIME_SLOTS = [
+  "9:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "2:00 PM",
+  "3:00 PM",
+  "4:00 PM",
+];
 
-// ── Trust Score Badge Component ───────────────────────────────────────────────
-function TrustScoreBadge({ stars }: { stars: number }) {
-  const trust = getTrustScore(stars);
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${trust.color} ${trust.bg} ${trust.border}`}
-    >
-      {trust.icon}
-      {trust.label}
-    </span>
-  );
-}
+const CARE_NEEDS = [
+  "General Care",
+  "Dementia Care",
+  "Physiotherapy",
+  "Mental Health",
+  "Palliative Care",
+  "Wound Management",
+];
 
-// ── Performance Tags Component ────────────────────────────────────────────────
-function PerformanceTags({
-  indicators,
-}: { indicators: CityProvider["indicators"] }) {
-  const tags = getPerformanceTags(indicators);
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag.text}
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-            tag.positive
-              ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-red-50 text-red-600 border border-red-200"
-          }`}
-        >
-          {tag.positive ? (
-            <ThumbsUp className="h-2.5 w-2.5" />
-          ) : (
-            <TrendingDown className="h-2.5 w-2.5" />
-          )}
-          {tag.text}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-// ── Smart Recommendation Banner ───────────────────────────────────────────────
-function SmartRecommendation({
-  providers,
-  onSelect,
-  currentQuarter,
-}: {
-  providers: CityProvider[];
-  onSelect: (p: CityProvider) => void;
-  currentQuarter: string;
-}) {
-  const top = useMemo(() => {
-    return [...providers]
-      .sort(
-        (a, b) =>
-          getProviderRatingForQuarter(b.id, currentQuarter).stars -
-          getProviderRatingForQuarter(a.id, currentQuarter).stars,
-      )
-      .slice(0, 3);
-  }, [providers, currentQuarter]);
-
-  if (top.length === 0) return null;
-
-  return (
-    <Card className="border border-blue-200 bg-blue-50 shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="rounded-lg bg-[#1E3A8A] p-2">
-            <Sparkles className="h-4 w-4 text-white" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-[#1E3A8A] text-sm">
-              Recommended Providers
-            </h2>
-            <p className="text-xs text-blue-600">
-              Top-rated providers in your selected region
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {top.map((p, idx) => {
-            const stars = getProviderRatingForQuarter(
-              p.id,
-              currentQuarter,
-            ).stars;
-            const trust = getTrustScore(stars);
-            const tags = getPerformanceTags(p.indicators);
-            const positiveTags = tags
-              .filter((t) => t.positive)
-              .slice(0, 2)
-              .map((t) => t.text);
-            return (
-              <button
-                type="button"
-                key={p.id}
-                onClick={() => onSelect(p)}
-                className="text-left rounded-xl bg-white border border-blue-100 p-4 hover:border-[#1E3A8A] hover:shadow-md transition-all group"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-1.5">
-                    {idx === 0 && (
-                      <Award className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                    )}
-                    <span className="font-semibold text-gray-900 text-sm leading-tight group-hover:text-[#1E3A8A]">
-                      {p.name}
-                    </span>
-                  </div>
-                  <span
-                    className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${trust.color} ${trust.bg} ${trust.border}`}
-                  >
-                    {trust.icon}
-                    {trust.label}
-                  </span>
-                </div>
-                <StarRating stars={stars} />
-                {positiveTags.length > 0 && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    {positiveTags.join(" · ")}
-                  </p>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Comparison Tool ───────────────────────────────────────────────────────────
-function ComparisonTool({
-  providers,
-  selectedIds,
-  onClear,
-  currentQuarter,
-}: {
-  providers: CityProvider[];
-  selectedIds: string[];
-  onClear: () => void;
-  currentQuarter: string;
-}) {
-  if (selectedIds.length < 2) return null;
-
-  const compared = selectedIds
-    .map((id) => providers.find((p) => p.id === id))
-    .filter(Boolean) as CityProvider[];
-
-  // Recharts bar chart data per domain
-  const barData = DOMAIN_ORDER.map((domain) => {
-    const row: Record<string, string | number> = {
-      domain: DOMAIN_SHORT[domain],
-    };
-    for (const p of compared) {
-      row[p.name] = Math.round((getDomainRawScores(p)[domain] / 5) * 100);
-    }
-    return row;
-  });
-
-  // Radar chart data
-  const radarData = DOMAIN_ORDER.map((domain) => {
-    const row: Record<string, string | number> = {
-      domain: DOMAIN_SHORT[domain],
-    };
-    for (const p of compared) {
-      row[p.name] = Math.round((getDomainRawScores(p)[domain] / 5) * 100);
-    }
-    return row;
-  });
-
-  return (
-    <Card
-      className="border border-gray-200 shadow-sm"
-      data-ocid="public.compare_panel"
-    >
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <div className="rounded-lg bg-[#1E3A8A] p-2">
-              <BarChart2 className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 text-sm">
-                Provider Comparison
-              </h2>
-              <p className="text-xs text-gray-500">
-                Comparing {compared.length} providers side by side
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClear}
-            className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1"
-          >
-            <X className="h-3.5 w-3.5" /> Clear comparison
-          </button>
-        </div>
-
-        {/* Provider summary row */}
-        <div
-          className={`grid gap-4 mb-6 ${
-            compared.length === 3 ? "grid-cols-3" : "grid-cols-2"
-          }`}
-        >
-          {compared.map((p, idx) => {
-            const stars = getProviderRatingForQuarter(
-              p.id,
-              currentQuarter,
-            ).stars;
-            const trust = getTrustScore(stars);
-            return (
-              <div
-                key={p.id}
-                className="rounded-xl border-2 p-4 space-y-2"
-                style={{ borderColor: `${COMPARE_COLORS[idx]}40` }}
-              >
-                <div
-                  className="h-1 w-full rounded-full mb-3"
-                  style={{ backgroundColor: COMPARE_COLORS[idx] }}
-                />
-                <p className="font-semibold text-gray-900 text-sm leading-tight">
-                  {p.name}
-                </p>
-                <StarRating stars={stars} />
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${trust.color} ${trust.bg} ${trust.border}`}
-                >
-                  {trust.icon} {trust.label}
-                </span>
-                <PerformanceTags indicators={p.indicators} />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Bar chart */}
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            Performance by Area (% of maximum)
-          </p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart
-              data={barData}
-              margin={{ top: 4, right: 8, left: -20, bottom: 4 }}
-            >
-              <XAxis
-                dataKey="domain"
-                tick={{ fontSize: 11, fill: "#6B7280" }}
-              />
-              <YAxis
-                domain={[0, 100]}
-                tick={{ fontSize: 10, fill: "#9CA3AF" }}
-              />
-              <Tooltip
-                formatter={(v: number) => `${v}%`}
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #E5E7EB",
-                  fontSize: 12,
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-              {compared.map((p, idx) => (
-                <Bar
-                  key={p.id}
-                  dataKey={p.name}
-                  fill={COMPARE_COLORS[idx]}
-                  radius={[3, 3, 0, 0]}
-                />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Radar chart */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            Performance Radar
-          </p>
-          <ResponsiveContainer width="100%" height={240}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="#E5E7EB" />
-              <PolarAngleAxis
-                dataKey="domain"
-                tick={{ fontSize: 11, fill: "#6B7280" }}
-              />
-              {compared.map((p, idx) => (
-                <Radar
-                  key={p.id}
-                  name={p.name}
-                  dataKey={p.name}
-                  stroke={COMPARE_COLORS[idx]}
-                  fill={COMPARE_COLORS[idx]}
-                  fillOpacity={0.15}
-                />
-              ))}
-              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-              <Tooltip
-                formatter={(v: number) => `${v}%`}
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #E5E7EB",
-                  fontSize: 12,
-                }}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Domain detail table */}
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider py-2 pr-4">
-                  Area
-                </th>
-                {compared.map((p, idx) => (
-                  <th
-                    key={p.id}
-                    className="text-center text-xs font-semibold py-2 px-2"
-                    style={{ color: COMPARE_COLORS[idx] }}
-                  >
-                    {p.name.split(" ").slice(0, 2).join(" ")}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {DOMAIN_ORDER.map((domain, i) => (
-                <tr
-                  key={domain}
-                  className={i % 2 === 0 ? "bg-gray-50" : "bg-white"}
-                >
-                  <td className="text-xs text-gray-600 py-2 pr-4 font-medium">
-                    {DOMAIN_FRIENDLY_NAMES[domain]}
-                  </td>
-                  {compared.map((p) => {
-                    const score = getDomainRawScores(p)[domain];
-                    const status = getIndicatorStatus(score);
-                    return (
-                      <td key={p.id} className="text-center py-2 px-2">
-                        <span
-                          className={`text-xs font-medium rounded-full px-2 py-0.5 ${status.chipClass}`}
-                        >
-                          {status.label}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Public Provider Modal ─────────────────────────────────────────────────────
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-type BookingStatus = "confirmed" | "completed" | "cancelled";
+// ── Types ────────────────────────────────────────────────────────────────────
+type BookingStatus = "confirmed" | "in_progress" | "completed" | "cancelled";
 interface Booking {
   id: string;
   providerId: string;
@@ -781,44 +152,537 @@ interface FeedbackData {
   quality: number;
   comment: string;
 }
+interface Review {
+  id: string;
+  author: string;
+  rating: number;
+  comment: string;
+  timestamp: number;
+  isOwn: boolean;
+}
+interface ChatMessage {
+  role: "user" | "ai";
+  text: string;
+  ts: number;
+  providers?: string[]; // provider ids to show as chips
+  quickReplies?: string[];
+}
+interface UserRatings {
+  [providerId: string]: FeedbackData & { count: number };
+}
 
-// ── Services ──────────────────────────────────────────────────────────────────
-const SERVICES = [
-  {
-    name: "General Care",
-    description: "Comprehensive daily care and support",
-    availability: "Mon–Fri, 8am–6pm",
-  },
-  {
-    name: "Physiotherapy",
-    description: "Physical therapy and rehabilitation",
-    availability: "Tue, Thu, 9am–4pm",
-  },
-  {
-    name: "Medication Review",
-    description: "Medication management and review",
-    availability: "Mon–Wed, 10am–3pm",
-  },
-  {
-    name: "Home Care",
-    description: "In-home assistance and support services",
-    availability: "Daily, 7am–7pm",
-  },
-  {
-    name: "Mental Health Support",
-    description: "Counselling and mental wellness programs",
-    availability: "Mon, Wed, Fri, 9am–5pm",
-  },
-];
+// ── Seed Reviews ─────────────────────────────────────────────────────────────
+function initReviews(): Record<string, Review[]> {
+  const result: Record<string, Review[]> = {};
+  const allProviders = Object.values(CITY_PROVIDERS).flat();
+  const sampleReviews: Array<[string, number, string]> = [
+    [
+      "Margaret T.",
+      5,
+      "Exceptional care and very attentive staff. Mum settled in immediately and is thriving.",
+    ],
+    [
+      "David R.",
+      4,
+      "Good facilities and responsive team. Minor concerns with shift handover communication but overall very positive.",
+    ],
+    [
+      "Sarah K.",
+      5,
+      "The staff go above and beyond. I'm impressed by the activity programs and personalised care plans.",
+    ],
+    [
+      "John M.",
+      3,
+      "Adequate care but room for improvement in communication with family members.",
+    ],
+    [
+      "Linda H.",
+      4,
+      "Clean, professional environment. Dad is well looked after and seems happy.",
+    ],
+    [
+      "Peter C.",
+      2,
+      "Understaffed on weekends. Raised concerns and management responded but changes are slow.",
+    ],
+    [
+      "Helen B.",
+      5,
+      "Outstanding dementia care program. The specialists really understand how to engage residents.",
+    ],
+    [
+      "Tom W.",
+      4,
+      "Friendly staff and modern facilities. The physio program has made a real difference.",
+    ],
+  ];
+  for (let i = 0; i < allProviders.length; i++) {
+    const p = allProviders[i];
+    const [r1, r2] = [
+      sampleReviews[i % sampleReviews.length],
+      sampleReviews[(i + 3) % sampleReviews.length],
+    ];
+    result[p.id] = [
+      {
+        id: `${p.id}-r1`,
+        author: r1[0] as string,
+        rating: r1[1] as number,
+        comment: r1[2] as string,
+        timestamp: Date.now() - 1000 * 60 * 60 * 24 * 14,
+        isOwn: false,
+      },
+      {
+        id: `${p.id}-r2`,
+        author: r2[0] as string,
+        rating: r2[1] as number,
+        comment: r2[2] as string,
+        timestamp: Date.now() - 1000 * 60 * 60 * 24 * 7,
+        isOwn: false,
+      },
+    ];
+  }
+  return result;
+}
 
-const TIME_SLOTS = [
-  "9:00 AM",
-  "10:00 AM",
-  "11:00 AM",
-  "2:00 PM",
-  "3:00 PM",
-  "4:00 PM",
-];
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const STAR_POSITIONS = [1, 2, 3, 4, 5] as const;
+
+function renderStars(rating: number, size = "h-4 w-4") {
+  return (
+    <span className="flex items-center gap-0.5">
+      {STAR_POSITIONS.map((pos) => {
+        const diff = rating - pos + 1;
+        if (diff >= 1)
+          return (
+            <Star
+              key={pos}
+              className={`${size} fill-amber-400 text-amber-400`}
+            />
+          );
+        if (diff >= 0.25)
+          return (
+            <span key={pos} className="relative inline-block">
+              <Star className={`${size} fill-gray-200 text-gray-300`} />
+              <span
+                className="absolute inset-0 overflow-hidden"
+                style={{ width: "50%" }}
+              >
+                <Star className={`${size} fill-amber-400 text-amber-400`} />
+              </span>
+            </span>
+          );
+        return (
+          <Star key={pos} className={`${size} fill-gray-100 text-gray-300`} />
+        );
+      })}
+    </span>
+  );
+}
+
+function getRiskLevel(
+  indicators: CityProvider["indicators"],
+): "Low" | "Medium" | "High" {
+  const scores = [
+    indicators.safetyClinical,
+    indicators.preventiveCare,
+    indicators.qualityMeasures,
+    indicators.staffing,
+    indicators.compliance,
+    indicators.experience,
+  ];
+  const poor = scores.filter((s) => s < 2.5).length;
+  const moderate = scores.filter((s) => s >= 2.5 && s < 3.5).length;
+  if (poor >= 2) return "High";
+  if (poor === 1 || moderate >= 3) return "Medium";
+  return "Low";
+}
+
+// ── New Helper Functions ──────────────────────────────────────────────────────
+function calcTrustScore(
+  stars: number,
+  safetyScore: number,
+  complianceScore: number,
+  avgReviewRating: number,
+  trendDiff: number,
+): { score: number; label: string; colorClass: string; ringColor: string } {
+  const ratingPct = (stars / 5) * 100;
+  const feedbackPct =
+    avgReviewRating > 0 ? (avgReviewRating / 5) * 100 : (stars / 5) * 100;
+  const trendBonus = Math.max(0, Math.min(100, 50 + trendDiff * 20));
+  const score = Math.round(
+    ratingPct * 0.35 +
+      feedbackPct * 0.2 +
+      safetyScore * 0.25 +
+      complianceScore * 0.1 +
+      trendBonus * 0.1,
+  );
+  const label =
+    score >= 70
+      ? "🟢 Trusted"
+      : score >= 50
+        ? "🟡 Moderate"
+        : "🔴 Needs Improvement";
+  const colorClass =
+    score >= 70
+      ? "text-green-600"
+      : score >= 50
+        ? "text-amber-600"
+        : "text-red-600";
+  const ringColor =
+    score >= 70 ? "#16A34A" : score >= 50 ? "#F59E0B" : "#DC2626";
+  return { score, label, colorClass, ringColor };
+}
+
+function TrustScoreRing({
+  score,
+  ringColor,
+  size = 48,
+}: { score: number; ringColor: string; size?: number }) {
+  const r = size / 2 - 5;
+  const circumference = 2 * Math.PI * r;
+  const dash = (score / 100) * circumference;
+  return (
+    <div
+      className="relative inline-flex items-center justify-center"
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={size}
+        height={size}
+        style={{ transform: "rotate(-90deg)" }}
+        role="img"
+        aria-label={`Trust score: ${score}`}
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth="4"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={ringColor}
+          strokeWidth="4"
+          strokeDasharray={`${dash} ${circumference}`}
+          strokeLinecap="round"
+          style={{ transition: "stroke-dasharray 1s ease" }}
+        />
+      </svg>
+      <span className="absolute text-xs font-bold" style={{ color: ringColor }}>
+        {score}
+      </span>
+    </div>
+  );
+}
+
+function calcOutcomePrediction(
+  ratingData: ReturnType<typeof getProviderRatingForQuarter>,
+) {
+  const { domainScores } = ratingData;
+  const score = Math.round(
+    domainScores.safety * 0.3 +
+      domainScores.experience * 0.25 +
+      domainScores.quality * 0.2 +
+      domainScores.preventive * 0.15 +
+      domainScores.compliance * 0.1,
+  );
+  const confidence =
+    score >= 75
+      ? "High Confidence"
+      : score >= 55
+        ? "Moderate Confidence"
+        : "Low Confidence";
+  const confidenceColor =
+    score >= 75
+      ? "text-green-600"
+      : score >= 55
+        ? "text-amber-600"
+        : "text-red-600";
+  return { score, confidence, confidenceColor };
+}
+
+function CapacityIndicator({
+  providerId,
+  serviceName,
+  capacityState,
+}: {
+  providerId: string;
+  serviceName: string;
+  capacityState: Record<string, { total: number; booked: number }>;
+}) {
+  const key = `${providerId}-${serviceName}`;
+  const cap = capacityState[key] ?? { total: 12, booked: 0 };
+  const available = cap.total - cap.booked;
+  const pct = cap.total > 0 ? available / cap.total : 0;
+  const status =
+    available === 0
+      ? { label: "Fully Booked", colorClass: "text-red-600", dot: "🔴" }
+      : pct > 0.5
+        ? { label: "Available Today", colorClass: "text-green-600", dot: "🟢" }
+        : pct > 0.1
+          ? {
+              label: "Limited Availability",
+              colorClass: "text-amber-600",
+              dot: "🟡",
+            }
+          : { label: "Filling Fast", colorClass: "text-red-600", dot: "🔴" };
+  return (
+    <div className="mt-2">
+      <div className="flex items-center justify-between text-xs mb-1">
+        <span className={`font-medium ${status.colorClass}`}>
+          {status.dot} {status.label}
+        </span>
+        <span className="text-gray-500">
+          {available} of {cap.total} slots
+        </span>
+      </div>
+      <Progress value={pct * 100} className="h-1.5" />
+    </div>
+  );
+}
+
+function CareJourneyTracker({
+  bookings,
+  onMarkComplete,
+  onFeedback,
+}: {
+  bookings: Booking[];
+  onMarkComplete: (id: string) => void;
+  onFeedback: (b: Booking) => void;
+}) {
+  if (bookings.length === 0) return null;
+
+  const stages: Array<{
+    key: BookingStatus | "feedback";
+    label: string;
+    icon: ReactNode;
+  }> = [
+    {
+      key: "confirmed",
+      label: "Booked",
+      icon: <Calendar className="h-3.5 w-3.5" />,
+    },
+    {
+      key: "in_progress",
+      label: "In Progress",
+      icon: <Activity className="h-3.5 w-3.5" />,
+    },
+    {
+      key: "completed",
+      label: "Completed",
+      icon: <CheckCircle className="h-3.5 w-3.5" />,
+    },
+    {
+      key: "feedback",
+      label: "Feedback",
+      icon: <ThumbsUp className="h-3.5 w-3.5" />,
+    },
+  ];
+
+  function getStageIndex(booking: Booking): number {
+    if (booking.feedbackSubmitted) return 4;
+    if (booking.status === "completed") return 3;
+    if (booking.status === "in_progress") return 2;
+    return 1;
+  }
+
+  return (
+    <div className="glass-card rounded-2xl p-5" data-ocid="journey.section">
+      <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-4">
+        <ClipboardCheck className="h-5 w-5 text-[#1E3A8A]" /> My Care Journey
+      </h2>
+      <div className="space-y-4">
+        {bookings.map((b, i) => {
+          const currentStage = getStageIndex(b);
+          return (
+            <div
+              key={b.id}
+              className="bg-[#F8FAFC] rounded-xl p-4 border"
+              data-ocid={`journey.item.${i + 1}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-semibold text-sm text-gray-900">
+                    {b.service}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {b.providerName} · {b.date} at {b.time}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {b.status === "confirmed" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs h-7"
+                      onClick={() => onMarkComplete(b.id)}
+                      data-ocid={`journey.progress_button.${i + 1}`}
+                    >
+                      Start Service
+                    </Button>
+                  )}
+                  {b.status === "in_progress" && (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs h-7"
+                      onClick={() => onMarkComplete(b.id)}
+                      data-ocid={`journey.complete_button.${i + 1}`}
+                    >
+                      Complete
+                    </Button>
+                  )}
+                  {b.status === "completed" && !b.feedbackSubmitted && (
+                    <Button
+                      size="sm"
+                      className="bg-amber-500 hover:bg-amber-600 text-white text-xs h-7"
+                      onClick={() => onFeedback(b)}
+                      data-ocid={`journey.feedback_button.${i + 1}`}
+                    >
+                      Rate Now
+                    </Button>
+                  )}
+                  {b.feedbackSubmitted && (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  )}
+                </div>
+              </div>
+              {/* Timeline */}
+              <div className="flex items-center gap-0">
+                {stages.map((stage, si) => {
+                  const isCompleted = currentStage > si + 1;
+                  const isActive = currentStage === si + 1;
+                  const isPending = currentStage < si + 1;
+                  return (
+                    <div
+                      key={stage.key}
+                      className="flex items-center flex-1 last:flex-none"
+                    >
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${isCompleted ? "bg-green-500 border-green-500 text-white" : isActive ? "bg-[#1E3A8A] border-[#1E3A8A] text-white" : "bg-white border-gray-200 text-gray-400"}`}
+                        >
+                          {stage.icon}
+                        </div>
+                        <span
+                          className={`text-xs mt-1 font-medium ${isCompleted ? "text-green-600" : isActive ? "text-[#1E3A8A]" : isPending ? "text-gray-400" : "text-gray-400"}`}
+                        >
+                          {stage.label}
+                        </span>
+                      </div>
+                      {si < stages.length - 1 && (
+                        <div
+                          className={`flex-1 h-0.5 mx-1 mb-4 ${isCompleted ? "bg-green-400" : "bg-gray-200"}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function getProviderAlerts(
+  indicators: CityProvider["indicators"],
+): Array<{ text: string; color: "red" | "amber" }> {
+  const alerts: Array<{ text: string; color: "red" | "amber" }> = [];
+  if (indicators.safetyClinical < 2.5)
+    alerts.push({ text: "⚠ High fall risk trend", color: "red" });
+  if (indicators.preventiveCare < 2.5)
+    alerts.push({ text: "⚠ Low screening performance", color: "amber" });
+  if (indicators.staffing < 2.5)
+    alerts.push({ text: "⚠ Staffing concerns", color: "amber" });
+  if (indicators.experience < 2.5)
+    alerts.push({ text: "⚠ Low satisfaction trend", color: "red" });
+  return alerts.slice(0, 2);
+}
+
+function getBestForTags(
+  provider: CityProvider,
+  stars: number,
+): Array<{ label: string; cls: string }> {
+  const tags: Array<{ label: string; cls: string }> = [];
+  if (stars >= 4.5)
+    tags.push({
+      label: "🏆 Top Rated",
+      cls: "bg-amber-50 text-amber-700 border border-amber-200",
+    });
+  if (provider.indicators.safetyClinical >= 4.0)
+    tags.push({
+      label: "🛡 Best for Safety",
+      cls: "bg-blue-50 text-blue-700 border border-blue-200",
+    });
+  if (provider.indicators.experience >= 4.0)
+    tags.push({
+      label: "⭐ Best for Experience",
+      cls: "bg-green-50 text-green-700 border border-green-200",
+    });
+  if (provider.indicators.preventiveCare >= 4.0)
+    tags.push({
+      label: "💊 Best Preventive Care",
+      cls: "bg-teal-50 text-teal-700 border border-teal-200",
+    });
+  if (stars < 3.0)
+    tags.push({
+      label: "⚠ Needs Improvement",
+      cls: "bg-red-50 text-red-600 border border-red-200",
+    });
+  return tags.slice(0, 2);
+}
+
+function getPerformanceTags(provider: CityProvider): string[] {
+  const tags: string[] = [];
+  if (provider.indicators.safetyClinical >= 4.0) tags.push("Low falls");
+  if (provider.indicators.experience >= 4.0) tags.push("High satisfaction");
+  if (provider.indicators.preventiveCare >= 4.0) tags.push("Good screening");
+  if (provider.indicators.staffing >= 4.0) tags.push("Strong staffing");
+  if (provider.indicators.qualityMeasures >= 4.0) tags.push("High quality");
+  return tags.slice(0, 3);
+}
+
+function generateRecommendationReason(
+  _provider: CityProvider,
+  domainScores: ReturnType<typeof getProviderRatingForQuarter>["domainScores"],
+): string {
+  const strengths: string[] = [];
+  if (domainScores.safety > 80) strengths.push("high safety");
+  if (domainScores.experience > 80) strengths.push("high satisfaction");
+  if (domainScores.preventive > 80) strengths.push("excellent preventive care");
+  if (domainScores.staffing > 80) strengths.push("strong staffing");
+  if (domainScores.compliance > 80) strengths.push("full compliance");
+  if (strengths.length === 0) strengths.push("consistent care quality");
+  return `Recommended due to ${strengths.slice(0, 2).join(" and ")} scores`;
+}
+
+function generateDynamicExplanation(
+  provider: CityProvider,
+  stars: number,
+): string {
+  const ind = provider.indicators;
+  const weak: string[] = [];
+  if (ind.safetyClinical < 3.0) weak.push("safety indicators");
+  if (ind.preventiveCare < 3.0) weak.push("preventive screening");
+  if (ind.staffing < 3.0) weak.push("staffing levels");
+  if (ind.experience < 3.0) weak.push("resident satisfaction");
+  if (weak.length === 0) {
+    if (stars >= 4.5)
+      return "This provider delivers exceptional care across all quality domains.";
+    if (stars >= 4.0)
+      return "This provider performs well overall with strong results across most quality indicators.";
+    return "This provider offers satisfactory care quality with room for improvement in some areas.";
+  }
+  return `Provider performs adequately overall but needs improvement in ${weak.slice(0, 2).join(" and ")} to reach higher standards.`;
+}
 
 // ── Star Picker ───────────────────────────────────────────────────────────────
 function StarPicker({
@@ -827,25 +691,34 @@ function StarPicker({
   label,
 }: { value: number; onChange: (v: number) => void; label?: string }) {
   const [hovered, setHovered] = useState(0);
+  const [popped, setPopped] = useState(0);
+  function handleClick(i: number) {
+    onChange(i);
+    setPopped(i);
+    setTimeout(() => setPopped(0), 220);
+  }
   return (
     <div className="flex items-center gap-2">
-      {label && <span className="text-sm text-gray-600 w-32">{label}</span>}
+      {label && (
+        <span className="text-sm text-gray-600 w-36 shrink-0">{label}</span>
+      )}
       <div className="flex gap-1">
         {[1, 2, 3, 4, 5].map((i) => (
           <button
-            key={i}
+            key={`star-${i}`}
             type="button"
-            onClick={() => onChange(i)}
+            onClick={() => handleClick(i)}
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(0)}
             className="transition-transform hover:scale-110"
           >
             <Star
-              className={`h-6 w-6 ${
+              className={`h-6 w-6 ${popped === i ? "star-pop" : ""} ${i <= (hovered || value) ? "fill-amber-400 text-amber-400" : "fill-gray-100 text-gray-300"}`}
+              style={
                 i <= (hovered || value)
-                  ? "fill-amber-400 text-amber-400"
-                  : "fill-gray-100 text-gray-300"
-              }`}
+                  ? { filter: "drop-shadow(0 0 4px rgba(251,191,36,0.75))" }
+                  : {}
+              }
             />
           </button>
         ))}
@@ -890,250 +763,176 @@ function ServiceBookingModal({
       userPhone,
     });
     setConfirmed(true);
-    setTimeout(() => {
-      onClose();
-    }, 2500);
   }
 
-  if (!provider) return null;
-
   return (
-    <Dialog open={!!provider} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="max-w-md p-0 overflow-hidden"
-        data-ocid="booking.dialog"
-      >
-        {/* Header */}
-        <div className="bg-[#1E3A8A] px-6 py-4 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">
-              Book Appointment
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-blue-200 text-sm mt-1">{provider.name}</p>
-          {/* Step indicator */}
-          {!confirmed && (
-            <div className="flex items-center gap-2 mt-4">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className="flex items-center gap-1.5">
-                  <div
-                    className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                      s <= step
-                        ? "bg-white text-[#1E3A8A]"
-                        : "bg-white/20 text-white/60"
-                    }`}
-                  >
-                    {s < step ? "✓" : s}
-                  </div>
-                  {s < 3 && (
-                    <div
-                      className={`h-0.5 w-8 ${s < step ? "bg-white" : "bg-white/20"}`}
-                    />
-                  )}
-                </div>
-              ))}
-              <span className="text-blue-200 text-xs ml-2">
-                {step === 1
-                  ? "Service"
-                  : step === 2
-                    ? "Date & Time"
-                    : "Your Details"}
-              </span>
+    <Dialog open={!!provider} onOpenChange={onClose}>
+      <DialogContent className="max-w-md" data-ocid="booking.dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-[#1E3A8A]" />
+            Book Appointment
+          </DialogTitle>
+        </DialogHeader>
+        {confirmed ? (
+          <div className="text-center py-8" data-ocid="booking.success_state">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-          )}
-        </div>
-
-        <div className="px-6 py-5">
-          {confirmed ? (
-            /* Success state */
-            <div
-              className="text-center py-6 space-y-4"
-              data-ocid="booking.success_state"
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              Booking Confirmed!
+            </h3>
+            <p className="text-gray-600 mb-1">
+              <span className="font-medium">{service}</span> at{" "}
+              <span className="font-medium">{provider?.name}</span>
+            </p>
+            <p className="text-sm text-gray-500">
+              {date} at {time}
+            </p>
+            <Button
+              className="mt-6 bg-[#1E3A8A] hover:bg-[#1e40af] btn-press"
+              onClick={onClose}
+              data-ocid="booking.close_button"
             >
-              <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
-                <CheckCircle className="h-10 w-10 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">
-                  Booking Confirmed!
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  We look forward to seeing you
-                </p>
-              </div>
-              <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-left space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Activity className="h-4 w-4 text-[#1E3A8A]" />
-                  <span className="font-medium">{service}</span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Calendar className="h-4 w-4 text-[#1E3A8A]" />
-                  <span>{date}</span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock className="h-4 w-4 text-[#1E3A8A]" />
-                  <span>{time}</span>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">
-                This dialog will close automatically…
-              </p>
-            </div>
-          ) : step === 1 ? (
-            /* Step 1: Confirm service */
-            <div className="space-y-4" data-ocid="booking.panel">
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1">
-                  Selected Service
-                </p>
-                <p className="text-lg font-bold text-[#1E3A8A]">{service}</p>
-                {SERVICES.find((s) => s.name === service) && (
-                  <>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {SERVICES.find((s) => s.name === service)!.description}
-                    </p>
-                    <div className="flex items-center gap-1.5 text-xs text-blue-600 mt-2">
-                      <Clock className="h-3.5 w-3.5" />
-                      {SERVICES.find((s) => s.name === service)!.availability}
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-                <p className="font-medium text-gray-800 mb-1">
-                  {provider.name}
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5" />
-                  {provider.city}, Australia
-                </p>
-              </div>
-              <Button
-                className="w-full bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
-                onClick={() => setStep(2)}
-                data-ocid="booking.primary_button"
-              >
-                Choose Date & Time <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          ) : step === 2 ? (
-            /* Step 2: Date & time */
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Select Date
-                </Label>
-                <Input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  min={new Date().toISOString().split("T")[0]}
-                  className="w-full"
-                  data-ocid="booking.input"
+              Done
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              {[1, 2, 3].map((s) => (
+                <div
+                  key={s}
+                  className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${step >= s ? "bg-gradient-to-r from-blue-500 to-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.55)]" : "bg-gray-200"}`}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Select Time
-                </Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {TIME_SLOTS.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setTime(slot)}
-                      className={`rounded-lg border py-2 text-sm font-medium transition-colors ${
-                        time === slot
-                          ? "border-[#1E3A8A] bg-[#1E3A8A] text-white"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-[#1E3A8A] hover:text-[#1E3A8A]"
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
+              ))}
+            </div>
+            {step === 1 && (
+              <div className="space-y-4" data-ocid="booking.panel">
+                <div className="bg-[#F8FAFC] rounded-lg p-4 border">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                    Selected Service
+                  </p>
+                  <p className="text-lg font-bold text-[#1E3A8A]">{service}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {SERVICES.find((s) => s.name === service)?.description}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {SERVICES.find((s) => s.name === service)?.availability}
+                  </p>
                 </div>
-              </div>
-              <div className="flex gap-3">
+                <div className="bg-[#F8FAFC] rounded-lg p-4 border">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                    Provider
+                  </p>
+                  <p className="font-semibold text-gray-900">
+                    {provider?.name}
+                  </p>
+                  <p className="text-sm text-gray-500">{provider?.city}</p>
+                </div>
                 <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setStep(1)}
-                  data-ocid="booking.secondary_button"
-                >
-                  Back
-                </Button>
-                <Button
-                  className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
-                  disabled={!date || !time}
-                  onClick={() => setStep(3)}
+                  className="w-full bg-[#1E3A8A] hover:bg-[#1e40af]"
+                  onClick={() => setStep(2)}
                   data-ocid="booking.primary_button"
                 >
-                  Continue <ArrowRight className="h-4 w-4 ml-2" />
+                  Select Date & Time <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
-            </div>
-          ) : (
-            /* Step 3: Personal details */
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Your Name
-                </Label>
-                <Input
-                  placeholder="Enter your full name"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  data-ocid="booking.input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Phone Number
-                </Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            )}
+            {step === 2 && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="bdate">Preferred Date</Label>
                   <Input
-                    placeholder="04xx xxx xxx"
-                    value={userPhone}
-                    onChange={(e) => setUserPhone(e.target.value)}
-                    className="pl-9"
+                    id="bdate"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="mt-1"
                     data-ocid="booking.input"
                   />
                 </div>
+                <div>
+                  <Label>Preferred Time</Label>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {TIME_SLOTS.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTime(t)}
+                        className={`text-sm py-2 px-3 rounded-lg border transition-colors ${time === t ? "bg-[#1E3A8A] text-white border-[#1E3A8A]" : "bg-white text-gray-700 border-gray-200 hover:border-[#3B82F6]"}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setStep(1)}
+                    data-ocid="booking.secondary_button"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af]"
+                    disabled={!date || !time}
+                    onClick={() => setStep(3)}
+                    data-ocid="booking.primary_button"
+                  >
+                    Continue
+                  </Button>
+                </div>
               </div>
-              {/* Summary */}
-              <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 text-xs text-gray-500 space-y-1">
-                <p className="font-medium text-gray-700 text-sm mb-2">
-                  Booking Summary
-                </p>
-                <p>
-                  {service} · {date} · {time}
-                </p>
-                <p>
-                  {provider.name}, {provider.city}
-                </p>
+            )}
+            {step === 3 && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="uname">Your Name</Label>
+                  <Input
+                    id="uname"
+                    placeholder="Full name"
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    className="mt-1"
+                    data-ocid="booking.input"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="uphone">Phone Number</Label>
+                  <Input
+                    id="uphone"
+                    placeholder="04xx xxx xxx"
+                    value={userPhone}
+                    onChange={(e) => setUserPhone(e.target.value)}
+                    className="mt-1"
+                    data-ocid="booking.input"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setStep(2)}
+                    data-ocid="booking.secondary_button"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af]"
+                    disabled={!userName || !userPhone}
+                    onClick={handleConfirm}
+                    data-ocid="booking.submit_button"
+                  >
+                    Confirm Booking
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setStep(2)}
-                  data-ocid="booking.secondary_button"
-                >
-                  Back
-                </Button>
-                <Button
-                  className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
-                  disabled={!userName || !userPhone}
-                  onClick={handleConfirm}
-                  data-ocid="booking.confirm_button"
-                >
-                  Confirm Booking
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1147,585 +946,1757 @@ function FeedbackModal({
 }: {
   booking: Booking | null;
   onClose: () => void;
-  onSubmit: (bookingId: string, feedback: FeedbackData) => void;
+  onSubmit: (bookingId: string, data: FeedbackData) => void;
 }) {
-  const [overall, setOverall] = useState(0);
-  const [safety, setSafety] = useState(0);
-  const [preventive, setPreventive] = useState(0);
-  const [experience, setExperience] = useState(0);
-  const [quality, setQuality] = useState(0);
-  const [comment, setComment] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-
-  function handleSubmit() {
-    if (!booking || overall === 0) return;
-    onSubmit(booking.id, {
-      overall,
-      safety,
-      preventive,
-      experience,
-      quality,
-      comment,
-    });
-    setSubmitted(true);
-    setTimeout(onClose, 2000);
-  }
-
+  const [fd, setFd] = useState<FeedbackData>({
+    overall: 5,
+    safety: 4,
+    preventive: 4,
+    experience: 4,
+    quality: 4,
+    comment: "",
+  });
   if (!booking) return null;
-
   return (
-    <Dialog open={!!booking} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="max-w-md p-0 overflow-hidden"
-        data-ocid="feedback.dialog"
-      >
-        <div className="bg-[#1E3A8A] px-6 py-4 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">
-              Rate Your Experience
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-blue-200 text-sm mt-1">
-            {booking.providerName} · {booking.service}
-          </p>
-        </div>
-
-        <div className="px-6 py-5">
-          {submitted ? (
-            <div
-              className="text-center py-8 space-y-3"
-              data-ocid="feedback.success_state"
+    <Dialog open={!!booking} onOpenChange={onClose}>
+      <DialogContent className="max-w-md" data-ocid="feedback.dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-amber-500" />
+            Rate Your Experience
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="bg-[#F8FAFC] rounded-lg p-3 border text-sm">
+            <p className="font-medium">{booking.service}</p>
+            <p className="text-gray-500">
+              {booking.providerName} · {booking.date}
+            </p>
+          </div>
+          <div className="space-y-3">
+            <StarPicker
+              value={fd.overall}
+              onChange={(v) => setFd({ ...fd, overall: v })}
+              label="Overall"
+            />
+            <StarPicker
+              value={fd.safety}
+              onChange={(v) => setFd({ ...fd, safety: v })}
+              label="Safety"
+            />
+            <StarPicker
+              value={fd.preventive}
+              onChange={(v) => setFd({ ...fd, preventive: v })}
+              label="Preventive Care"
+            />
+            <StarPicker
+              value={fd.experience}
+              onChange={(v) => setFd({ ...fd, experience: v })}
+              label="Experience"
+            />
+            <StarPicker
+              value={fd.quality}
+              onChange={(v) => setFd({ ...fd, quality: v })}
+              label="Quality"
+            />
+          </div>
+          <div>
+            <Label>Comments (optional)</Label>
+            <Textarea
+              placeholder="Share your experience..."
+              value={fd.comment}
+              onChange={(e) => setFd({ ...fd, comment: e.target.value })}
+              className="mt-1"
+              data-ocid="feedback.textarea"
+              rows={3}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={onClose}
+              data-ocid="feedback.cancel_button"
             >
-              <div className="mx-auto h-14 w-14 rounded-full bg-green-100 flex items-center justify-center">
-                <CheckCircle className="h-9 w-9 text-green-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900">Thank you!</h3>
-              <p className="text-sm text-gray-500">
-                Your feedback helps others make informed decisions.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-5">
-              {/* Overall rating — required */}
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-gray-800">
-                  Overall Experience <span className="text-red-500">*</span>
-                </p>
-                <StarPicker value={overall} onChange={setOverall} />
-                {overall === 0 && (
-                  <p className="text-xs text-red-500">
-                    Please select a rating to continue
-                  </p>
-                )}
-              </div>
-
-              <div className="border-t border-gray-100" />
-
-              {/* Domain ratings — optional */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  Area Ratings (optional)
-                </p>
-                <StarPicker
-                  value={safety}
-                  onChange={setSafety}
-                  label="Safety"
-                />
-                <StarPicker
-                  value={preventive}
-                  onChange={setPreventive}
-                  label="Preventive Care"
-                />
-                <StarPicker
-                  value={experience}
-                  onChange={setExperience}
-                  label="Experience"
-                />
-                <StarPicker
-                  value={quality}
-                  onChange={setQuality}
-                  label="Care Quality"
-                />
-              </div>
-
-              <div className="border-t border-gray-100" />
-
-              {/* Comment */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Comments <span className="text-gray-400">(optional)</span>
-                </Label>
-                <Textarea
-                  placeholder="Share your experience…"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={3}
-                  data-ocid="feedback.textarea"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={onClose}
-                  data-ocid="feedback.cancel_button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
-                  disabled={overall === 0}
-                  onClick={handleSubmit}
-                  data-ocid="feedback.submit_button"
-                >
-                  Submit Feedback
-                </Button>
-              </div>
-            </div>
-          )}
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-gradient-to-r from-[#1e3a8a] to-[#4f46e5] hover:opacity-90 text-white btn-press"
+              onClick={() => onSubmit(booking.id, fd)}
+              data-ocid="feedback.submit_button"
+            >
+              Submit Feedback
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function PublicProviderModal({
-  provider,
-  onClose,
-  currentQuarter = "Q4-2025",
-  onBookService,
+// ── AI Chatbot ────────────────────────────────────────────────────────────────
+function AIChatbot({
+  currentCity,
+  onCityChange,
+  onOpenProvider,
 }: {
-  provider: CityProvider | null;
-  onClose: () => void;
-  currentQuarter?: string;
-  onBookService?: (provider: CityProvider, service: string) => void;
+  currentCity: string;
+  onCityChange: (c: string) => void;
+  onOpenProvider: (p: CityProvider) => void;
 }) {
-  if (!provider) return null;
+  const [open, setOpen] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [awaitingService, setAwaitingService] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: "ai",
+      text: "Hi! I'm your AI Care Assistant. Ask me anything about aged care providers in your area.",
+      ts: Date.now(),
+      quickReplies: [
+        "Best provider?",
+        "Safest option?",
+        "Home care?",
+        "Compare providers",
+      ],
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const stars = getProviderRatingForQuarter(provider.id, currentQuarter).stars;
-  const risk = getRiskLevelFromIndicators(provider.indicators);
-  const perf = getPerformanceLabel(stars);
-  const explanation = generateDynamicExplanation(stars, provider.indicators);
-  const rawScores = getDomainRawScores(provider);
-  const strengths = Object.entries(rawScores).filter(([, v]) => v >= 4.0);
-  const improvements = Object.entries(rawScores).filter(([, v]) => v < 3.0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrollRef is stable
+  useEffect(() => {
+    if (scrollRef.current)
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  function generateResponse(msg: string): string {
+    const lower = msg.toLowerCase();
+    const cityProviders = CITY_PROVIDERS[currentCity] || [];
+
+    // City name mentioned — switch city
+    for (const city of CITY_LIST) {
+      if (lower.includes(city.toLowerCase())) {
+        const cityPs = CITY_PROVIDERS[city] || [];
+        if (cityPs.length > 0) {
+          onCityChange(city);
+          const top = [...cityPs].sort((a, b) => {
+            const ra = getProviderRatingForQuarter(a.id).stars;
+            const rb = getProviderRatingForQuarter(b.id).stars;
+            return rb - ra;
+          })[0];
+          const rating = getProviderRatingForQuarter(top.id);
+          return `I've switched to ${city}. The top provider there is **${top.name}** with ${rating.stars.toFixed(1)}⭐. ${generateRecommendationReason(top, rating.domainScores)}.`;
+        }
+      }
+    }
+
+    if (cityProviders.length === 0)
+      return "I couldn't find providers for your current location. Try selecting a different city.";
+
+    const sorted = [...cityProviders].sort((a, b) => {
+      const ra = getProviderRatingForQuarter(a.id).stars;
+      const rb = getProviderRatingForQuarter(b.id).stars;
+      return rb - ra;
+    });
+
+    if (lower.includes("dementia")) {
+      const top = sorted[0];
+      const r = getProviderRatingForQuarter(top.id);
+      return `For dementia care, I recommend **${top.name}** in ${top.city}. They have a ${r.stars.toFixed(1)}⭐ rating with strong safety and experience scores. ${generateRecommendationReason(top, r.domainScores)}.`;
+    }
+    if (
+      lower.includes("safe") ||
+      lower.includes("fall") ||
+      lower.includes("safety")
+    ) {
+      const safest = [...cityProviders].sort(
+        (a, b) => b.indicators.safetyClinical - a.indicators.safetyClinical,
+      )[0];
+      const r = getProviderRatingForQuarter(safest.id);
+      return `The safest provider in ${currentCity} is **${safest.name}** with a safety score of ${safest.indicators.safetyClinical.toFixed(1)}/5 and overall rating of ${r.stars.toFixed(1)}⭐.`;
+    }
+    if (
+      lower.includes("home care") ||
+      lower.includes("cheapest") ||
+      lower.includes("home")
+    ) {
+      const homeProviders = cityProviders.filter((p) => p.type === "Home Care");
+      if (homeProviders.length === 0)
+        return `There are no home care providers listed in ${currentCity}. Try searching in another city.`;
+      return `Home care options in ${currentCity}: ${homeProviders.map((p) => `**${p.name}**`).join(", ")}. I recommend checking their ratings using the provider cards below.`;
+    }
+    if (
+      lower.includes("highest rated") ||
+      lower.includes("best provider") ||
+      lower.includes("top rated")
+    ) {
+      const top = sorted[0];
+      const r = getProviderRatingForQuarter(top.id);
+      return `The highest rated provider in ${currentCity} is **${top.name}** with ${r.stars.toFixed(1)}⭐. ${generateRecommendationReason(top, r.domainScores)}.`;
+    }
+    if (lower.includes("lowest risk") || lower.includes("low risk")) {
+      const lowRisk = cityProviders.find(
+        (p) => getRiskLevel(p.indicators) === "Low",
+      );
+      if (lowRisk) {
+        const r = getProviderRatingForQuarter(lowRisk.id);
+        return `The lowest risk provider in ${currentCity} is **${lowRisk.name}** (${r.stars.toFixed(1)}⭐, Low Risk) — strong performance across all safety indicators.`;
+      }
+      return `All providers in ${currentCity} currently show some risk indicators. I recommend **${sorted[0].name}** as the best overall option.`;
+    }
+    if (lower.includes("how many") || lower.includes("providers")) {
+      return `There are ${cityProviders.length} aged care providers listed in ${currentCity}. ${sorted.filter((p) => getProviderRatingForQuarter(p.id).stars >= 4).length} have a rating of 4⭐ or higher.`;
+    }
+    return `I can help you find aged care providers in ${currentCity}. Try asking:\n• "Best provider for dementia care"\n• "Safest provider"\n• "Home care options"\n• "Highest rated provider"\nOr mention a city name to explore providers there.`;
+  }
+
+  function sendMessage(overrideText?: string) {
+    const text = (overrideText ?? input).trim();
+    if (!text) return;
+    const userMsg: ChatMessage = { role: "user", text, ts: Date.now() };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setIsTyping(true);
+
+    // Multi-step: if "best provider" without service context, ask for service
+    const lower = text.toLowerCase();
+    if (
+      !awaitingService &&
+      (lower === "best provider?" || lower === "best provider") &&
+      !lower.includes("for")
+    ) {
+      setTimeout(() => {
+        setIsTyping(false);
+        setAwaitingService(true);
+        const aiMsg: ChatMessage = {
+          role: "ai",
+          text: "What type of care are you looking for?",
+          ts: Date.now(),
+          quickReplies: [
+            "General Care",
+            "Dementia Care",
+            "Physiotherapy",
+            "Home Care",
+            "Mental Health",
+          ],
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+      }, 700);
+      return;
+    }
+    setAwaitingService(false);
+
+    setTimeout(() => {
+      setIsTyping(false);
+      const responseText = generateResponse(text);
+      // Find provider chips if response mentions providers
+      const cityPs = CITY_PROVIDERS[currentCity] || [];
+      const mentionedProviders = cityPs
+        .filter((p) => responseText.includes(p.name))
+        .map((p) => p.id);
+      const aiMsg: ChatMessage = {
+        role: "ai",
+        text: responseText,
+        ts: Date.now(),
+        providers:
+          mentionedProviders.length > 0 ? mentionedProviders : undefined,
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+    }, 700);
+  }
 
   return (
-    <Dialog open={!!provider} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="max-w-lg p-0 overflow-hidden"
-        data-ocid="public.dialog"
+    <>
+      {/* Floating button */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        data-ocid="chat.open_modal_button"
+        className="fixed bottom-6 right-6 w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 z-50 pulse-ring btn-press"
+        style={{ background: "linear-gradient(135deg,#1e3a8a,#6366f1)" }}
+        title="AI Care Assistant"
       >
-        {/* Navy header */}
-        <div className="bg-[#1E3A8A] px-6 py-5 text-white">
-          <div className="flex items-start justify-between gap-3">
-            <DialogHeader className="flex-1 min-w-0">
-              <DialogTitle className="text-xl font-bold text-white leading-tight">
-                {provider.name}
-              </DialogTitle>
-              <p className="flex items-center gap-1.5 text-blue-200 text-sm mt-1">
-                <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                {provider.city}, Australia
-              </p>
-            </DialogHeader>
+        <Bot className="h-6 w-6" />
+      </button>
+
+      {/* Chat panel */}
+      {open && (
+        <div
+          className="fixed bottom-24 right-6 w-80 h-96 glass-card rounded-2xl flex flex-col z-50 animate-fade-up"
+          data-ocid="chat.panel"
+        >
+          <div
+            className="text-white px-4 py-3 rounded-t-2xl flex items-center justify-between"
+            style={{ background: "linear-gradient(135deg,#1e3a8a,#312e81)" }}
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              <span className="font-semibold text-sm">AI Care Assistant</span>
+            </div>
             <button
               type="button"
-              onClick={onClose}
-              data-ocid="public.close_button"
-              className="rounded-full p-1.5 text-blue-200 hover:bg-white/10 hover:text-white transition-colors flex-shrink-0 mt-0.5"
-              aria-label="Close"
+              onClick={() => setOpen(false)}
+              className="hover:opacity-75"
+              data-ocid="chat.close_button"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="mt-4 flex items-center gap-4 flex-wrap">
-            <div>
-              <StarRating stars={stars} size="lg" />
-              <p className="text-sm font-semibold mt-0.5 text-blue-100">
-                {stars.toFixed(1)} / 5 &mdash; {perf.label}
-              </p>
-            </div>
-            <div className="ml-auto flex flex-col items-end gap-2">
-              <RiskBadge level={risk} />
-              <TrustScoreBadge stars={stars} />
-            </div>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+            {messages.map((m) => (
+              <div key={m.ts} className="space-y-1">
+                <div
+                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm animate-chat-bubble ${m.role === "user" ? "bg-gradient-to-br from-[#1e3a8a] to-[#4f46e5] text-white rounded-br-sm" : "bg-white/90 text-gray-800 border border-gray-200 rounded-bl-sm"}`}
+                  >
+                    {m.text.split("\n").map((line, li) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: static split index
+                      <p key={li} className={li > 0 ? "mt-1" : ""}>
+                        {line}
+                      </p>
+                    ))}
+                    <p
+                      className={`text-xs mt-1 opacity-60 ${m.role === "user" ? "text-right" : ""}`}
+                    >
+                      {new Date(m.ts).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+                {/* Provider chips */}
+                {m.providers && m.providers.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pl-2">
+                    {m.providers.map((pid) => {
+                      const allPs = Object.values(CITY_PROVIDERS).flat();
+                      const prov = allPs.find((p) => p.id === pid);
+                      if (!prov) return null;
+                      return (
+                        <button
+                          key={pid}
+                          type="button"
+                          onClick={() => {
+                            onOpenProvider(prov);
+                            setOpen(false);
+                          }}
+                          className="text-xs px-2 py-1 bg-[#1e3a8a]/10 hover:bg-[#1e3a8a]/20 text-[#1e3a8a] rounded-full border border-[#1e3a8a]/20 font-medium transition-colors"
+                          data-ocid="chat.provider.button"
+                        >
+                          📍 {prov.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Quick replies */}
+                {m.role === "ai" &&
+                  m.quickReplies &&
+                  messages[messages.length - 1]?.ts === m.ts && (
+                    <div className="flex flex-wrap gap-1 pl-2">
+                      {m.quickReplies.map((qr) => (
+                        <button
+                          key={qr}
+                          type="button"
+                          onClick={() => sendMessage(qr)}
+                          className="text-xs px-2.5 py-1 bg-white border border-gray-200 hover:border-[#1e3a8a] hover:text-[#1e3a8a] text-gray-600 rounded-full transition-colors"
+                          data-ocid="chat.quick_reply.button"
+                        >
+                          {qr}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+              </div>
+            ))}
+            {/* Typing indicator */}
+            {isTyping && (
+              <div className="flex justify-start">
+                <div className="bg-white/90 border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3">
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: `${i * 0.15}s` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          {/* Performance tags in modal header */}
-          <div className="mt-3">
-            <PerformanceTags indicators={provider.indicators} />
+          <div className="p-3 border-t flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              placeholder="Ask about providers..."
+              className="flex-1 text-sm"
+              data-ocid="chat.input"
+            />
+            <Button
+              size="sm"
+              className="bg-[#1E3A8A] hover:bg-[#1e40af] px-3"
+              onClick={() => sendMessage()}
+              data-ocid="chat.submit_button"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
         </div>
+      )}
+    </>
+  );
+}
 
-        <div className="overflow-y-auto max-h-[65vh] px-6 py-5 space-y-5">
-          {/* Plain-language explanation */}
-          <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
-            <p className="text-sm font-semibold text-[#1E3A8A] mb-1">
-              What this means for you
-            </p>
-            <p className="text-sm text-gray-700 leading-relaxed">
-              {explanation}
-            </p>
+// ── Provider Detail Modal ─────────────────────────────────────────────────────
+function ProviderDetailModal({
+  provider,
+  quarter,
+  onClose,
+  onBook,
+  reviews,
+  onAddReview,
+  onEditReview,
+  onDeleteReview,
+  userRatings,
+  capacityState,
+}: {
+  provider: CityProvider | null;
+  quarter: string;
+  onClose: () => void;
+  onBook: (service: string) => void;
+  reviews: Review[];
+  onAddReview: (review: Omit<Review, "id" | "isOwn">) => void;
+  onEditReview: (id: string, updates: Partial<Review>) => void;
+  onDeleteReview: (id: string) => void;
+  userRatings: UserRatings;
+  capacityState: Record<string, { total: number; booked: number }>;
+}) {
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "trends" | "services" | "reviews"
+  >("overview");
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState({ rating: 5, comment: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ rating: 5, comment: "" });
+
+  const ratingData = useMemo(() => {
+    if (!provider) return null;
+    return getProviderRatingForQuarter(provider.id, quarter);
+  }, [provider, quarter]);
+
+  const trendData = useMemo(() => {
+    if (!provider) return [];
+    return ALL_QUARTERS.map((q) => ({
+      quarter: q.replace("-2025", ""),
+      stars: getProviderRatingForQuarter(provider.id, q).stars,
+    }));
+  }, [provider]);
+
+  if (!provider || !ratingData) return null;
+
+  const risk = getRiskLevel(provider.indicators);
+  const alerts = getProviderAlerts(provider.indicators);
+  const tags = getBestForTags(provider, ratingData.stars);
+  const explanation = generateDynamicExplanation(provider, ratingData.stars);
+
+  const q1Stars = trendData[0]?.stars ?? ratingData.stars;
+  const q4Stars = trendData[3]?.stars ?? ratingData.stars;
+  const trendStatus =
+    q4Stars > q1Stars + 0.1
+      ? "improving"
+      : q4Stars < q1Stars - 0.1
+        ? "declining"
+        : "stable";
+
+  // Explainable rating: top 3 positive / negative domains
+  const domainEntries = Object.entries(ratingData.domainScores) as [
+    string,
+    number,
+  ][];
+  const sortedDomains = [...domainEntries].sort((a, b) => b[1] - a[1]);
+  const top3Positive = sortedDomains.slice(0, 3);
+  const top3Negative = sortedDomains.slice(-3).reverse();
+
+  const domainLabels: Record<string, string> = {
+    safety: "Falls & Safety",
+    preventive: "Preventive Screening",
+    quality: "Care Quality",
+    staffing: "Staffing",
+    compliance: "Compliance",
+    experience: "Resident Experience",
+  };
+
+  const avgReviewRating =
+    reviews.length > 0
+      ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
+      : 0;
+
+  const trust = calcTrustScore(
+    ratingData.stars,
+    ratingData.domainScores.safety,
+    ratingData.domainScores.compliance,
+    avgReviewRating,
+    q4Stars - q1Stars,
+  );
+  const outcome = calcOutcomePrediction(ratingData);
+
+  // User feedback boost
+  const userRating = userRatings[provider.id];
+  const blendedStars = userRating
+    ? (ratingData.stars * 10 + userRating.overall) / 11
+    : ratingData.stars;
+
+  const domainBars = [
+    {
+      name: "Safety",
+      value: Math.round(ratingData.domainScores.safety),
+      color: "#1E3A8A",
+    },
+    {
+      name: "Preventive",
+      value: Math.round(ratingData.domainScores.preventive),
+      color: "#3B82F6",
+    },
+    {
+      name: "Quality",
+      value: Math.round(ratingData.domainScores.quality),
+      color: "#16A34A",
+    },
+    {
+      name: "Staffing",
+      value: Math.round(ratingData.domainScores.staffing),
+      color: "#F59E0B",
+    },
+    {
+      name: "Compliance",
+      value: Math.round(ratingData.domainScores.compliance),
+      color: "#8B5CF6",
+    },
+    {
+      name: "Experience",
+      value: Math.round(ratingData.domainScores.experience),
+      color: "#EC4899",
+    },
+  ];
+
+  function handleAddReview() {
+    onAddReview({
+      author: "You",
+      rating: reviewDraft.rating,
+      comment: reviewDraft.comment,
+      timestamp: Date.now(),
+    });
+    setReviewDraft({ rating: 5, comment: "" });
+    setShowReviewForm(false);
+  }
+
+  function handleEditSave(id: string) {
+    onEditReview(id, editDraft);
+    setEditingId(null);
+  }
+
+  return (
+    <Dialog open={!!provider} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-y-auto p-0"
+        data-ocid="provider.modal"
+      >
+        <div className="animate-modal-up">
+          {/* Header */}
+          <div
+            className="sticky top-0 bg-white border-b px-6 py-4 z-10"
+            style={{
+              background:
+                "linear-gradient(135deg,rgba(255,255,255,0.97),rgba(248,250,252,0.97))",
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {provider.name}
+                  </h2>
+                  <div
+                    title={`Trust Score: ${trust.score}/100 — Based on ratings, safety, compliance, reviews and improvement trend`}
+                    className="flex items-center gap-1.5 cursor-help"
+                  >
+                    <TrustScoreRing
+                      score={trust.score}
+                      ringColor={trust.ringColor}
+                      size={40}
+                    />
+                    <span
+                      className={`text-xs font-semibold ${trust.colorClass}`}
+                    >
+                      {trust.label}
+                    </span>
+                  </div>
+                  {tags.map((t) => (
+                    <span
+                      key={t.label}
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border ${t.cls}`}
+                    >
+                      {t.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex items-center gap-1">
+                    {renderStars(blendedStars, "h-5 w-5")}
+                    <span className="font-bold text-gray-900 ml-1">
+                      {blendedStars.toFixed(1)}
+                    </span>
+                    <span className="text-gray-400 text-sm">/5</span>
+                  </div>
+                  <span className="text-gray-300">|</span>
+                  <span
+                    className={`text-sm font-medium ${risk === "Low" ? "text-green-600" : risk === "Medium" ? "text-amber-600" : "text-red-600"}`}
+                  >
+                    {risk} Risk
+                  </span>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-sm text-gray-500">
+                    {provider.city} · {provider.type}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600"
+                data-ocid="provider.close_button"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {/* Tabs */}
+            <div className="flex gap-1 mt-3">
+              {(["overview", "trends", "services", "reviews"] as const).map(
+                (tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    data-ocid={`provider.${tab}.tab`}
+                    className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors capitalize ${activeTab === tab ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                  >
+                    {tab}
+                  </button>
+                ),
+              )}
+            </div>
           </div>
 
-          {/* All 6 Performance Areas */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-              Key Performance Areas
-            </p>
-            <div className="space-y-3">
-              {DOMAIN_ORDER.map((domain) => {
-                const score = rawScores[domain];
-                const status = getIndicatorStatus(score);
-                const description = getIndicatorDescription(domain, score);
-                return (
+          <div className="p-6 space-y-5">
+            {activeTab === "overview" && (
+              <>
+                {/* Smart Alerts */}
+                {alerts.length > 0 && (
                   <div
-                    key={domain}
-                    className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
+                    className="space-y-2"
+                    data-ocid="provider.alerts.section"
                   >
-                    <div className="rounded-full bg-blue-100 p-1.5 flex-shrink-0">
-                      {DOMAIN_ICONS[domain]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-800">
-                          {DOMAIN_FRIENDLY_NAMES[domain]}
+                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                      <Bell className="h-4 w-4" /> Safety Alerts
+                    </h3>
+                    {alerts.map((a) => (
+                      <div
+                        key={a.text}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${a.color === "red" ? "bg-red-50 text-red-700 border border-red-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}
+                      >
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        {a.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Why This Rating */}
+                <div className="bg-[#F8FAFC] rounded-xl p-4 border">
+                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1 mb-3">
+                    <Info className="h-4 w-4 text-[#1E3A8A]" /> Why This Rating?
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-3">{explanation}</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+                      Top Performing Areas
+                    </p>
+                    {top3Positive.map(([domain, score]) => (
+                      <div
+                        key={domain}
+                        className="flex items-center justify-between bg-green-50 rounded-lg px-3 py-2"
+                      >
+                        <span className="text-sm font-medium text-gray-700">
+                          {domainLabels[domain] ?? domain}
                         </span>
-                        <span
-                          className={`text-xs font-medium rounded-full px-2 py-0.5 ${status.chipClass}`}
-                        >
-                          {status.label}
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 bg-gray-200 rounded-full w-20">
+                            <div
+                              className="h-1.5 bg-green-500 rounded-full"
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-green-700">
+                            {score.toFixed(0)}/100
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+                            Better
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mt-1">
+                      Areas for Improvement
+                    </p>
+                    {top3Negative.map(([domain, score]) => (
+                      <div
+                        key={domain}
+                        className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2"
+                      >
+                        <span className="text-sm font-medium text-gray-700">
+                          {domainLabels[domain] ?? domain}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 bg-gray-200 rounded-full w-20">
+                            <div
+                              className="h-1.5 bg-amber-500 rounded-full"
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-amber-700">
+                            {score.toFixed(0)}/100
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">
+                            {score < 60 ? "Needs Work" : "Monitor"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Domain Progress Bars */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    Performance by Domain
+                  </h3>
+                  <div className="space-y-2">
+                    {domainBars.map((d) => (
+                      <div key={d.name} className="flex items-center gap-3">
+                        <span className="text-sm text-gray-600 w-24 shrink-0">
+                          {d.name}
+                        </span>
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{
+                              width: `${d.value}%`,
+                              backgroundColor: d.color,
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-gray-700 w-10 text-right">
+                          {d.value}%
                         </span>
                       </div>
-                      <Progress
-                        value={Math.round(score * 20)}
-                        className="h-1.5 mt-1.5"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {description}
+                    ))}
+                  </div>
+                </div>
+
+                {/* Outcome Prediction Score */}
+                <div
+                  className="bg-gradient-to-br from-[#1E3A8A]/5 to-[#3B82F6]/5 rounded-xl p-4 border border-[#3B82F6]/20"
+                  data-ocid="provider.outcome.card"
+                >
+                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1 mb-3">
+                    <Zap className="h-4 w-4 text-[#1E3A8A]" /> Outcome
+                    Prediction Score
+                    <span
+                      title="Calculated from: Safety (30%), Resident Experience (25%), Care Quality (20%), Preventive Care (15%), Compliance (10%)"
+                      className="ml-1 cursor-help"
+                    >
+                      <Info className="h-3.5 w-3.5 text-gray-400" />
+                    </span>
+                  </h3>
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <div className="text-3xl font-black text-[#1E3A8A]">
+                        {outcome.score}%
+                      </div>
+                      <div
+                        className={`text-xs font-semibold mt-0.5 ${outcome.confidenceColor}`}
+                      >
+                        {outcome.confidence}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <Progress value={outcome.score} className="h-3 mb-1" />
+                      <p className="text-xs text-gray-600">
+                        This provider has a{" "}
+                        <strong>{outcome.score}% predicted success rate</strong>{" "}
+                        for similar care cases based on historical domain
+                        performance.
                       </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Strengths */}
-          <div className="rounded-lg bg-green-50 border border-green-100 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <p className="text-sm font-semibold text-green-800">Strengths</p>
-            </div>
-            {strengths.length > 0 ? (
-              <ul className="space-y-1">
-                {strengths.map(([key]) => (
-                  <li
-                    key={key}
-                    className="flex items-center gap-2 text-sm text-green-700"
-                  >
-                    <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                    {DOMAIN_FRIENDLY_NAMES[key] ?? key}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-green-700">
-                Performing at benchmark levels across all areas.
-              </p>
+                </div>
+              </>
             )}
-          </div>
 
-          {/* Areas for Improvement */}
-          <div className="rounded-lg bg-amber-50 border border-amber-100 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingDown className="h-4 w-4 text-amber-600" />
-              <p className="text-sm font-semibold text-amber-800">
-                Areas Being Improved
-              </p>
-            </div>
-            {improvements.length > 0 ? (
-              <ul className="space-y-1">
-                {improvements.map(([key]) => (
-                  <li
-                    key={key}
-                    className="flex items-center gap-2 text-sm text-amber-700"
+            {activeTab === "trends" && (
+              <>
+                {/* Trend badge */}
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-semibold text-gray-700">
+                    Performance Trend (Q1–Q4 2025)
+                  </h3>
+                  <span
+                    className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
+                      trendStatus === "improving"
+                        ? "bg-green-100 text-green-700"
+                        : trendStatus === "declining"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-gray-100 text-gray-600"
+                    }`}
                   >
-                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                    Working to improve {DOMAIN_FRIENDLY_NAMES[key] ?? key}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-amber-700">
-                No major concerns identified.
-              </p>
+                    {trendStatus === "improving" ? (
+                      <>
+                        <TrendingUp className="h-3 w-3" /> 📈 Improving
+                      </>
+                    ) : trendStatus === "declining" ? (
+                      <>
+                        <TrendingDown className="h-3 w-3" /> 📉 Declining
+                      </>
+                    ) : (
+                      <>➡ Stable</>
+                    )}
+                  </span>
+                </div>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData}>
+                      <XAxis dataKey="quarter" tick={{ fontSize: 11 }} />
+                      <YAxis domain={[1, 5]} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(v: number) => [
+                          `${v.toFixed(2)}⭐`,
+                          "Rating",
+                        ]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="stars"
+                        stroke="#1E3A8A"
+                        strokeWidth={2.5}
+                        dot={{ fill: "#1E3A8A", r: 5 }}
+                        activeDot={{ r: 7 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {trendData.map((d) => (
+                    <div
+                      key={d.quarter}
+                      className="bg-[#F8FAFC] rounded-lg p-3 text-center border"
+                    >
+                      <p className="text-xs text-gray-500">{d.quarter}</p>
+                      <p className="text-lg font-bold text-[#1E3A8A]">
+                        {d.stars.toFixed(1)}
+                      </p>
+                      <div className="flex justify-center">
+                        {renderStars(d.stars, "h-3 w-3")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
-          </div>
 
-          {/* Available Services */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-              Available Services
-            </p>
-            <div className="space-y-2">
-              {SERVICES.map((svc) => (
-                <div
-                  key={svc.name}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800">
-                      {svc.name}
+            {activeTab === "services" && (
+              <>
+                <h3 className="text-sm font-semibold text-gray-700">
+                  Available Services
+                </h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {SERVICES.map((s) => {
+                    const capKey = `${provider.id}-${s.name}`;
+                    const cap = capacityState[capKey] ?? {
+                      total: 12,
+                      booked: 0,
+                    };
+                    const isFullyBooked = cap.total - cap.booked <= 0;
+                    return (
+                      <div
+                        key={s.name}
+                        className="glass-card hover-glow rounded-xl p-4"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0"
+                            style={{
+                              background:
+                                "linear-gradient(135deg,#dbeafe,#ede9fe)",
+                            }}
+                          >
+                            {s.icon}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">
+                              {s.name}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {s.description}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              <Clock className="h-3 w-3 inline mr-1" />
+                              {s.availability}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-gradient-to-r from-[#1e3a8a] to-[#4f46e5] hover:opacity-90 text-white shrink-0 btn-press"
+                            onClick={() => onBook(s.name)}
+                            disabled={isFullyBooked}
+                            data-ocid="service.book_button"
+                          >
+                            {isFullyBooked ? "Full" : "Book"}
+                          </Button>
+                        </div>
+                        <CapacityIndicator
+                          providerId={provider.id}
+                          serviceName={s.name}
+                          capacityState={capacityState}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {activeTab === "reviews" && (
+              <>
+                {/* Aggregate rating */}
+                <div className="bg-[#F8FAFC] rounded-xl p-4 border flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-4xl font-bold text-[#1E3A8A]">
+                      {avgReviewRating.toFixed(1)}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {svc.description}
+                    <div className="flex justify-center mt-1">
+                      {renderStars(avgReviewRating, "h-4 w-4")}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {reviews.length} review{reviews.length !== 1 ? "s" : ""}
                     </p>
-                    <div className="flex items-center gap-1.5 text-xs text-blue-600 mt-1">
-                      <Clock className="h-3 w-3" />
-                      {svc.availability}
+                  </div>
+                  <div className="flex-1">
+                    {[5, 4, 3, 2, 1].map((star) => {
+                      const count = reviews.filter(
+                        (r) => r.rating === star,
+                      ).length;
+                      return (
+                        <div
+                          key={star}
+                          className="flex items-center gap-2 mb-1"
+                        >
+                          <span className="text-xs text-gray-500 w-3">
+                            {star}
+                          </span>
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                          <div className="flex-1 h-1.5 bg-gray-200 rounded-full">
+                            <div
+                              className="h-full bg-amber-400 rounded-full"
+                              style={{
+                                width: reviews.length
+                                  ? `${(count / reviews.length) * 100}%`
+                                  : "0%",
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-500 w-4">
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Review list */}
+                <div className="space-y-3">
+                  {reviews.map((rev) => (
+                    <div
+                      key={rev.id}
+                      className="bg-white rounded-xl border p-4"
+                    >
+                      {editingId === rev.id ? (
+                        <div className="space-y-3">
+                          <StarPicker
+                            value={editDraft.rating}
+                            onChange={(v) =>
+                              setEditDraft({ ...editDraft, rating: v })
+                            }
+                          />
+                          <Textarea
+                            value={editDraft.comment}
+                            onChange={(e) =>
+                              setEditDraft({
+                                ...editDraft,
+                                comment: e.target.value,
+                              })
+                            }
+                            rows={2}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditingId(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-[#1E3A8A]"
+                              onClick={() => handleEditSave(rev.id)}
+                              data-ocid="review.save_button"
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <span className="font-semibold text-sm text-gray-900">
+                                {rev.author}
+                              </span>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {renderStars(rev.rating, "h-3.5 w-3.5")}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">
+                                {new Date(rev.timestamp).toLocaleDateString(
+                                  "en-AU",
+                                )}
+                              </span>
+                              {rev.isOwn && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingId(rev.id);
+                                      setEditDraft({
+                                        rating: rev.rating,
+                                        comment: rev.comment,
+                                      });
+                                    }}
+                                    className="text-gray-400 hover:text-[#1E3A8A]"
+                                    data-ocid="review.edit_button"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteReview(rev.id)}
+                                    className="text-gray-400 hover:text-red-500"
+                                    data-ocid="review.delete_button"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-2">
+                            {rev.comment}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Write review */}
+                {!showReviewForm ? (
+                  <Button
+                    variant="outline"
+                    className="w-full border-[#1E3A8A] text-[#1E3A8A]"
+                    onClick={() => setShowReviewForm(true)}
+                    data-ocid="review.open_modal_button"
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" /> Write a Review
+                  </Button>
+                ) : (
+                  <div
+                    className="bg-[#F8FAFC] rounded-xl p-4 border space-y-3"
+                    data-ocid="review.modal"
+                  >
+                    <h4 className="font-semibold text-gray-900">Your Review</h4>
+                    <StarPicker
+                      value={reviewDraft.rating}
+                      onChange={(v) =>
+                        setReviewDraft({ ...reviewDraft, rating: v })
+                      }
+                      label="Your Rating"
+                    />
+                    <Textarea
+                      placeholder="Share your experience with this provider..."
+                      value={reviewDraft.comment}
+                      onChange={(e) =>
+                        setReviewDraft({
+                          ...reviewDraft,
+                          comment: e.target.value,
+                        })
+                      }
+                      rows={3}
+                      data-ocid="review.textarea"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowReviewForm(false)}
+                        data-ocid="review.cancel_button"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-[#1E3A8A] hover:bg-[#1e40af]"
+                        disabled={!reviewDraft.comment.trim()}
+                        onClick={handleAddReview}
+                        data-ocid="review.submit_button"
+                      >
+                        Submit Review
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    className="flex-shrink-0 bg-[#1E3A8A] hover:bg-[#1e40af] text-white text-xs"
-                    onClick={() => {
-                      if (onBookService && provider) {
-                        onBookService(provider, svc.name);
-                        onClose();
-                      }
-                    }}
-                    data-ocid="booking.open_modal_button"
-                  >
-                    Book
-                  </Button>
-                </div>
-              ))}
-            </div>
+                )}
+              </>
+            )}
           </div>
-
-          <p className="text-xs text-gray-400 text-center pb-1">
-            Ratings are based on national quality standards and updated
-            quarterly.
-          </p>
         </div>
-
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
-          <Button
-            onClick={onClose}
-            data-ocid="public.cancel_button"
-            className="w-full bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
-          >
-            Close
-          </Button>
-        </div>
+        {/* /animate-modal-up */}
       </DialogContent>
     </Dialog>
   );
 }
 
 // ── Provider Card ─────────────────────────────────────────────────────────────
-
 function ProviderCard({
   provider,
-  onSelect,
-  isComparing,
-  onToggleCompare,
-  currentQuarter = "Q4-2025",
+  quarter,
+  isInCompare,
+  onCompareToggle,
+  onViewDetails,
+  index,
 }: {
   provider: CityProvider;
-  onSelect: (p: CityProvider) => void;
-  isComparing: boolean;
-  onToggleCompare: (id: string) => void;
-  currentQuarter?: string;
+  quarter: string;
+  isInCompare: boolean;
+  onCompareToggle: () => void;
+  onViewDetails: () => void;
+  index: number;
 }) {
-  const stars = getProviderRatingForQuarter(provider.id, currentQuarter).stars;
-  const risk = getRiskLevelFromIndicators(provider.indicators);
-  const fallsStatus = getIndicatorStatus(provider.indicators.safetyClinical);
-  const screeningPct = getScorePct(provider);
-  const satisfactionPct = getSatisfactionPct(provider);
+  const ratingData = useMemo(
+    () => getProviderRatingForQuarter(provider.id, quarter),
+    [provider.id, quarter],
+  );
+  const risk = getRiskLevel(provider.indicators);
+  const alerts = getProviderAlerts(provider.indicators);
+  const tags = getBestForTags(provider, ratingData.stars);
+  const perfTags = getPerformanceTags(provider);
+  const q1Stars = getProviderRatingForQuarter(provider.id, "Q1-2025").stars;
+  const q4Stars = getProviderRatingForQuarter(provider.id, "Q4-2025").stars;
+  const trust = calcTrustScore(
+    ratingData.stars,
+    ratingData.domainScores.safety,
+    ratingData.domainScores.compliance,
+    0,
+    q4Stars - q1Stars,
+  );
+  const outcome = calcOutcomePrediction(ratingData);
 
-  const accentColor =
-    stars >= 4 ? "bg-green-500" : stars >= 3 ? "bg-amber-500" : "bg-red-500";
-
+  const staggerClass = `animate-fade-up-${(index % 6) + 1}`;
   return (
     <Card
-      className={`overflow-hidden border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer group ${
-        isComparing
-          ? "border-[#1E3A8A] ring-2 ring-[#1E3A8A]/20"
-          : "border-gray-200"
-      }`}
-      onClick={() => onSelect(provider)}
-      data-ocid="public.card"
+      className={`group relative overflow-hidden glass-card hover-glow rounded-2xl ${staggerClass}`}
+      data-ocid={`provider.item.${index + 1}`}
     >
-      <div className={`h-1 w-full ${accentColor}`} />
-      <CardContent className="p-4 space-y-3">
-        {/* Header */}
-        <div className="space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-gray-900 leading-tight group-hover:text-[#1E3A8A] transition-colors">
+      <div
+        className="absolute inset-x-0 top-0 h-1 rounded-t-2xl"
+        style={{ background: "linear-gradient(90deg,#3b82f6,#6366f1)" }}
+      />
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-gray-900 text-sm leading-tight truncate">
               {provider.name}
             </h3>
-            <TrustScoreBadge stars={stars} />
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-xs text-gray-500">
+                <MapPin className="h-3 w-3 inline" /> {provider.city}
+              </span>
+              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-500">{provider.type}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="flex items-center gap-1 text-xs text-gray-500">
-              <MapPin className="h-3 w-3" />
-              {provider.city}
-            </span>
-            <Badge variant="outline" className="text-xs px-1.5 py-0">
-              {provider.type}
-            </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <input
+              type="checkbox"
+              checked={isInCompare}
+              onChange={onCompareToggle}
+              className="h-3.5 w-3.5 accent-[#1E3A8A]"
+              title="Compare"
+              data-ocid={`provider.compare.${index + 1}.checkbox`}
+            />
+            <span className="text-xs text-gray-400">Compare</span>
           </div>
         </div>
 
-        {/* Rating & Risk */}
-        <div className="flex items-center justify-between">
-          <StarRating stars={stars} />
-          <RiskBadge level={risk} />
+        {/* Stars + Trust Ring */}
+        <div className="flex items-center gap-2 mb-2">
+          {renderStars(ratingData.stars, "h-4 w-4")}
+          <span className="font-bold text-sm text-gray-900">
+            {ratingData.stars.toFixed(1)}
+          </span>
+          <div
+            title={`Trust Score: ${trust.score}/100`}
+            className="flex items-center gap-1 cursor-help ml-1"
+          >
+            <TrustScoreRing
+              score={trust.score}
+              ringColor={trust.ringColor}
+              size={32}
+            />
+          </div>
+          <span className={`text-xs font-semibold ${trust.colorClass}`}>
+            {trust.label}
+          </span>
         </div>
+
+        {/* Best For Tags */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {tags.map((t) => (
+              <span
+                key={t.label}
+                className={`text-xs px-1.5 py-0.5 rounded-full border font-medium ${t.cls}`}
+              >
+                {t.label}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Performance tags */}
-        <PerformanceTags indicators={provider.indicators} />
-
-        {/* Indicators */}
-        <div className="space-y-2 pt-1 border-t border-gray-100">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Falls Safety</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${fallsStatus.chipClass}`}
-            >
-              {fallsStatus.label}
-            </span>
+        {perfTags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {perfTags.map((t) => (
+              <span
+                key={t}
+                className="text-xs px-1.5 py-0.5 rounded-full bg-[#F8FAFC] text-gray-600 border"
+              >
+                {t}
+              </span>
+            ))}
           </div>
-          <IndicatorBar
-            label="Screening Completion"
-            value={screeningPct}
-            color={getPctColor(screeningPct)}
-          />
-          <IndicatorBar
-            label="Satisfaction Score"
-            value={satisfactionPct}
-            color={getPctColor(satisfactionPct)}
-          />
+        )}
+
+        {/* Smart Alerts */}
+        {alerts.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {alerts.map((a) => (
+              <span
+                key={a.text}
+                className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${a.color === "red" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"}`}
+              >
+                {a.text}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Indicator bars */}
+        <div className="space-y-1.5 mb-3">
+          {[
+            { label: "Safety", value: provider.indicators.safetyClinical },
+            { label: "Screening", value: provider.indicators.preventiveCare },
+            { label: "Satisfaction", value: provider.indicators.experience },
+          ].map((ind) => (
+            <div key={ind.label} className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-16 shrink-0">
+                {ind.label}
+              </span>
+              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${(ind.value / 5) * 100}%`,
+                    backgroundColor:
+                      ind.value >= 4
+                        ? "#16A34A"
+                        : ind.value >= 3
+                          ? "#F59E0B"
+                          : "#DC2626",
+                  }}
+                />
+              </div>
+              <span className="text-xs font-medium text-gray-600 w-6 text-right">
+                {ind.value.toFixed(1)}
+              </span>
+            </div>
+          ))}
         </div>
 
-        {/* Actions */}
-        <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect(provider);
-            }}
-            data-ocid="public.primary_button"
-            className="flex items-center gap-1.5 text-sm font-medium text-[#1E3A8A] hover:text-blue-700 transition-colors py-1 rounded-md hover:bg-blue-50 px-2"
+        {/* Outcome Prediction mini */}
+        <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
+          <Zap className="h-3 w-3 text-[#1E3A8A]" />
+          <span
+            title="Outcome Prediction Score — weighted from domain performance"
+            className="cursor-help"
           >
-            View Details
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleCompare(provider.id);
-            }}
-            className={`flex items-center gap-1 text-xs font-medium py-1 px-2 rounded-md border transition-colors ${
-              isComparing
-                ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
-                : "text-gray-500 border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A]"
-            }`}
+            <span className="font-semibold text-[#1E3A8A]">
+              {outcome.score}%
+            </span>{" "}
+            success rate ·{" "}
+            <span className={outcome.confidenceColor}>
+              {outcome.confidence}
+            </span>
+          </span>
+        </div>
+
+        {index === 0 && (
+          <div className="mb-2 flex">
+            <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-gradient-to-r from-amber-400 to-orange-400 text-white">
+              ⭐ Top Recommended
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium ${risk === "Low" ? "badge-gradient-green" : risk === "Medium" ? "badge-gradient-amber" : "badge-gradient-red"}`}
           >
-            {isComparing ? (
-              <>
-                <XCircle className="h-3 w-3" /> Remove
-              </>
-            ) : (
-              <>
-                <BarChart2 className="h-3 w-3" /> Compare
-              </>
-            )}
-          </button>
+            {risk} Risk
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-[#1E3A8A] hover:text-[#1e40af] hover:bg-blue-50 text-xs h-7 px-2"
+            onClick={onViewDetails}
+            data-ocid={`provider.view_button.${index + 1}`}
+          >
+            View Details <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Comparison Panel ──────────────────────────────────────────────────────────
+function ComparisonPanel({
+  providerIds,
+  allProviders,
+  quarter,
+  onClose,
+}: {
+  providerIds: string[];
+  allProviders: CityProvider[];
+  quarter: string;
+  onClose: () => void;
+}) {
+  const providers = providerIds
+    .map((id) => allProviders.find((p) => p.id === id))
+    .filter(Boolean) as CityProvider[];
+  if (providers.length < 2) return null;
 
-interface PublicViewProps {
-  currentQuarter?: string;
+  const ratings = providers.map((p) =>
+    getProviderRatingForQuarter(p.id, quarter),
+  );
+
+  const trendData = ALL_QUARTERS.map((q) => {
+    const row: Record<string, string | number> = {
+      quarter: q.replace("-2025", ""),
+    };
+    for (const p of providers) {
+      row[p.name] = getProviderRatingForQuarter(p.id, q).stars;
+    }
+    return row;
+  });
+
+  const barData = [
+    "Safety",
+    "Preventive",
+    "Quality",
+    "Staffing",
+    "Compliance",
+    "Experience",
+  ].map((domain) => {
+    const key =
+      domain.toLowerCase() as keyof (typeof ratings)[0]["domainScores"];
+    const row: Record<string, string | number> = { domain };
+    for (let i = 0; i < providers.length; i++) {
+      row[providers[i].name] = Math.round(ratings[i].domainScores[key] ?? 0);
+    }
+    return row;
+  });
+
+  const radarData = [
+    "safety",
+    "preventive",
+    "quality",
+    "staffing",
+    "compliance",
+    "experience",
+  ].map((key) => {
+    const row: Record<string, string | number> = {
+      domain: key.charAt(0).toUpperCase() + key.slice(0, 5),
+    };
+    for (let i = 0; i < providers.length; i++) {
+      row[providers[i].name] = Math.round(
+        ratings[i].domainScores[
+          key as keyof (typeof ratings)[0]["domainScores"]
+        ] ?? 0,
+      );
+    }
+    return row;
+  });
+
+  const COLORS = ["#1E3A8A", "#16A34A", "#DC2626"];
+
+  return (
+    <div className="glass-card rounded-2xl p-5" data-ocid="compare.panel">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+          <BarChart2 className="h-5 w-5 text-[#1E3A8A]" /> Provider Comparison
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600"
+          data-ocid="compare.close_button"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+        {providers.map((p, i) => {
+          const r = ratings[i];
+          const risk = getRiskLevel(p.indicators);
+          return (
+            <div
+              key={p.id}
+              className="bg-[#F8FAFC] rounded-xl p-3 border-2"
+              style={{ borderColor: COLORS[i] }}
+            >
+              <p className="font-bold text-sm text-gray-900 truncate">
+                {p.name}
+              </p>
+              <div className="flex items-center gap-1 mt-1">
+                {renderStars(r.stars, "h-3.5 w-3.5")}
+                <span className="text-sm font-bold text-gray-800 ml-1">
+                  {r.stars.toFixed(1)}
+                </span>
+              </div>
+              <span
+                className={`text-xs font-medium ${risk === "Low" ? "text-green-600" : risk === "Medium" ? "text-amber-600" : "text-red-600"}`}
+              >
+                {risk} Risk
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bar chart */}
+      <div className="mb-5">
+        <p className="text-sm font-semibold text-gray-700 mb-2">
+          Domain Scores Comparison
+        </p>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={barData} barGap={4}>
+              <XAxis dataKey="domain" tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {providers.map((p, i) => (
+                <Bar
+                  key={p.id}
+                  dataKey={p.name}
+                  fill={COLORS[i]}
+                  radius={[3, 3, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Radar chart */}
+      <div className="mb-5">
+        <p className="text-sm font-semibold text-gray-700 mb-2">
+          Performance Radar
+        </p>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart data={radarData}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="domain" tick={{ fontSize: 10 }} />
+              {providers.map((p, i) => (
+                <Radar
+                  key={p.id}
+                  name={p.name}
+                  dataKey={p.name}
+                  stroke={COLORS[i]}
+                  fill={COLORS[i]}
+                  fillOpacity={0.2}
+                />
+              ))}
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Trend lines */}
+      <div>
+        <p className="text-sm font-semibold text-gray-700 mb-2">
+          Rating Trend Q1–Q4 2025
+        </p>
+        <div className="h-40">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData}>
+              <XAxis dataKey="quarter" tick={{ fontSize: 10 }} />
+              <YAxis domain={[1, 5]} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {providers.map((p, i) => (
+                <Line
+                  key={p.id}
+                  dataKey={p.name}
+                  stroke={COLORS[i]}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
 }
 
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function PublicView({
   currentQuarter = "Q4-2025",
-}: PublicViewProps) {
-  const cities = Object.keys(CITY_PROVIDERS);
+}: { currentQuarter?: string }) {
+  // Core state
+  const [isLoading, setIsLoading] = useState(false);
+  const [syncBanner, setSyncBanner] = useState(false);
   const [selectedCity, setSelectedCity] = useState("Sydney");
-  const [sortBy, setSortBy] = useState<"rating" | "name">("rating");
+  const [searchText, setSearchText] = useState("");
+  const [filterRating, setFilterRating] = useState("all");
+  const [filterRisk, setFilterRisk] = useState("all");
+  const [filterService, setFilterService] = useState("all");
+  const [careNeeds, setCareNeeds] = useState("General Care");
   const [selectedProvider, setSelectedProvider] = useState<CityProvider | null>(
     null,
   );
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
+  const [nearMeMsg, setNearMeMsg] = useState(false);
+
+  // Reviews
+  const seedReviews = useMemo(() => initReviews(), []);
+  const [reviews, setReviews] = useState<Record<string, Review[]>>(seedReviews);
+
+  // Bookings
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [bookingProvider, setBookingProvider] = useState<CityProvider | null>(
-    null,
-  );
-  const [bookingService, setBookingService] = useState<string>("");
-  const [feedbackBookingId, setFeedbackBookingId] = useState<string | null>(
-    null,
-  );
-  const [userRatingAdjustments, setUserRatingAdjustments] = useState<
-    Record<string, number>
-  >({});
-  const [rateNotification, setRateNotification] = useState<Booking | null>(
-    null,
+  const [bookingModal, setBookingModal] = useState<{
+    provider: CityProvider;
+    service: string;
+  } | null>(null);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    booking: Booking;
+  } | null>(null);
+  const [feedbackImpact, setFeedbackImpact] = useState<{
+    name: string;
+    pct: number;
+  } | null>(null);
+  const [userRatings, setUserRatings] = useState<UserRatings>({});
+
+  const SERVICES_LIST = [
+    "General Care",
+    "Physiotherapy",
+    "Medication Review",
+    "Home Care",
+    "Mental Health Support",
+  ];
+  const [capacityState, setCapacityState] = useState<
+    Record<string, { total: number; booked: number }>
+  >(() => {
+    const init: Record<string, { total: number; booked: number }> = {};
+    for (const [, providers] of Object.entries(CITY_PROVIDERS)) {
+      for (const p of providers) {
+        for (let i = 0; i < SERVICES_LIST.length; i++) {
+          const key = `${p.id}-${SERVICES_LIST[i]}`;
+          init[key] = {
+            total: 10 + ((p.id.length + i) % 11),
+            booked: Math.floor((p.id.length * i) % 8),
+          };
+        }
+      }
+    }
+    return init;
+  });
+
+  // Providers in city
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger skeleton on city change
+  useEffect(() => {
+    setIsLoading(true);
+    const t = setTimeout(() => setIsLoading(false), 420);
+    return () => clearTimeout(t);
+  }, [selectedCity]);
+
+  const cityProviders = useMemo(
+    () => CITY_PROVIDERS[selectedCity] || [],
+    [selectedCity],
   );
 
-  const providers = useMemo(() => {
-    const list = CITY_PROVIDERS[selectedCity] ?? [];
-    return [...list].sort((a, b) => {
-      if (sortBy === "rating")
-        return (
+  // Filtered providers
+  const filteredProviders = useMemo(() => {
+    return cityProviders
+      .filter((p) => {
+        const rating = getProviderRatingForQuarter(p.id, currentQuarter);
+        const risk = getRiskLevel(p.indicators);
+
+        if (
+          searchText &&
+          !p.name.toLowerCase().includes(searchText.toLowerCase())
+        )
+          return false;
+
+        if (filterRating === "5") {
+          if (rating.stars < 4.5) return false;
+        } else if (filterRating === "4+") {
+          if (rating.stars < 4.0) return false;
+        } else if (filterRating === "3+") {
+          if (rating.stars < 3.0) return false;
+        }
+
+        if (filterRisk !== "all" && risk.toLowerCase() !== filterRisk)
+          return false;
+        if (
+          filterService !== "all" &&
+          p.type.toLowerCase() !== filterService.toLowerCase()
+        )
+          return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        const ra = getProviderRatingForQuarter(a.id, currentQuarter);
+        const rb = getProviderRatingForQuarter(b.id, currentQuarter);
+        const riskScore = (p: CityProvider) => {
+          const risk = getRiskLevel(p.indicators);
+          return risk === "Low" ? 100 : risk === "Medium" ? 60 : 20;
+        };
+        const availScore = (p: CityProvider) => {
+          const key = `${p.id}-General Care`;
+          const cap = capacityState[key] ?? { total: 12, booked: 0 };
+          return cap.total > 0
+            ? Math.round(((cap.total - cap.booked) / cap.total) * 100)
+            : 0;
+        };
+        const feedbackScore = (p: CityProvider) => {
+          const ur = userRatings[p.id];
+          return ur ? (ur.overall / 5) * 100 : 50;
+        };
+        const scoreA =
+          (ra.stars / 5) * 100 * 0.4 +
+          riskScore(a) * 0.3 +
+          availScore(a) * 0.2 +
+          feedbackScore(a) * 0.1;
+        const scoreB =
+          (rb.stars / 5) * 100 * 0.4 +
+          riskScore(b) * 0.3 +
+          availScore(b) * 0.2 +
+          feedbackScore(b) * 0.1;
+        return scoreB - scoreA;
+      });
+  }, [
+    cityProviders,
+    searchText,
+    filterRating,
+    filterRisk,
+    filterService,
+    currentQuarter,
+    capacityState,
+    userRatings,
+  ]);
+
+  // Recommendations
+  const recommendations = useMemo(() => {
+    return [...cityProviders]
+      .sort(
+        (a, b) =>
           getProviderRatingForQuarter(b.id, currentQuarter).stars -
-          getProviderRatingForQuarter(a.id, currentQuarter).stars
-        );
-      return a.name.localeCompare(b.name);
-    });
-  }, [selectedCity, sortBy, currentQuarter]);
+          getProviderRatingForQuarter(a.id, currentQuarter).stars,
+      )
+      .slice(0, 3)
+      .map((p) => ({
+        provider: p,
+        rating: getProviderRatingForQuarter(p.id, currentQuarter),
+      }));
+  }, [cityProviders, currentQuarter]);
 
-  const kpi = useMemo(() => {
-    const stars = providers.map(
-      (p) => getProviderRatingForQuarter(p.id, currentQuarter).stars,
-    );
-    const avgRating =
-      stars.length > 0 ? stars.reduce((s, x) => s + x, 0) / stars.length : 0;
-    const goodOrAbove = stars.filter((s) => s >= 4).length;
-    const higherRisk = providers.filter(
-      (p) => getRiskLevelFromIndicators(p.indicators) === "High",
-    ).length;
-    const trusted = providers.filter(
-      (p) => getProviderRatingForQuarter(p.id, currentQuarter).stars >= 4,
-    ).length;
+  // KPI stats
+  const kpiStats = useMemo(() => {
+    const all = cityProviders.map((p) => ({
+      stars: getProviderRatingForQuarter(p.id, currentQuarter).stars,
+      risk: getRiskLevel(p.indicators),
+    }));
+    const avg = all.reduce((s, p) => s + p.stars, 0) / (all.length || 1);
     return {
-      total: providers.length,
-      avgRating: avgRating.toFixed(1),
-      goodOrAbovePct:
-        providers.length > 0
-          ? Math.round((goodOrAbove / providers.length) * 100)
-          : 0,
-      higherRisk,
-      trusted,
+      total: all.length,
+      avg: avg.toFixed(1),
+      highRisk: all.filter((p) => p.risk === "High").length,
+      trusted: all.filter((p) => p.stars >= 4.0).length,
     };
-  }, [providers, currentQuarter]);
+  }, [cityProviders, currentQuarter]);
 
-  function toggleCompare(id: string) {
+  function handleNearMe() {
+    setSelectedCity("Sydney");
+    setNearMeMsg(true);
+    setTimeout(() => setNearMeMsg(false), 3000);
+  }
+
+  function handleToggleCompare(id: string) {
     setCompareIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev; // max 3
+      if (prev.length >= 3) return prev;
       return [...prev, id];
     });
+  }
+
+  function handleBook(service: string) {
+    if (!selectedProvider) return;
+    setBookingModal({ provider: selectedProvider, service });
   }
 
   function handleBookingConfirm(
@@ -1733,464 +2704,748 @@ export default function PublicView({
   ) {
     const newBooking: Booking = {
       ...booking,
-      id: `booking-${Date.now()}`,
+      id: `B-${Date.now()}`,
       status: "confirmed",
       feedbackSubmitted: false,
     };
     setBookings((prev) => [...prev, newBooking]);
-    setBookingProvider(null);
-    setBookingService("");
+    // Decrease capacity
+    const capKey = `${booking.providerId}-${booking.service}`;
+    setCapacityState((prev) => {
+      const cur = prev[capKey] ?? { total: 12, booked: 0 };
+      return {
+        ...prev,
+        [capKey]: { ...cur, booked: Math.min(cur.booked + 1, cur.total) },
+      };
+    });
+    setBookingModal(null);
   }
 
-  function handleMarkComplete(bookingId: string) {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: "completed" } : b)),
-    );
+  function handleMarkComplete(id: string) {
+    const booking = bookings.find((b) => b.id === id);
+    if (!booking) return;
+    if (booking.status === "confirmed") {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, status: "in_progress" } : b)),
+      );
+    } else if (booking.status === "in_progress") {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, status: "completed" } : b)),
+      );
+      setFeedbackModal({ booking: { ...booking, status: "completed" } });
+    }
+  }
+
+  function handleFeedbackSubmit(bookingId: string, data: FeedbackData) {
     const booking = bookings.find((b) => b.id === bookingId);
-    if (booking) setRateNotification(booking);
-  }
+    if (!booking) return;
 
-  function handleFeedbackSubmit(bookingId: string, feedback: FeedbackData) {
+    const oldRating = getProviderRatingForQuarter(
+      booking.providerId,
+      currentQuarter,
+    ).stars;
+    const existingUserRating = userRatings[booking.providerId];
+    const oldBlended = existingUserRating
+      ? (oldRating * 10 +
+          existingUserRating.overall * existingUserRating.count) /
+        (10 + existingUserRating.count)
+      : oldRating;
+    const newCount = (existingUserRating?.count ?? 0) + 1;
+    const newBlended = (oldBlended * (newCount - 1) + data.overall) / newCount;
+    const pct = Math.max(0.1, Math.abs(newBlended - oldBlended) * 100);
+
+    setUserRatings((prev) => ({
+      ...prev,
+      [booking.providerId]: { ...data, count: newCount },
+    }));
     setBookings((prev) =>
       prev.map((b) =>
         b.id === bookingId ? { ...b, feedbackSubmitted: true } : b,
       ),
     );
-    const booking = bookings.find((b) => b.id === bookingId);
-    if (booking) {
-      const existing = userRatingAdjustments[booking.providerId] ?? 0;
-      const blended = existing
-        ? 0.3 * feedback.overall + 0.7 * existing
-        : feedback.overall;
-      setUserRatingAdjustments((prev) => ({
+    setFeedbackModal(null);
+    setFeedbackImpact({ name: booking.providerName, pct });
+    setTimeout(() => setFeedbackImpact(null), 5000);
+    setSyncBanner(true);
+    setTimeout(() => setSyncBanner(false), 3500);
+
+    // Add as review
+    if (data.comment.trim()) {
+      setReviews((prev) => ({
         ...prev,
-        [booking.providerId]: blended,
+        [booking.providerId]: [
+          ...(prev[booking.providerId] ?? []),
+          {
+            id: `${booking.providerId}-user-${Date.now()}`,
+            author: booking.userName,
+            rating: data.overall,
+            comment: data.comment,
+            timestamp: Date.now(),
+            isOwn: true,
+          },
+        ],
       }));
     }
-    setFeedbackBookingId(null);
-    setRateNotification(null);
   }
 
-  // Reset compare when city changes
-  function handleCityChange(city: string) {
-    setSelectedCity(city);
-    setCompareIds([]);
+  function handleAddReview(
+    providerId: string,
+    review: Omit<Review, "id" | "isOwn">,
+  ) {
+    setReviews((prev) => ({
+      ...prev,
+      [providerId]: [
+        ...(prev[providerId] ?? []),
+        { ...review, id: `${providerId}-r-${Date.now()}`, isOwn: true },
+      ],
+    }));
   }
+
+  function handleEditReview(
+    providerId: string,
+    id: string,
+    updates: Partial<Review>,
+  ) {
+    setReviews((prev) => ({
+      ...prev,
+      [providerId]: (prev[providerId] ?? []).map((r) =>
+        r.id === id ? { ...r, ...updates } : r,
+      ),
+    }));
+  }
+
+  function handleDeleteReview(providerId: string, id: string) {
+    setReviews((prev) => ({
+      ...prev,
+      [providerId]: (prev[providerId] ?? []).filter((r) => r.id !== id),
+    }));
+  }
+
+  const pendingFeedback = bookings.filter(
+    (b) => b.status === "completed" && !b.feedbackSubmitted,
+  );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      <div className="h-1 bg-gradient-to-r from-[#D97706] via-[#F59E0B] to-[#D97706]" />
-
-      {/* Hero band */}
-      <div className="bg-[#1E3A8A] text-white">
-        <div className="mx-auto max-w-7xl px-6 py-10">
-          <div className="flex items-center gap-2 mb-3 text-blue-300 text-sm font-medium">
-            <Shield className="h-4 w-4" />
-            Australian Government · Department of Health and Aged Care
+    <div
+      className="min-h-screen"
+      style={{
+        background:
+          "linear-gradient(160deg,#0f172a 0%,#1e3a8a 45%,#312e81 100%)",
+      }}
+    >
+      {/* Hero Band */}
+      <div
+        className="relative overflow-hidden text-white"
+        style={{
+          background:
+            "linear-gradient(135deg,#0f172a 0%,#1e3a8a 50%,#312e81 100%)",
+        }}
+      >
+        <div
+          className="absolute inset-0 opacity-10"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle,#93c5fd 1px,transparent 1px)",
+            backgroundSize: "28px 28px",
+          }}
+        />
+        <div className="max-w-7xl mx-auto px-4 py-8 relative">
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
+                <Shield className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-blue-200 font-medium">
+                    Australian Government
+                  </span>
+                  <span className="text-blue-300">·</span>
+                  <span className="text-xs text-blue-200">
+                    Department of Health and Aged Care
+                  </span>
+                </div>
+                <h1 className="text-xl font-bold tracking-tight">
+                  Aged Care Provider Finder
+                </h1>
+                <p className="text-sm text-blue-200 mt-0.5">
+                  Find and compare quality aged care providers in your area
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-xs">Live Data · {currentQuarter}</span>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-blue-200">
+                  Public Transparency Platform
+                </span>
+              </div>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight mb-1">
-            Aged Care Provider Search
-          </h1>
-          <p className="text-blue-200 text-base">
-            Search, compare, and choose the best aged care provider for you or
-            your family
-          </p>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
-        {/* Filter bar */}
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-600">
-                  Region
-                </span>
-                <Select value={selectedCity} onValueChange={handleCityChange}>
-                  <SelectTrigger className="w-44" data-ocid="public.select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cities.map((city) => (
-                      <SelectItem key={city} value={city}>
-                        {city}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {/* Feedback Impact Banner */}
+        {feedbackImpact && (
+          <div
+            className="animate-sync rounded-xl px-5 py-3 flex items-center justify-between shadow-lg"
+            style={{
+              background:
+                "linear-gradient(135deg,rgba(220,252,231,0.95),rgba(187,247,208,0.95))",
+              border: "1px solid #86efac",
+            }}
+            data-ocid="feedback.success_state"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <ThumbsUp className="h-4 w-4 text-green-600" />
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-600">
-                  Sort by
+              <p className="text-sm font-semibold text-green-800">
+                🎉 Your feedback improved{" "}
+                <span className="font-bold">{feedbackImpact.name}</span>'s score
+                by{" "}
+                <span className="font-bold text-green-700">
+                  +{feedbackImpact.pct.toFixed(1)}%
                 </span>
-                <div className="flex rounded-md border border-gray-200 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setSortBy("rating")}
-                    data-ocid="public.toggle"
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${
-                      sortBy === "rating"
-                        ? "bg-[#1E3A8A] text-white"
-                        : "bg-white text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Star className="h-3.5 w-3.5" />
-                    Rating
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSortBy("name")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border-l border-gray-200 transition-colors ${
-                      sortBy === "name"
-                        ? "bg-[#1E3A8A] text-white"
-                        : "bg-white text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <SortAsc className="h-3.5 w-3.5" />
-                    Name
-                  </button>
-                </div>
-              </div>
-
-              {compareIds.length > 0 && (
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-xs text-gray-500">
-                    {compareIds.length} selected for comparison
-                    {compareIds.length < 2 && " (select 1 more to compare)"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCompareIds([])}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-
-              <span
-                className={`text-sm text-gray-500 ${compareIds.length === 0 ? "ml-auto" : ""}`}
-              >
-                Showing{" "}
-                <strong className="text-gray-800">{providers.length}</strong>{" "}
-                providers in {selectedCity}
-              </span>
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <button
+              type="button"
+              onClick={() => setFeedbackImpact(null)}
+              className="text-green-600 hover:text-green-800"
+              data-ocid="feedback.close_button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="rounded-lg bg-blue-50 p-2.5">
-                <Building2 className="h-5 w-5 text-[#1E3A8A]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{kpi.total}</p>
-                <p className="text-xs text-gray-500">Providers in Region</p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Pending Feedback Notification */}
+        {pendingFeedback.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Bell className="h-5 w-5 text-amber-600" />
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">
+                  Please rate your experience
+                </span>{" "}
+                — You have {pendingFeedback.length} completed appointment
+                {pendingFeedback.length > 1 ? "s" : ""} awaiting feedback
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-700 hover:bg-amber-100"
+              onClick={() => setFeedbackModal({ booking: pendingFeedback[0] })}
+              data-ocid="feedback.open_modal_button"
+            >
+              Rate Now
+            </Button>
+          </div>
+        )}
 
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="rounded-lg bg-amber-50 p-2.5">
-                <Star className="h-5 w-5 text-amber-500" />
+        {/* Smart Recommendation Engine */}
+        <div className="glass-card rounded-2xl p-5 animate-fade-up">
+          <div className="flex items-center gap-2 mb-4">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,#dbeafe,#ede9fe)" }}
+            >
+              <Sparkles className="h-4 w-4 text-[#1E3A8A]" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">
+                Smart Provider Recommendation Engine
+              </h2>
+              <p className="text-xs text-gray-500">
+                Powered by AI · Based on real performance data
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="flex-1 min-w-[140px]">
+              <Label className="text-xs text-gray-500 mb-1 block">
+                Your Location
+              </Label>
+              <Select value={selectedCity} onValueChange={setSelectedCity}>
+                <SelectTrigger
+                  className="h-9"
+                  data-ocid="recommendation.city.select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CITY_LIST.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <Label className="text-xs text-gray-500 mb-1 block">
+                Care Needs
+              </Label>
+              <Select value={careNeeds} onValueChange={setCareNeeds}>
+                <SelectTrigger
+                  className="h-9"
+                  data-ocid="recommendation.care.select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CARE_NEEDS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {recommendations.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                👉 Top Recommended Providers
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {recommendations.map(({ provider, rating }, i) => {
+                  const reason = generateRecommendationReason(
+                    provider,
+                    rating.domainScores,
+                  );
+                  const topDomains = (
+                    Object.entries(rating.domainScores) as [string, number][]
+                  )
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 2)
+                    .map(
+                      ([k]) =>
+                        ({
+                          safety: "Safety",
+                          preventive: "Preventive",
+                          quality: "Quality",
+                          staffing: "Staffing",
+                          compliance: "Compliance",
+                          experience: "Experience",
+                        })[k] ?? k,
+                    );
+                  return (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      className="bg-gradient-to-br from-[#1E3A8A]/5 to-[#3B82F6]/5 rounded-xl p-4 border border-[#3B82F6]/20 cursor-pointer hover:shadow-md transition-all text-left w-full"
+                      onClick={() => setSelectedProvider(provider)}
+                      data-ocid={`recommendation.item.${i + 1}`}
+                    >
+                      {i === 0 && (
+                        <div className="text-xs font-bold text-[#1E3A8A] mb-1">
+                          🥇 Best Match
+                        </div>
+                      )}
+                      {i === 1 && (
+                        <div className="text-xs font-bold text-[#3B82F6] mb-1">
+                          🥈 Runner Up
+                        </div>
+                      )}
+                      {i === 2 && (
+                        <div className="text-xs font-bold text-gray-600 mb-1">
+                          🥉 3rd Choice
+                        </div>
+                      )}
+                      <p className="font-bold text-sm text-gray-900">
+                        {provider.name}
+                      </p>
+                      <div className="flex items-center gap-1 mt-1">
+                        {renderStars(rating.stars, "h-3.5 w-3.5")}
+                        <span className="text-xs font-bold text-gray-800 ml-1">
+                          {rating.stars.toFixed(1)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2">{reason}</p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {topDomains.map((d) => (
+                          <span
+                            key={d}
+                            className="text-xs px-1.5 py-0.5 bg-white rounded border text-[#1E3A8A] font-medium"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {kpi.avgRating}
-                </p>
-                <p className="text-xs text-gray-500">Average Rating</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="rounded-lg bg-green-50 p-2.5">
-                <ShieldCheck className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {kpi.trusted}
-                </p>
-                <p className="text-xs text-gray-500">Trusted Providers (4★+)</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="rounded-lg bg-red-50 p-2.5">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {kpi.higherRisk}
-                </p>
-                <p className="text-xs text-gray-500">High Risk Providers</p>
-              </div>
-            </CardContent>
-          </Card>
+            </>
+          )}
         </div>
 
-        {/* Smart Recommendation */}
-        <SmartRecommendation
-          providers={providers}
-          onSelect={setSelectedProvider}
-          currentQuarter={currentQuarter}
-        />
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            {
+              label: "Providers in Area",
+              value: kpiStats.total.toString(),
+              icon: Building2,
+              color: "text-[#1E3A8A]",
+              bg: "bg-[#1E3A8A]/10",
+            },
+            {
+              label: "Average Rating",
+              value: `${kpiStats.avg}⭐`,
+              icon: Star,
+              color: "text-amber-600",
+              bg: "bg-amber-50",
+            },
+            {
+              label: "High Risk Providers",
+              value: kpiStats.highRisk.toString(),
+              icon: AlertTriangle,
+              color: "text-red-600",
+              bg: "bg-red-50",
+            },
+            {
+              label: "Trusted Providers",
+              value: kpiStats.trusted.toString(),
+              icon: ShieldCheck,
+              color: "text-green-600",
+              bg: "bg-green-50",
+            },
+          ].map((kpi, i) => (
+            <Card
+              key={kpi.label}
+              className="glass-card hover-glow rounded-2xl"
+              data-ocid={`kpi.item.${i + 1}`}
+            >
+              <CardContent className="p-4 flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 ${kpi.bg} rounded-xl flex items-center justify-center shrink-0`}
+                >
+                  <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
+                  <p className="text-xs text-gray-500">{kpi.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-        {/* Comparison panel (shows when 2+ selected) */}
-        {compareIds.length >= 2 && (
-          <ComparisonTool
-            providers={providers}
-            selectedIds={compareIds}
-            onClear={() => setCompareIds([])}
-            currentQuarter={currentQuarter}
+        {/* Filter Bar */}
+        <div className="glass-card rounded-2xl p-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-xs text-gray-500 mb-1 block">
+                Search Providers
+              </Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by name..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="pl-9 h-9"
+                  data-ocid="filter.search_input"
+                />
+              </div>
+            </div>
+            <div className="min-w-[120px]">
+              <Label className="text-xs text-gray-500 mb-1 block">Rating</Label>
+              <Select value={filterRating} onValueChange={setFilterRating}>
+                <SelectTrigger className="h-9" data-ocid="filter.rating.select">
+                  <SelectValue placeholder="All Ratings" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Ratings</SelectItem>
+                  <SelectItem value="5">5 Stars</SelectItem>
+                  <SelectItem value="4+">4+ Stars</SelectItem>
+                  <SelectItem value="3+">3+ Stars</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-[120px]">
+              <Label className="text-xs text-gray-500 mb-1 block">
+                Risk Level
+              </Label>
+              <Select value={filterRisk} onValueChange={setFilterRisk}>
+                <SelectTrigger className="h-9" data-ocid="filter.risk.select">
+                  <SelectValue placeholder="All Risk" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Risk Levels</SelectItem>
+                  <SelectItem value="low">Low Risk</SelectItem>
+                  <SelectItem value="medium">Medium Risk</SelectItem>
+                  <SelectItem value="high">High Risk</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-[130px]">
+              <Label className="text-xs text-gray-500 mb-1 block">
+                Service Type
+              </Label>
+              <Select value={filterService} onValueChange={setFilterService}>
+                <SelectTrigger
+                  className="h-9"
+                  data-ocid="filter.service.select"
+                >
+                  <SelectValue placeholder="All Services" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Services</SelectItem>
+                  <SelectItem value="Residential">Residential</SelectItem>
+                  <SelectItem value="Home Care">Home Care</SelectItem>
+                  <SelectItem value="Day Care">Day Care</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              variant="outline"
+              className="h-9 border-[#1E3A8A] text-[#1E3A8A] hover:bg-[#1E3A8A]/5"
+              onClick={handleNearMe}
+              data-ocid="filter.near_me_button"
+            >
+              <MapPin className="h-4 w-4 mr-1" /> Near Me
+            </Button>
+            {(searchText ||
+              filterRating !== "all" ||
+              filterRisk !== "all" ||
+              filterService !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-gray-500"
+                onClick={() => {
+                  setSearchText("");
+                  setFilterRating("all");
+                  setFilterRisk("all");
+                  setFilterService("all");
+                }}
+                data-ocid="filter.clear_button"
+              >
+                <X className="h-3.5 w-3.5 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
+          {nearMeMsg && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-[#1E3A8A] bg-[#1E3A8A]/5 rounded-lg px-3 py-2">
+              <MapPin className="h-4 w-4" /> Showing providers near Sydney
+            </div>
+          )}
+        </div>
+
+        {/* Care Journey Tracker */}
+        {bookings.length > 0 && (
+          <CareJourneyTracker
+            bookings={bookings}
+            onMarkComplete={handleMarkComplete}
+            onFeedback={(b) => setFeedbackModal({ booking: b })}
           />
         )}
 
-        {/* My Bookings panel */}
-        {bookings.length > 0 && (
-          <Card
-            className="border border-gray-200 shadow-sm"
-            data-ocid="booking.panel"
-          >
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-[#1E3A8A] p-2">
-                    <Calendar className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-gray-900 text-sm">
-                      My Bookings
-                    </h2>
-                    <p className="text-xs text-gray-500">
-                      Your appointment history
-                    </p>
-                  </div>
+        {/* Provider Grid */}
+        <div>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-base font-bold text-white/90">
+              Providers in {selectedCity}
+              <span className="ml-2 text-sm font-normal text-white/50">
+                ({filteredProviders.length} found)
+              </span>
+            </h2>
+            {compareIds.length >= 2 && (
+              <Button
+                className="bg-gradient-to-r from-[#1e3a8a] to-[#4f46e5] hover:opacity-90 text-white h-8 text-sm btn-press"
+                onClick={() => setShowCompare(true)}
+                data-ocid="compare.open_modal_button"
+              >
+                <BarChart2 className="h-4 w-4 mr-1" /> Compare{" "}
+                {compareIds.length} Providers
+              </Button>
+            )}
+          </div>
+
+          {syncBanner && (
+            <div
+              className="animate-sync flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white shadow-lg mb-3"
+              style={{ background: "linear-gradient(90deg,#2563eb,#4f46e5)" }}
+            >
+              <CheckCircle className="h-4 w-4 shrink-0" /> ✓ Synced across all
+              modules — provider rating updated in real time
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 6 }).map((_, si) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton positions
+                <div key={si} className="glass-card rounded-2xl p-5 space-y-3">
+                  <div className="skeleton-shimmer h-5 w-3/4" />
+                  <div className="skeleton-shimmer h-4 w-1/2" />
+                  <div className="skeleton-shimmer h-3 w-full" />
+                  <div className="skeleton-shimmer h-3 w-4/5" />
+                  <div className="skeleton-shimmer h-8 w-24 mt-4" />
                 </div>
-                <Badge className="bg-[#1E3A8A] text-white">
-                  {bookings.length}
-                </Badge>
-              </div>
-              <div className="space-y-3">
-                {bookings.map((b, idx) => (
-                  <div
-                    key={b.id}
-                    data-ocid={`booking.item.${idx + 1}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800">
-                        {b.providerName}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {b.service}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="flex items-center gap-1 text-xs text-gray-400">
-                          <Calendar className="h-3 w-3" />
-                          {b.date}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-gray-400">
-                          <Clock className="h-3 w-3" />
-                          {b.time}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {b.status === "confirmed" && (
-                        <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs">
-                          Confirmed
-                        </Badge>
-                      )}
-                      {b.status === "completed" && (
-                        <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs">
-                          Completed
-                        </Badge>
-                      )}
-                      {b.status === "cancelled" && (
-                        <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">
-                          Cancelled
-                        </Badge>
-                      )}
-                      {b.status === "confirmed" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs h-7"
-                          onClick={() => handleMarkComplete(b.id)}
-                          data-ocid="booking.secondary_button"
-                        >
-                          Mark Complete
-                        </Button>
-                      )}
-                      {b.status === "completed" && !b.feedbackSubmitted && (
-                        <Button
-                          size="sm"
-                          className="text-xs h-7 bg-amber-500 hover:bg-amber-600 text-white"
-                          onClick={() => setFeedbackBookingId(b.id)}
-                          data-ocid="feedback.open_modal_button"
-                        >
-                          Rate Now
-                        </Button>
-                      )}
-                      {b.feedbackSubmitted && (
-                        <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-                          <CheckCircle className="h-3.5 w-3.5" /> Rated
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          ) : filteredProviders.length === 0 ? (
+            <div
+              className="glass-card rounded-2xl p-12 text-center"
+              data-ocid="provider.empty_state"
+            >
+              <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">
+                No providers match your filters
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                Try adjusting your search criteria
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredProviders.map((provider, i) => (
+                <ProviderCard
+                  key={provider.id}
+                  provider={provider}
+                  quarter={currentQuarter}
+                  isInCompare={compareIds.includes(provider.id)}
+                  onCompareToggle={() => handleToggleCompare(provider.id)}
+                  onViewDetails={() => setSelectedProvider(provider)}
+                  index={i}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Comparison Panel */}
+        {showCompare && compareIds.length >= 2 && (
+          <ComparisonPanel
+            providerIds={compareIds}
+            allProviders={cityProviders}
+            quarter={currentQuarter}
+            onClose={() => setShowCompare(false)}
+          />
         )}
 
         {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-          <span className="font-medium text-gray-600">Trust Score:</span>
-          <span className="flex items-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-            <span className="text-green-700 font-medium">Trusted</span> = 4★ and
-            above
-          </span>
-          <span className="flex items-center gap-1">
-            <Info className="h-3.5 w-3.5 text-amber-500" />
-            <span className="text-amber-700 font-medium">Average</span> = 3–4★
-          </span>
-          <span className="flex items-center gap-1">
-            <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-            <span className="text-red-700 font-medium">Needs Improvement</span>{" "}
-            = below 3★
-          </span>
-          <span className="ml-auto text-gray-400 italic">
-            Click Compare on up to 3 providers to compare side-by-side
-          </span>
-        </div>
-
-        {/* Provider grid */}
-        {providers.length > 0 ? (
-          <div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            data-ocid="public.list"
-          >
-            {providers.map((p, idx) => (
-              <div key={p.id} data-ocid={`public.item.${idx + 1}`}>
-                <ProviderCard
-                  provider={p}
-                  onSelect={setSelectedProvider}
-                  isComparing={compareIds.includes(p.id)}
-                  onToggleCompare={toggleCompare}
-                  currentQuarter={currentQuarter}
-                />
+        <div className="glass-card rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Info className="h-4 w-4 text-[#1E3A8A]" /> Rating Guide
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {[
+              {
+                label: "Trusted",
+                desc: "4★ and above — consistently high quality",
+                cls: "bg-green-100 text-green-700",
+              },
+              {
+                label: "Average",
+                desc: "3–4★ — meets most standards",
+                cls: "bg-amber-100 text-amber-700",
+              },
+              {
+                label: "Needs Improvement",
+                desc: "Below 3★ — under review",
+                cls: "bg-red-100 text-red-700",
+              },
+              {
+                label: "Low Risk",
+                desc: "All key indicators performing well",
+                cls: "bg-blue-100 text-blue-700",
+              },
+              {
+                label: "Medium Risk",
+                desc: "Some indicators need monitoring",
+                cls: "bg-orange-100 text-orange-700",
+              },
+              {
+                label: "High Risk",
+                desc: "Multiple indicators below threshold",
+                cls: "bg-red-100 text-red-700",
+              },
+            ].map((item) => (
+              <div key={item.label} className="flex items-start gap-2">
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${item.cls}`}
+                >
+                  {item.label}
+                </span>
+                <p className="text-xs text-gray-500">{item.desc}</p>
               </div>
             ))}
           </div>
-        ) : (
-          <Card
-            className="border border-gray-200 shadow-sm"
-            data-ocid="public.empty_state"
-          >
-            <CardContent className="py-12 text-center space-y-4">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
-                <Building2 className="h-7 w-7 text-gray-400" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-700">
-                  No providers found
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  No aged care providers are listed for this region.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        </div>
 
         {/* Footer */}
-        <footer className="border-t border-gray-200 pt-6 pb-4 text-center text-sm text-gray-400">
-          © {new Date().getFullYear()} Australian Government · Department of
-          Health and Aged Care. Built with love using{" "}
+        <footer className="text-center py-4 text-xs text-white/50">
+          © {new Date().getFullYear()}.{" "}
           <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
+            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-gray-600"
+            className="hover:text-white/80"
           >
-            caffeine.ai
+            Built with ❤️ using caffeine.ai
           </a>
-          .
         </footer>
       </div>
 
-      {/* Sticky rate notification */}
-      {rateNotification && !rateNotification.feedbackSubmitted && (
-        <div
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4"
-          data-ocid="feedback.toast"
-        >
-          <div className="flex items-center justify-between gap-4 rounded-xl bg-amber-500 px-5 py-4 shadow-xl text-white">
-            <div className="flex items-center gap-3 min-w-0">
-              <Bell className="h-5 w-5 flex-shrink-0" />
-              <p className="text-sm font-medium leading-tight">
-                You completed your visit to{" "}
-                <strong>{rateNotification.providerName}</strong>. Share your
-                experience to help others.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                size="sm"
-                className="bg-white text-amber-600 hover:bg-amber-50 text-xs font-semibold h-8"
-                onClick={() => setFeedbackBookingId(rateNotification.id)}
-                data-ocid="feedback.open_modal_button"
-              >
-                Rate Now
-              </Button>
-              <button
-                type="button"
-                className="text-white/80 hover:text-white"
-                onClick={() => setRateNotification(null)}
-                data-ocid="feedback.close_button"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Provider Detail Modal */}
+      <ProviderDetailModal
+        provider={selectedProvider}
+        quarter={currentQuarter}
+        onClose={() => setSelectedProvider(null)}
+        onBook={handleBook}
+        reviews={reviews[selectedProvider?.id ?? ""] ?? []}
+        onAddReview={(review) =>
+          selectedProvider && handleAddReview(selectedProvider.id, review)
+        }
+        onEditReview={(id, updates) =>
+          selectedProvider && handleEditReview(selectedProvider.id, id, updates)
+        }
+        onDeleteReview={(id) =>
+          selectedProvider && handleDeleteReview(selectedProvider.id, id)
+        }
+        userRatings={userRatings}
+        capacityState={capacityState}
+      />
+
+      {/* Booking Modal */}
+      {bookingModal && (
+        <ServiceBookingModal
+          provider={bookingModal.provider}
+          service={bookingModal.service}
+          onClose={() => setBookingModal(null)}
+          onConfirm={handleBookingConfirm}
+        />
       )}
 
-      <PublicProviderModal
-        provider={selectedProvider}
-        onClose={() => setSelectedProvider(null)}
-        currentQuarter={currentQuarter}
-        onBookService={(provider, service) => {
-          setBookingProvider(provider);
-          setBookingService(service);
+      {/* Feedback Modal */}
+      {feedbackModal && (
+        <FeedbackModal
+          booking={feedbackModal.booking}
+          onClose={() => setFeedbackModal(null)}
+          onSubmit={handleFeedbackSubmit}
+        />
+      )}
+
+      {/* AI Chatbot */}
+      <AIChatbot
+        currentCity={selectedCity}
+        onCityChange={(c) => {
+          setSelectedCity(c);
+          setIsLoading(true);
+          setTimeout(() => setIsLoading(false), 420);
         }}
-      />
-      <ServiceBookingModal
-        provider={bookingProvider}
-        service={bookingService}
-        onClose={() => {
-          setBookingProvider(null);
-          setBookingService("");
-        }}
-        onConfirm={handleBookingConfirm}
-      />
-      <FeedbackModal
-        booking={bookings.find((b) => b.id === feedbackBookingId) ?? null}
-        onClose={() => setFeedbackBookingId(null)}
-        onSubmit={handleFeedbackSubmit}
+        onOpenProvider={(p) => setSelectedProvider(p)}
       />
     </div>
   );

@@ -1,37 +1,48 @@
-# N-ACRM National Aged Care Framework
+# N-ACRM — Regulator Dashboard Command Center Redesign
 
 ## Current State
-The Public Dashboard (`PublicView.tsx`) is a read-only viewer showing provider cards with star ratings, trust badges, comparison tool, smart recommendations, and popup detail modals. The popup shows provider name, rating, key indicators, strengths/improvements. No booking, feedback, or rating submission system exists.
+- `NationalOverview.tsx` is the main Regulator landing page (1331 lines): KPI cards, state table, alerts, radar/area charts, submissions table
+- `ProviderPerformance.tsx` shows provider table with ratings, benchmarks (636 lines)
+- `Header.tsx` and `Sidebar.tsx` already use a dark navy sidebar with gov-gold highlights
+- `index.css` has a complete OKLCH design token system (`--gov-navy`, `--gov-gold`, `--gov-green`, `--gov-amber`, `--gov-red`)
+- `mockData.ts` exports `UNIFIED_PROVIDERS`, `PROVIDER_MASTER`, `getProviderRatingForQuarter(id, quarter)`, `getUnifiedProviderIndicators(id, quarter)`
+- `ratingEngine.ts` has `calcNewWeightedOverallScore`, `overallScoreToStars`, `starsToPercentScore`
+- All providers have Q1-Q4 quarterly indicator data available via `getUnifiedProviderIndicators`
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Service Listing section** inside the provider detail popup: 5 service cards (General Care, Physiotherapy, Medication Review, Home Care, Mental Health Support) with name, description, availability, and "Book Appointment" button
-- **Appointment Booking Modal**: multi-step form — select service (pre-filled), pick date/time, enter name/contact details, confirm booking; shows animated success confirmation; stores bookings in React state
-- **Service Completion Trigger**: simulated "Mark as Completed" button per booking in a "My Bookings" mini-panel; triggers feedback notification banner
-- **Feedback & Rating Modal**: interactive star rating for Overall Provider + 4 domain indicators (Safety, Preventive Care, Experience, Quality); optional text comment; submit stores feedback
-- **Rating Integration**: submitted user feedback scores blend into the provider's indicator scores in local state (satisfaction-weighted merge), triggering recalculation via `getProviderRatingForQuarter`-compatible logic, updating the displayed stars and domain scores across the public view
-- **Synchronization**: after rating submission, update the displayed ratings in provider cards, popup, comparison panel, and KPI summary counts
-- **Validation**: one feedback per booking per user (tracked by booking ID in local state); feedback only enabled after service marked complete; duplicate prevention
-- **My Bookings panel**: collapsible section showing active bookings, status (Pending/Completed), and feedback action button
+- **Futuristic Command Center NationalOverview**: Deep navy/indigo glassmorphism redesign with animated KPI cards, glowing borders, gradient backgrounds, animated dot-grid hero banner. 4 command KPI cards (Total Providers, High-Risk Providers, Avg Rating, Active Alerts) each with icon, metric, trend indicator, gradient background, hover animation
+- **Risk Prediction Engine utility** (`utils/riskPrediction.ts`): Predict future risk level (Low/Medium/High) + confidence score (%) for each provider using Q1-Q4 trend direction (improving/declining), benchmark deviation, current risk score. Logic: if 2+ indicators declining across quarters → elevated predicted risk; if falls rising continuously → high; confidence based on number of consistent trend signals
+- **Trend Deviation Detector utility** (`utils/trendDeviation.ts`): Compare current vs previous quarter indicators, flag if change >20% (spike/drop). Output: deviation alerts per provider with indicator name, % change, severity (critical/warning)
+- **Decision Support System utility** (`utils/decisionSupport.ts`): Given risk score + predicted risk + deviations + compliance → generate actionable recommendation ("Send audit team", "Increase monitoring", "Issue compliance warning", "Provide additional funding"), priority (High/Medium/Low), and plain-language explanation
+- **New Regulator Intelligence page** (`pages/RegulatorIntelligence.tsx`): Full-page command center with 3 tabs: (1) Risk Predictions — table of all providers with Predicted Risk column (color-coded red/yellow/green), Confidence %, tooltip explanation; (2) Deviation Alerts — alert panel listing providers with sudden changes, affected indicator, % change, severity badges; (3) Decision Support — provider table with Recommended Action column, action badges, priority classification, clickable detail modal
+- **New nav item** in Sidebar: "Regulator Intelligence" under INTELLIGENCE group, visible only to Regulator role, using `Brain` or `Cpu` Lucide icon, with `regulator_intelligence` page key
+- **Advanced visual components** in NationalOverview: Recharts RadarChart for domain performance, AreaChart for trends, heatmap-style state grid
+- **Glassmorphism card components**: backdrop-blur, semi-transparent backgrounds, glowing hover effects
+- **Loading skeletons** for all data-loading states
+- **Micro-interactions**: hover lift, glow, animated transitions on cards
 
 ### Modify
-- **Provider detail popup** (`ProviderDetailModal`): add "Available Services" section below indicator summary; retain all existing content
-- **PublicView state**: add bookings state array, feedbacks state array, userRatingOverrides state map (providerId → blended scores)
+- `App.tsx`: Add `regulator_intelligence` to `ActivePage` type
+- `Layout.tsx`: Add `RegulatorIntelligence` import and route case
+- `Sidebar.tsx`: Add "Regulator Intelligence" nav item under INTELLIGENCE group for Regulator role only, using `Brain` icon
+- `NationalOverview.tsx`: Full visual redesign — deep navy command center aesthetic with gradient hero, glassmorphism KPI cards with animated glow borders, advanced charts, alert panel with large color-coded cards
+- `Header.tsx`: Enhance with notification bell badge (showing alert count), pulsing system status, more premium futuristic styling with gradient background
+- `index.css`: Add futuristic utility classes: `.cmd-card` (glassmorphism card), `.glow-blue`, `.glow-red`, `.glow-green`, animated shimmer keyframe, `@keyframes pulse-glow`
 
 ### Remove
-- Nothing removed; all existing features preserved
+- No existing features removed
 
 ## Implementation Plan
-1. Define TypeScript types: `ServiceDef`, `Booking`, `FeedbackEntry`, `UserRatingOverride` in `PublicView.tsx`
-2. Define `AVAILABLE_SERVICES` constant (5 services with id, name, description, availability, icon)
-3. Add booking/feedback/override state to `PublicView` component
-4. Build `ServiceCard` sub-component with Book button
-5. Build `BookingModal` — 3-step wizard: Service confirmation → Date/Time picker → Contact details → Success screen
-6. Build `FeedbackModal` — interactive star pickers for 5 dimensions + text area + submit
-7. Build `MyBookingsPanel` — collapsible list, Mark Complete button, Leave Feedback button
-8. Integrate `ServiceCard` grid into existing `ProviderDetailModal` popup
-9. Wire rating overrides: on feedback submit, blend user scores with provider's existing indicator values (weighted 80% existing / 20% user), recompute stars, update provider card display
-10. Add feedback notification banner that appears when a booking is completed
-11. Ensure no sensitive data is exposed; all UI uses public-friendly language
-12. Validate and build
+
+1. Update `index.css` with futuristic utility classes and keyframe animations (shimmer, pulse-glow, slide-up)
+2. Create `utils/riskPrediction.ts` — predict risk level + confidence from quarterly indicator trends
+3. Create `utils/trendDeviation.ts` — detect >20% changes between quarters, output alert list
+4. Create `utils/decisionSupport.ts` — generate action recommendations with priority and explanation
+5. Redesign `NationalOverview.tsx` as a futuristic command center (keep all existing data, upgrade visuals: gradient hero, glassmorphism KPI cards, animated charts, large alert cards)
+6. Redesign `Header.tsx` — add notification count, more futuristic dark gradient styling for Regulator role
+7. Create `pages/RegulatorIntelligence.tsx` — 3-tab intelligence page using all 3 new utility modules
+8. Update `App.tsx` — add `regulator_intelligence` to ActivePage
+9. Update `Layout.tsx` — add RegulatorIntelligence route
+10. Update `Sidebar.tsx` — add Regulator Intelligence nav item with Brain icon

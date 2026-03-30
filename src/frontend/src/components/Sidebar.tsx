@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BarChart3,
+  Brain,
   Building2,
   Calculator,
   ClipboardCheck,
@@ -41,6 +42,13 @@ const NAV_GROUPS: NavGroup[] = [
         icon: LayoutDashboard,
         roles: ["Regulator", "Provider", "Policy Analyst"],
         ocid: "nav.national_overview.link",
+      },
+      {
+        id: "regulator_intelligence",
+        label: "Regulator Intelligence",
+        icon: Brain,
+        roles: ["Regulator"],
+        ocid: "nav.regulator_intelligence.link",
       },
       {
         id: "regional_provider",
