@@ -7,6 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -15,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   CITY_PROVIDERS,
   type CityProvider,
@@ -40,11 +43,15 @@ import {
   ArrowRight,
   Award,
   BarChart2,
+  Bell,
   Building2,
+  Calendar,
   CheckCircle,
   ClipboardCheck,
+  Clock,
   Info,
   MapPin,
+  Phone,
   Shield,
   ShieldCheck,
   SortAsc,
@@ -752,14 +759,547 @@ function ComparisonTool({
 
 // ── Public Provider Modal ─────────────────────────────────────────────────────
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+type BookingStatus = "confirmed" | "completed" | "cancelled";
+interface Booking {
+  id: string;
+  providerId: string;
+  providerName: string;
+  service: string;
+  date: string;
+  time: string;
+  userName: string;
+  userPhone: string;
+  status: BookingStatus;
+  feedbackSubmitted: boolean;
+}
+interface FeedbackData {
+  overall: number;
+  safety: number;
+  preventive: number;
+  experience: number;
+  quality: number;
+  comment: string;
+}
+
+// ── Services ──────────────────────────────────────────────────────────────────
+const SERVICES = [
+  {
+    name: "General Care",
+    description: "Comprehensive daily care and support",
+    availability: "Mon–Fri, 8am–6pm",
+  },
+  {
+    name: "Physiotherapy",
+    description: "Physical therapy and rehabilitation",
+    availability: "Tue, Thu, 9am–4pm",
+  },
+  {
+    name: "Medication Review",
+    description: "Medication management and review",
+    availability: "Mon–Wed, 10am–3pm",
+  },
+  {
+    name: "Home Care",
+    description: "In-home assistance and support services",
+    availability: "Daily, 7am–7pm",
+  },
+  {
+    name: "Mental Health Support",
+    description: "Counselling and mental wellness programs",
+    availability: "Mon, Wed, Fri, 9am–5pm",
+  },
+];
+
+const TIME_SLOTS = [
+  "9:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "2:00 PM",
+  "3:00 PM",
+  "4:00 PM",
+];
+
+// ── Star Picker ───────────────────────────────────────────────────────────────
+function StarPicker({
+  value,
+  onChange,
+  label,
+}: { value: number; onChange: (v: number) => void; label?: string }) {
+  const [hovered, setHovered] = useState(0);
+  return (
+    <div className="flex items-center gap-2">
+      {label && <span className="text-sm text-gray-600 w-32">{label}</span>}
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onChange(i)}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(0)}
+            className="transition-transform hover:scale-110"
+          >
+            <Star
+              className={`h-6 w-6 ${
+                i <= (hovered || value)
+                  ? "fill-amber-400 text-amber-400"
+                  : "fill-gray-100 text-gray-300"
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+      {value > 0 && (
+        <span className="text-sm font-medium text-gray-600">{value}/5</span>
+      )}
+    </div>
+  );
+}
+
+// ── Service Booking Modal ─────────────────────────────────────────────────────
+function ServiceBookingModal({
+  provider,
+  service,
+  onClose,
+  onConfirm,
+}: {
+  provider: CityProvider | null;
+  service: string;
+  onClose: () => void;
+  onConfirm: (
+    booking: Omit<Booking, "id" | "status" | "feedbackSubmitted">,
+  ) => void;
+}) {
+  const [step, setStep] = useState(1);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [userName, setUserName] = useState("");
+  const [userPhone, setUserPhone] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+
+  function handleConfirm() {
+    if (!provider || !date || !time || !userName || !userPhone) return;
+    onConfirm({
+      providerId: provider.id,
+      providerName: provider.name,
+      service,
+      date,
+      time,
+      userName,
+      userPhone,
+    });
+    setConfirmed(true);
+    setTimeout(() => {
+      onClose();
+    }, 2500);
+  }
+
+  if (!provider) return null;
+
+  return (
+    <Dialog open={!!provider} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-w-md p-0 overflow-hidden"
+        data-ocid="booking.dialog"
+      >
+        {/* Header */}
+        <div className="bg-[#1E3A8A] px-6 py-4 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white">
+              Book Appointment
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-blue-200 text-sm mt-1">{provider.name}</p>
+          {/* Step indicator */}
+          {!confirmed && (
+            <div className="flex items-center gap-2 mt-4">
+              {[1, 2, 3].map((s) => (
+                <div key={s} className="flex items-center gap-1.5">
+                  <div
+                    className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                      s <= step
+                        ? "bg-white text-[#1E3A8A]"
+                        : "bg-white/20 text-white/60"
+                    }`}
+                  >
+                    {s < step ? "✓" : s}
+                  </div>
+                  {s < 3 && (
+                    <div
+                      className={`h-0.5 w-8 ${s < step ? "bg-white" : "bg-white/20"}`}
+                    />
+                  )}
+                </div>
+              ))}
+              <span className="text-blue-200 text-xs ml-2">
+                {step === 1
+                  ? "Service"
+                  : step === 2
+                    ? "Date & Time"
+                    : "Your Details"}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-5">
+          {confirmed ? (
+            /* Success state */
+            <div
+              className="text-center py-6 space-y-4"
+              data-ocid="booking.success_state"
+            >
+              <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle className="h-10 w-10 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Booking Confirmed!
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  We look forward to seeing you
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-left space-y-2 text-sm">
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Activity className="h-4 w-4 text-[#1E3A8A]" />
+                  <span className="font-medium">{service}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Calendar className="h-4 w-4 text-[#1E3A8A]" />
+                  <span>{date}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Clock className="h-4 w-4 text-[#1E3A8A]" />
+                  <span>{time}</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">
+                This dialog will close automatically…
+              </p>
+            </div>
+          ) : step === 1 ? (
+            /* Step 1: Confirm service */
+            <div className="space-y-4" data-ocid="booking.panel">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1">
+                  Selected Service
+                </p>
+                <p className="text-lg font-bold text-[#1E3A8A]">{service}</p>
+                {SERVICES.find((s) => s.name === service) && (
+                  <>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {SERVICES.find((s) => s.name === service)!.description}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-blue-600 mt-2">
+                      <Clock className="h-3.5 w-3.5" />
+                      {SERVICES.find((s) => s.name === service)!.availability}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+                <p className="font-medium text-gray-800 mb-1">
+                  {provider.name}
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {provider.city}, Australia
+                </p>
+              </div>
+              <Button
+                className="w-full bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
+                onClick={() => setStep(2)}
+                data-ocid="booking.primary_button"
+              >
+                Choose Date & Time <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          ) : step === 2 ? (
+            /* Step 2: Date & time */
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Select Date
+                </Label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="w-full"
+                  data-ocid="booking.input"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Select Time
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {TIME_SLOTS.map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => setTime(slot)}
+                      className={`rounded-lg border py-2 text-sm font-medium transition-colors ${
+                        time === slot
+                          ? "border-[#1E3A8A] bg-[#1E3A8A] text-white"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-[#1E3A8A] hover:text-[#1E3A8A]"
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setStep(1)}
+                  data-ocid="booking.secondary_button"
+                >
+                  Back
+                </Button>
+                <Button
+                  className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
+                  disabled={!date || !time}
+                  onClick={() => setStep(3)}
+                  data-ocid="booking.primary_button"
+                >
+                  Continue <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* Step 3: Personal details */
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Your Name
+                </Label>
+                <Input
+                  placeholder="Enter your full name"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  data-ocid="booking.input"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Phone Number
+                </Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="04xx xxx xxx"
+                    value={userPhone}
+                    onChange={(e) => setUserPhone(e.target.value)}
+                    className="pl-9"
+                    data-ocid="booking.input"
+                  />
+                </div>
+              </div>
+              {/* Summary */}
+              <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 text-xs text-gray-500 space-y-1">
+                <p className="font-medium text-gray-700 text-sm mb-2">
+                  Booking Summary
+                </p>
+                <p>
+                  {service} · {date} · {time}
+                </p>
+                <p>
+                  {provider.name}, {provider.city}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setStep(2)}
+                  data-ocid="booking.secondary_button"
+                >
+                  Back
+                </Button>
+                <Button
+                  className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
+                  disabled={!userName || !userPhone}
+                  onClick={handleConfirm}
+                  data-ocid="booking.confirm_button"
+                >
+                  Confirm Booking
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Feedback Modal ─────────────────────────────────────────────────────────────
+function FeedbackModal({
+  booking,
+  onClose,
+  onSubmit,
+}: {
+  booking: Booking | null;
+  onClose: () => void;
+  onSubmit: (bookingId: string, feedback: FeedbackData) => void;
+}) {
+  const [overall, setOverall] = useState(0);
+  const [safety, setSafety] = useState(0);
+  const [preventive, setPreventive] = useState(0);
+  const [experience, setExperience] = useState(0);
+  const [quality, setQuality] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  function handleSubmit() {
+    if (!booking || overall === 0) return;
+    onSubmit(booking.id, {
+      overall,
+      safety,
+      preventive,
+      experience,
+      quality,
+      comment,
+    });
+    setSubmitted(true);
+    setTimeout(onClose, 2000);
+  }
+
+  if (!booking) return null;
+
+  return (
+    <Dialog open={!!booking} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-w-md p-0 overflow-hidden"
+        data-ocid="feedback.dialog"
+      >
+        <div className="bg-[#1E3A8A] px-6 py-4 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white">
+              Rate Your Experience
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-blue-200 text-sm mt-1">
+            {booking.providerName} · {booking.service}
+          </p>
+        </div>
+
+        <div className="px-6 py-5">
+          {submitted ? (
+            <div
+              className="text-center py-8 space-y-3"
+              data-ocid="feedback.success_state"
+            >
+              <div className="mx-auto h-14 w-14 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle className="h-9 w-9 text-green-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Thank you!</h3>
+              <p className="text-sm text-gray-500">
+                Your feedback helps others make informed decisions.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Overall rating — required */}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-gray-800">
+                  Overall Experience <span className="text-red-500">*</span>
+                </p>
+                <StarPicker value={overall} onChange={setOverall} />
+                {overall === 0 && (
+                  <p className="text-xs text-red-500">
+                    Please select a rating to continue
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t border-gray-100" />
+
+              {/* Domain ratings — optional */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Area Ratings (optional)
+                </p>
+                <StarPicker
+                  value={safety}
+                  onChange={setSafety}
+                  label="Safety"
+                />
+                <StarPicker
+                  value={preventive}
+                  onChange={setPreventive}
+                  label="Preventive Care"
+                />
+                <StarPicker
+                  value={experience}
+                  onChange={setExperience}
+                  label="Experience"
+                />
+                <StarPicker
+                  value={quality}
+                  onChange={setQuality}
+                  label="Care Quality"
+                />
+              </div>
+
+              <div className="border-t border-gray-100" />
+
+              {/* Comment */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Comments <span className="text-gray-400">(optional)</span>
+                </Label>
+                <Textarea
+                  placeholder="Share your experience…"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={3}
+                  data-ocid="feedback.textarea"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={onClose}
+                  data-ocid="feedback.cancel_button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-[#1E3A8A] hover:bg-[#1e40af] text-white"
+                  disabled={overall === 0}
+                  onClick={handleSubmit}
+                  data-ocid="feedback.submit_button"
+                >
+                  Submit Feedback
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PublicProviderModal({
   provider,
   onClose,
   currentQuarter = "Q4-2025",
+  onBookService,
 }: {
   provider: CityProvider | null;
   onClose: () => void;
   currentQuarter?: string;
+  onBookService?: (provider: CityProvider, service: string) => void;
 }) {
   if (!provider) return null;
 
@@ -921,6 +1461,47 @@ function PublicProviderModal({
                 No major concerns identified.
               </p>
             )}
+          </div>
+
+          {/* Available Services */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+              Available Services
+            </p>
+            <div className="space-y-2">
+              {SERVICES.map((svc) => (
+                <div
+                  key={svc.name}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800">
+                      {svc.name}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {svc.description}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-blue-600 mt-1">
+                      <Clock className="h-3 w-3" />
+                      {svc.availability}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="flex-shrink-0 bg-[#1E3A8A] hover:bg-[#1e40af] text-white text-xs"
+                    onClick={() => {
+                      if (onBookService && provider) {
+                        onBookService(provider, svc.name);
+                        onClose();
+                      }
+                    }}
+                    data-ocid="booking.open_modal_button"
+                  >
+                    Book
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
 
           <p className="text-xs text-gray-400 text-center pb-1">
@@ -1087,6 +1668,20 @@ export default function PublicView({
     null,
   );
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookingProvider, setBookingProvider] = useState<CityProvider | null>(
+    null,
+  );
+  const [bookingService, setBookingService] = useState<string>("");
+  const [feedbackBookingId, setFeedbackBookingId] = useState<string | null>(
+    null,
+  );
+  const [userRatingAdjustments, setUserRatingAdjustments] = useState<
+    Record<string, number>
+  >({});
+  const [rateNotification, setRateNotification] = useState<Booking | null>(
+    null,
+  );
 
   const providers = useMemo(() => {
     const list = CITY_PROVIDERS[selectedCity] ?? [];
@@ -1131,6 +1726,49 @@ export default function PublicView({
       if (prev.length >= 3) return prev; // max 3
       return [...prev, id];
     });
+  }
+
+  function handleBookingConfirm(
+    booking: Omit<Booking, "id" | "status" | "feedbackSubmitted">,
+  ) {
+    const newBooking: Booking = {
+      ...booking,
+      id: `booking-${Date.now()}`,
+      status: "confirmed",
+      feedbackSubmitted: false,
+    };
+    setBookings((prev) => [...prev, newBooking]);
+    setBookingProvider(null);
+    setBookingService("");
+  }
+
+  function handleMarkComplete(bookingId: string) {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status: "completed" } : b)),
+    );
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (booking) setRateNotification(booking);
+  }
+
+  function handleFeedbackSubmit(bookingId: string, feedback: FeedbackData) {
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.id === bookingId ? { ...b, feedbackSubmitted: true } : b,
+      ),
+    );
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (booking) {
+      const existing = userRatingAdjustments[booking.providerId] ?? 0;
+      const blended = existing
+        ? 0.3 * feedback.overall + 0.7 * existing
+        : feedback.overall;
+      setUserRatingAdjustments((prev) => ({
+        ...prev,
+        [booking.providerId]: blended,
+      }));
+    }
+    setFeedbackBookingId(null);
+    setRateNotification(null);
   }
 
   // Reset compare when city changes
@@ -1317,6 +1955,106 @@ export default function PublicView({
           />
         )}
 
+        {/* My Bookings panel */}
+        {bookings.length > 0 && (
+          <Card
+            className="border border-gray-200 shadow-sm"
+            data-ocid="booking.panel"
+          >
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-[#1E3A8A] p-2">
+                    <Calendar className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900 text-sm">
+                      My Bookings
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Your appointment history
+                    </p>
+                  </div>
+                </div>
+                <Badge className="bg-[#1E3A8A] text-white">
+                  {bookings.length}
+                </Badge>
+              </div>
+              <div className="space-y-3">
+                {bookings.map((b, idx) => (
+                  <div
+                    key={b.id}
+                    data-ocid={`booking.item.${idx + 1}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">
+                        {b.providerName}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {b.service}
+                      </p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Calendar className="h-3 w-3" />
+                          {b.date}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Clock className="h-3 w-3" />
+                          {b.time}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {b.status === "confirmed" && (
+                        <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs">
+                          Confirmed
+                        </Badge>
+                      )}
+                      {b.status === "completed" && (
+                        <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs">
+                          Completed
+                        </Badge>
+                      )}
+                      {b.status === "cancelled" && (
+                        <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">
+                          Cancelled
+                        </Badge>
+                      )}
+                      {b.status === "confirmed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7"
+                          onClick={() => handleMarkComplete(b.id)}
+                          data-ocid="booking.secondary_button"
+                        >
+                          Mark Complete
+                        </Button>
+                      )}
+                      {b.status === "completed" && !b.feedbackSubmitted && (
+                        <Button
+                          size="sm"
+                          className="text-xs h-7 bg-amber-500 hover:bg-amber-600 text-white"
+                          onClick={() => setFeedbackBookingId(b.id)}
+                          data-ocid="feedback.open_modal_button"
+                        >
+                          Rate Now
+                        </Button>
+                      )}
+                      {b.feedbackSubmitted && (
+                        <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                          <CheckCircle className="h-3.5 w-3.5" /> Rated
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
           <span className="font-medium text-gray-600">Trust Score:</span>
@@ -1394,10 +2132,65 @@ export default function PublicView({
         </footer>
       </div>
 
+      {/* Sticky rate notification */}
+      {rateNotification && !rateNotification.feedbackSubmitted && (
+        <div
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4"
+          data-ocid="feedback.toast"
+        >
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-amber-500 px-5 py-4 shadow-xl text-white">
+            <div className="flex items-center gap-3 min-w-0">
+              <Bell className="h-5 w-5 flex-shrink-0" />
+              <p className="text-sm font-medium leading-tight">
+                You completed your visit to{" "}
+                <strong>{rateNotification.providerName}</strong>. Share your
+                experience to help others.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                className="bg-white text-amber-600 hover:bg-amber-50 text-xs font-semibold h-8"
+                onClick={() => setFeedbackBookingId(rateNotification.id)}
+                data-ocid="feedback.open_modal_button"
+              >
+                Rate Now
+              </Button>
+              <button
+                type="button"
+                className="text-white/80 hover:text-white"
+                onClick={() => setRateNotification(null)}
+                data-ocid="feedback.close_button"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PublicProviderModal
         provider={selectedProvider}
         onClose={() => setSelectedProvider(null)}
         currentQuarter={currentQuarter}
+        onBookService={(provider, service) => {
+          setBookingProvider(provider);
+          setBookingService(service);
+        }}
+      />
+      <ServiceBookingModal
+        provider={bookingProvider}
+        service={bookingService}
+        onClose={() => {
+          setBookingProvider(null);
+          setBookingService("");
+        }}
+        onConfirm={handleBookingConfirm}
+      />
+      <FeedbackModal
+        booking={bookings.find((b) => b.id === feedbackBookingId) ?? null}
+        onClose={() => setFeedbackBookingId(null)}
+        onSubmit={handleFeedbackSubmit}
       />
     </div>
   );
