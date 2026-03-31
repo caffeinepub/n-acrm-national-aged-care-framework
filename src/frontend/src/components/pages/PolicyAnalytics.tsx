@@ -3832,36 +3832,39 @@ export default function PolicyAnalytics({
 }: { currentQuarter?: string }) {
   return (
     <div className="p-5 space-y-5 animate-fade-in">
-      {/* Page Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
+      {/* Page hero banner */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.22 0.12 265) 0%, oklch(0.30 0.12 230) 100%)",
+        }}
+      >
+        <div className="px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <div
-              className="flex items-center justify-center w-8 h-8 rounded-sm"
-              style={{ background: "oklch(0.22 0.07 258)" }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.74 0.14 86)" }}
             >
-              <BarChart2 className="h-4 w-4 text-white" />
+              <BarChart2
+                className="w-5 h-5"
+                style={{ color: "oklch(0.14 0.055 258)" }}
+              />
             </div>
             <div>
-              <h1
-                className="text-base font-bold leading-none"
-                style={{ color: "oklch(0.16 0.035 258)" }}
-              >
-                Policy Analyst Dashboard
-              </h1>
+              <h1 className="text-lg font-bold text-white">Policy Analytics</h1>
               <p
                 className="text-xs mt-0.5"
-                style={{ color: "oklch(0.5 0.022 252)" }}
+                style={{ color: "oklch(0.72 0.03 252)" }}
               >
                 National Aged Care Intelligence Centre · Sector-Level Aggregated
                 Analytics
               </p>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="badge-blue">Aggregated Data Only</span>
-          <span className="badge-gray">Q4 2024</span>
+          <div className="flex items-center gap-2">
+            <span className="badge-blue">Aggregated Data Only</span>
+          </div>
         </div>
       </div>
 

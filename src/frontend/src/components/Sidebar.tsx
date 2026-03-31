@@ -7,16 +7,20 @@ import {
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
   Brain,
   Building2,
   Calculator,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   Database,
   LayoutDashboard,
   MapPin,
+  Search,
   Shield,
+  Star,
   TrendingUp,
 } from "lucide-react";
 import type { ActivePage, AppRole } from "../App";
@@ -137,7 +141,56 @@ const NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+  {
+    title: "PUBLIC PORTAL",
+    items: [
+      {
+        id: "national_overview",
+        label: "Find Providers",
+        icon: Search,
+        roles: ["Public"],
+        ocid: "nav.public.find",
+      },
+      {
+        id: "public_bookings",
+        label: "My Bookings",
+        icon: CalendarDays,
+        roles: ["Public"],
+        ocid: "nav.public.bookings",
+      },
+      {
+        id: "care_resources",
+        label: "Care Resources",
+        icon: BookOpen,
+        roles: ["Public"],
+        ocid: "nav.public.resources",
+      },
+      {
+        id: "my_reviews",
+        label: "My Reviews",
+        icon: Star,
+        roles: ["Public"],
+        ocid: "nav.public.reviews",
+      },
+    ],
+  },
 ];
+
+/** Role → CSS color variable mapping */
+function getRoleColor(role: AppRole): string {
+  switch (role) {
+    case "Regulator":
+      return "var(--role-regulator)";
+    case "Provider":
+      return "var(--role-provider)";
+    case "Policy Analyst":
+      return "var(--role-analyst)";
+    case "Public":
+      return "var(--role-public)";
+    default:
+      return "oklch(0.74 0.14 86)";
+  }
+}
 
 interface SidebarProps {
   activePage: ActivePage;
@@ -154,50 +207,74 @@ export default function Sidebar({
   collapsed,
   onToggleCollapse,
 }: SidebarProps) {
+  const roleColor = getRoleColor(currentRole);
+
   return (
     <TooltipProvider delayDuration={200}>
       <aside
-        className="flex flex-col border-r overflow-y-auto flex-shrink-0"
+        className="flex flex-col overflow-y-auto flex-shrink-0"
         style={{
-          width: collapsed ? "48px" : "220px",
-          minWidth: collapsed ? "48px" : "220px",
+          width: collapsed ? "56px" : "240px",
+          minWidth: collapsed ? "56px" : "240px",
           transition: "width 250ms ease, min-width 250ms ease",
-          background: "oklch(var(--sidebar))",
-          borderColor: "oklch(var(--sidebar-border))",
+          background: "var(--sidebar-gradient)",
+          borderRight: "1px solid oklch(0.20 0.055 258)",
         }}
         aria-label="Main navigation"
       >
-        {/* App identity block */}
+        {/* ── Logo / App Identity Block ── */}
         <div
-          className="px-2 py-4 border-b flex-shrink-0 overflow-hidden"
+          className="flex-shrink-0 overflow-hidden"
           style={{
-            borderBottomColor: "oklch(var(--sidebar-border))",
-            background: "oklch(0.13 0.052 258)",
+            padding: collapsed ? "16px 10px" : "18px 16px 14px",
+            borderBottom: "1px solid oklch(0.18 0.05 258)",
+            background: "oklch(0.13 0.052 258 / 0.6)",
           }}
         >
-          <div className="flex items-center gap-2.5">
+          <div
+            className="flex items-center"
+            style={{ gap: collapsed ? "0" : "11px" }}
+          >
             <div
-              className="w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0"
+              className="flex items-center justify-center flex-shrink-0"
               style={{
-                background: "oklch(var(--gov-gold))",
-                color: "oklch(0.14 0.055 258)",
+                width: "34px",
+                height: "34px",
+                borderRadius: "8px",
+                background:
+                  "linear-gradient(135deg, oklch(0.48 0.18 260), oklch(0.40 0.22 290))",
+                boxShadow: "0 2px 8px oklch(0.30 0.18 265 / 0.5)",
+                flexShrink: 0,
               }}
             >
-              <LayoutDashboard className="w-4 h-4" />
+              <Shield
+                style={{ width: "17px", height: "17px", color: "#fff" }}
+              />
             </div>
+
             {!collapsed && (
               <div className="overflow-hidden">
                 <div
-                  className="text-sm font-extrabold uppercase tracking-widest leading-none whitespace-nowrap"
-                  style={{ color: "#fff", letterSpacing: "0.10em" }}
+                  style={{
+                    fontSize: "15px",
+                    fontWeight: 800,
+                    color: "#fff",
+                    letterSpacing: "0.10em",
+                    lineHeight: 1.1,
+                    whiteSpace: "nowrap",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  }}
                 >
                   N-ACRM
                 </div>
                 <div
-                  className="text-xs leading-snug mt-0.5 whitespace-nowrap"
                   style={{
-                    color: "oklch(0.68 0.022 252)",
-                    fontSize: "0.65rem",
+                    fontSize: "10px",
+                    color: "oklch(0.60 0.022 252)",
+                    marginTop: "3px",
+                    whiteSpace: "nowrap",
+                    letterSpacing: "0.04em",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
                   }}
                 >
                   Aged Care Intelligence
@@ -206,26 +283,70 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* Role pill */}
           {!collapsed && (
             <div
-              className="mt-3 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-semibold whitespace-nowrap"
               style={{
-                background: "oklch(0.22 0.065 258)",
-                color: "oklch(0.74 0.028 252)",
+                marginTop: "12px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                background: "oklch(0.18 0.055 258 / 0.8)",
+                border: "1px solid oklch(0.24 0.055 258)",
               }}
             >
               <span
-                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{ background: "oklch(var(--gov-gold))" }}
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  background: roleColor,
+                  boxShadow: `0 0 6px ${roleColor}`,
+                }}
               />
-              {currentRole}
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "oklch(0.78 0.022 252)",
+                  whiteSpace: "nowrap",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {currentRole}
+              </span>
+            </div>
+          )}
+
+          {collapsed && (
+            <div
+              style={{
+                marginTop: "8px",
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  background: roleColor,
+                  boxShadow: `0 0 6px ${roleColor}`,
+                }}
+              />
             </div>
           )}
         </div>
 
-        {/* Nav groups */}
-        <nav className="flex-1 py-1 overflow-y-auto overflow-x-hidden">
+        {/* ── Navigation Groups ── */}
+        <nav
+          className="flex-1 overflow-y-auto overflow-x-hidden"
+          style={{ paddingTop: "6px", paddingBottom: "6px" }}
+        >
           {NAV_GROUPS.map((group, groupIdx) => {
             const visibleItems = group.items.filter((item) =>
               item.roles.includes(currentRole),
@@ -234,53 +355,39 @@ export default function Sidebar({
 
             return (
               <div key={group.title}>
-                {/* Group label — hidden when collapsed */}
                 {!collapsed && (
                   <div
-                    className="px-4 flex items-center gap-2"
+                    className="sidebar-group-label"
                     style={{
-                      paddingTop: groupIdx === 0 ? "10px" : "11px",
-                      paddingBottom: "5px",
+                      marginTop: groupIdx === 0 ? "4px" : "8px",
                       borderTop:
                         groupIdx > 0
-                          ? "1px solid oklch(0.22 0.052 258)"
+                          ? "1px solid oklch(0.18 0.048 258)"
                           : "none",
-                      marginTop: groupIdx > 0 ? "4px" : "0",
+                      paddingTop: groupIdx > 0 ? "12px" : "6px",
                     }}
                   >
-                    <span
-                      className="text-xs font-bold uppercase"
-                      style={{
-                        color: "oklch(0.62 0.040 255)",
-                        letterSpacing: "0.08em",
-                        fontSize: "0.64rem",
-                      }}
-                    >
-                      {group.title}
-                    </span>
-                    <div
-                      className="flex-1 h-px"
-                      style={{ background: "oklch(0.22 0.052 258)" }}
-                      aria-hidden="true"
-                    />
+                    {group.title}
                   </div>
                 )}
-                {/* Collapsed separator */}
+
                 {collapsed && groupIdx > 0 && (
                   <div
-                    className="mx-2 my-1 h-px"
-                    style={{ background: "oklch(0.22 0.052 258)" }}
+                    style={{
+                      height: "1px",
+                      margin: "6px 10px",
+                      background: "oklch(0.18 0.048 258)",
+                    }}
                     aria-hidden="true"
                   />
                 )}
 
-                {/* Nav items */}
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activePage === item.id;
                   const label = item.labelOverride?.[currentRole] ?? item.label;
 
-                  const buttonContent = (
+                  const button = (
                     <button
                       type="button"
                       key={item.id}
@@ -288,51 +395,34 @@ export default function Sidebar({
                       data-ocid={item.ocid}
                       aria-label={label}
                       aria-current={isActive ? "page" : undefined}
-                      className="w-full flex items-center gap-2.5 py-2 text-left transition-colors duration-100 focus-visible:outline-none"
+                      className={`sidebar-nav-item${isActive ? " active" : ""}`}
                       style={{
-                        paddingLeft: collapsed ? "12px" : "14px",
-                        paddingRight: collapsed ? "12px" : "8px",
                         justifyContent: collapsed ? "center" : "flex-start",
-                        background: isActive
-                          ? "oklch(0.22 0.085 258)"
-                          : "transparent",
-                        color: isActive
-                          ? "oklch(0.96 0.008 252)"
-                          : "oklch(0.58 0.025 252)",
-                        borderLeft: isActive
-                          ? "2px solid oklch(var(--gov-gold))"
-                          : "2px solid transparent",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive) {
-                          (
-                            e.currentTarget as HTMLButtonElement
-                          ).style.background = "oklch(0.20 0.065 258)";
-                          (e.currentTarget as HTMLButtonElement).style.color =
-                            "oklch(0.82 0.015 252)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) {
-                          (
-                            e.currentTarget as HTMLButtonElement
-                          ).style.background = "transparent";
-                          (e.currentTarget as HTMLButtonElement).style.color =
-                            "oklch(0.58 0.025 252)";
-                        }
+                        margin: collapsed ? "1px auto" : undefined,
+                        width: collapsed ? "40px" : undefined,
+                        padding: collapsed ? "9px 0" : undefined,
+                        borderRadius: collapsed ? "8px" : undefined,
+                        borderLeft: collapsed ? "none" : undefined,
                       }}
                     >
                       <Icon
-                        className="w-3.5 h-3.5 flex-shrink-0"
+                        className="sidebar-icon"
                         style={{
-                          color: isActive
-                            ? "oklch(var(--gov-gold))"
-                            : "inherit",
-                          opacity: isActive ? 1 : 0.65,
+                          color: isActive ? "oklch(0.74 0.14 86)" : "inherit",
                         }}
                       />
                       {!collapsed && (
-                        <span className="text-xs font-medium leading-snug whitespace-nowrap overflow-hidden">
+                        <span
+                          style={{
+                            fontSize: "12.5px",
+                            fontWeight: 500,
+                            lineHeight: 1.3,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontFamily: "'Plus Jakarta Sans', sans-serif",
+                          }}
+                        >
                           {label}
                         </span>
                       )}
@@ -341,47 +431,53 @@ export default function Sidebar({
 
                   if (collapsed) {
                     return (
-                      <Tooltip key={item.id}>
-                        <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
+                      <Tooltip key={`${item.id}-${item.ocid}`}>
+                        <TooltipTrigger asChild>{button}</TooltipTrigger>
                         <TooltipContent side="right" className="text-xs">
                           {label}
                         </TooltipContent>
                       </Tooltip>
                     );
                   }
-                  return <div key={item.id}>{buttonContent}</div>;
+                  return <div key={`${item.id}-${item.ocid}`}>{button}</div>;
                 })}
               </div>
             );
           })}
         </nav>
 
-        {/* Footer + Collapse toggle */}
+        {/* ── Footer + Collapse Toggle ── */}
         <div
-          className="border-t flex-shrink-0"
+          className="flex-shrink-0"
           style={{
-            borderColor: "oklch(0.22 0.052 258)",
-            background: "oklch(0.13 0.052 258)",
+            borderTop: "1px solid oklch(0.18 0.048 258)",
+            background: "oklch(0.12 0.048 258 / 0.6)",
           }}
         >
           {!collapsed && (
-            <div className="px-4 pt-3 pb-1">
+            <div style={{ padding: "10px 16px 6px" }}>
               <div
-                className="text-xs"
-                style={{ color: "oklch(0.46 0.028 252)" }}
+                style={{
+                  fontSize: "10.5px",
+                  color: "oklch(0.44 0.025 252)",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                }}
               >
                 Version 24 · Q4-2025
               </div>
               <div
-                className="text-xs mt-0.5"
-                style={{ color: "oklch(0.36 0.022 252)", fontSize: "0.65rem" }}
+                style={{
+                  fontSize: "10px",
+                  color: "oklch(0.36 0.02 252)",
+                  marginTop: "2px",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                }}
               >
                 Privacy Act 1988 Compliance
               </div>
             </div>
           )}
 
-          {/* Collapse toggle button */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -389,25 +485,12 @@ export default function Sidebar({
                 onClick={onToggleCollapse}
                 data-ocid="sidebar.toggle"
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className="w-full flex items-center justify-center py-2.5 transition-colors duration-100"
-                style={{ color: "oklch(0.50 0.025 252)" }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.background =
-                    "oklch(0.20 0.065 258)";
-                  (e.currentTarget as HTMLButtonElement).style.color =
-                    "oklch(0.82 0.015 252)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.background =
-                    "transparent";
-                  (e.currentTarget as HTMLButtonElement).style.color =
-                    "oklch(0.50 0.025 252)";
-                }}
+                className="sidebar-collapse-btn"
               >
                 {collapsed ? (
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <ChevronRight style={{ width: "14px", height: "14px" }} />
                 ) : (
-                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <ChevronLeft style={{ width: "14px", height: "14px" }} />
                 )}
               </button>
             </TooltipTrigger>

@@ -3,13 +3,16 @@ import type { ActivePage, AppRole } from "../App";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import AuditGovernance from "./pages/AuditGovernance";
+import CareResources from "./pages/CareResources";
 import DataQuality from "./pages/DataQuality";
 import HighRiskCohorts from "./pages/HighRiskCohorts";
+import MyReviews from "./pages/MyReviews";
 import NationalOverview from "./pages/NationalOverview";
 import PayForImprovement from "./pages/PayForImprovement";
 import PolicyAnalytics from "./pages/PolicyAnalytics";
 import ProviderDashboard from "./pages/ProviderDashboard";
 import ProviderPerformance from "./pages/ProviderPerformance";
+import PublicBookings from "./pages/PublicBookings";
 import PublicView from "./pages/PublicView";
 import RatingEngine from "./pages/RatingEngine";
 import RegionalProviderDrillDown from "./pages/RegionalProviderDrillDown";
@@ -19,26 +22,37 @@ import StateHeatmaps from "./pages/StateHeatmaps";
 
 interface LayoutProps {
   currentRole: AppRole;
-  setCurrentRole: (role: AppRole) => void;
   activePage: ActivePage;
   setActivePage: (page: ActivePage) => void;
   currentQuarter: string;
   setCurrentQuarter: (quarter: string) => void;
+  onRoleSwitch: (role: AppRole) => void;
+  onGoHome: () => void;
 }
 
 export default function Layout({
   currentRole,
-  setCurrentRole,
   activePage,
   setActivePage,
   currentQuarter,
   setCurrentQuarter,
+  onRoleSwitch,
+  onGoHome,
 }: LayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const renderPage = () => {
     if (currentRole === "Public") {
-      return <PublicView currentQuarter={currentQuarter} />;
+      switch (activePage) {
+        case "public_bookings":
+          return <PublicBookings currentQuarter={currentQuarter} />;
+        case "care_resources":
+          return <CareResources />;
+        case "my_reviews":
+          return <MyReviews />;
+        default:
+          return <PublicView currentQuarter={currentQuarter} />;
+      }
     }
 
     if (currentRole === "Provider" && activePage === "national_overview") {
@@ -89,20 +103,19 @@ export default function Layout({
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       <Header
         currentRole={currentRole}
-        setCurrentRole={setCurrentRole}
         currentQuarter={currentQuarter}
         setCurrentQuarter={setCurrentQuarter}
+        onRoleSwitch={onRoleSwitch}
+        onGoHome={onGoHome}
       />
       <div className="flex flex-1 overflow-hidden">
-        {currentRole !== "Public" && (
-          <Sidebar
-            activePage={activePage}
-            setActivePage={setActivePage}
-            currentRole={currentRole}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-          />
-        )}
+        <Sidebar
+          activePage={activePage}
+          setActivePage={setActivePage}
+          currentRole={currentRole}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        />
         <main className="flex-1 overflow-y-auto bg-background">
           {renderPage()}
         </main>

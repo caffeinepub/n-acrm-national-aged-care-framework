@@ -191,15 +191,40 @@ export default function PayForImprovement({
 
   return (
     <div className="p-6 space-y-5">
-      {/* Page header */}
-      <div className="border-b pb-4">
-        <h1 className="text-xl font-bold text-gov-navy">
-          Pay-for-Improvement Tracker
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {currentQuarter} Eligibility Report — Provider funding eligibility
-          based on centralized rating engine
-        </p>
+      {/* Page hero banner */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.18 0.06 258) 0%, oklch(0.24 0.09 280) 100%)",
+        }}
+      >
+        <div className="px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.74 0.14 86)" }}
+            >
+              <TrendingUp
+                className="w-5 h-5"
+                style={{ color: "oklch(0.14 0.055 258)" }}
+              />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white">
+                Pay-for-Improvement
+              </h1>
+              <p
+                className="text-xs mt-0.5"
+                style={{ color: "oklch(0.72 0.03 252)" }}
+              >
+                Incentive Calculation &amp; Eligibility Management —{" "}
+                {currentQuarter}
+              </p>
+            </div>
+          </div>
+          <span className="badge-navy text-xs">Centralised Rating Engine</span>
+        </div>
       </div>
 
       {/* Eligibility logic cards */}
@@ -289,76 +314,118 @@ export default function PayForImprovement({
 
       {/* KPI summary row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="rounded-none border" data-ocid="pfi.total.card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <TrendingUp className="w-6 h-6 text-gov-navy flex-shrink-0" />
+        <div className="kpi-card" data-ocid="pfi.total.card">
+          <div
+            className="kpi-card-accent"
+            style={{ background: "oklch(0.22 0.07 258)" }}
+          />
+          <div className="p-4 pt-5 flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.93 0.012 258)" }}
+            >
+              <TrendingUp
+                className="w-5 h-5"
+                style={{ color: "oklch(0.22 0.07 258)" }}
+              />
+            </div>
             <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
+              <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">
                 Total Providers
               </div>
-              <div className="text-2xl font-bold text-gov-navy">
+              <div
+                className="text-2xl font-bold stat-number"
+                style={{ color: "oklch(0.22 0.07 258)" }}
+              >
                 {providerRows.length}
               </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-none border" data-ocid="pfi.eligible.card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <CheckCircle2
-              className="w-6 h-6 flex-shrink-0"
-              style={{ color: "oklch(0.52 0.15 145)" }}
-            />
+          </div>
+        </div>
+        <div className="kpi-card" data-ocid="pfi.eligible.card">
+          <div
+            className="kpi-card-accent"
+            style={{ background: "oklch(0.52 0.15 145)" }}
+          />
+          <div className="p-4 pt-5 flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.94 0.06 145)" }}
+            >
+              <CheckCircle2
+                className="w-5 h-5"
+                style={{ color: "oklch(0.45 0.15 145)" }}
+              />
+            </div>
             <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
+              <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">
                 Eligible (incl. Highly)
               </div>
               <div
-                className="text-2xl font-bold"
-                style={{ color: "oklch(0.52 0.15 145)" }}
+                className="text-2xl font-bold stat-number"
+                style={{ color: "oklch(0.45 0.15 145)" }}
               >
                 {eligibleCount}
               </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-none border" data-ocid="pfi.not_eligible.card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <XCircle
-              className="w-6 h-6 flex-shrink-0"
-              style={{ color: "oklch(0.52 0.22 25)" }}
-            />
+          </div>
+        </div>
+        <div className="kpi-card" data-ocid="pfi.not_eligible.card">
+          <div
+            className="kpi-card-accent"
+            style={{ background: "oklch(0.52 0.22 25)" }}
+          />
+          <div className="p-4 pt-5 flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.95 0.06 25)" }}
+            >
+              <XCircle
+                className="w-5 h-5"
+                style={{ color: "oklch(0.45 0.22 25)" }}
+              />
+            </div>
             <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
+              <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">
                 Not Eligible
               </div>
               <div
-                className="text-2xl font-bold"
-                style={{ color: "oklch(0.52 0.22 25)" }}
+                className="text-2xl font-bold stat-number"
+                style={{ color: "oklch(0.45 0.22 25)" }}
               >
                 {notEligibleCount}
               </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-none border" data-ocid="pfi.funding.card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <DollarSign
-              className="w-6 h-6 flex-shrink-0"
-              style={{ color: "oklch(0.60 0.14 72)" }}
-            />
+          </div>
+        </div>
+        <div className="kpi-card" data-ocid="pfi.funding.card">
+          <div
+            className="kpi-card-accent"
+            style={{ background: "oklch(0.60 0.14 72)" }}
+          />
+          <div className="p-4 pt-5 flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.96 0.06 80)" }}
+            >
+              <DollarSign
+                className="w-5 h-5"
+                style={{ color: "oklch(0.38 0.14 72)" }}
+              />
+            </div>
             <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
+              <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">
                 Est. Total Funding
               </div>
               <div
-                className="text-xl font-bold"
+                className="text-xl font-bold stat-number"
                 style={{ color: "oklch(0.38 0.14 72)" }}
               >
                 ${(totalFunding / 1_000_000).toFixed(2)}M
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Provider eligibility table */}

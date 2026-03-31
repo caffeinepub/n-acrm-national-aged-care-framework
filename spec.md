@@ -1,48 +1,75 @@
-# N-ACRM — Regulator Dashboard Command Center Redesign
+# N-ACRM National Aged Care Framework
 
 ## Current State
-- `NationalOverview.tsx` is the main Regulator landing page (1331 lines): KPI cards, state table, alerts, radar/area charts, submissions table
-- `ProviderPerformance.tsx` shows provider table with ratings, benchmarks (636 lines)
-- `Header.tsx` and `Sidebar.tsx` already use a dark navy sidebar with gov-gold highlights
-- `index.css` has a complete OKLCH design token system (`--gov-navy`, `--gov-gold`, `--gov-green`, `--gov-amber`, `--gov-red`)
-- `mockData.ts` exports `UNIFIED_PROVIDERS`, `PROVIDER_MASTER`, `getProviderRatingForQuarter(id, quarter)`, `getUnifiedProviderIndicators(id, quarter)`
-- `ratingEngine.ts` has `calcNewWeightedOverallScore`, `overallScoreToStars`, `starsToPercentScore`
-- All providers have Q1-Q4 quarterly indicator data available via `getUnifiedProviderIndicators`
+- App starts with full-screen `RoleSelectionDashboard` (glassmorphic cards, animated)
+- After selecting role → `Layout` (Header + Sidebar + page content)
+- Header has role badge (read-only) — no way to switch roles once inside
+- Sidebar has unified dark navy design across all roles
+- Public role has 4 sidebar items: Find Providers, My Bookings, Care Resources, My Reviews — but all map to existing ActivePage IDs (`national_overview`, `pay_for_improvement`, `policy_analytics`, `audit_governance`) which show non-public content
+- `PublicView.tsx` handles Find Providers with full provider search/booking/comparison/AI chatbot features
+- My Bookings, Care Resources, My Reviews currently show non-public-specific pages
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Futuristic Command Center NationalOverview**: Deep navy/indigo glassmorphism redesign with animated KPI cards, glowing borders, gradient backgrounds, animated dot-grid hero banner. 4 command KPI cards (Total Providers, High-Risk Providers, Avg Rating, Active Alerts) each with icon, metric, trend indicator, gradient background, hover animation
-- **Risk Prediction Engine utility** (`utils/riskPrediction.ts`): Predict future risk level (Low/Medium/High) + confidence score (%) for each provider using Q1-Q4 trend direction (improving/declining), benchmark deviation, current risk score. Logic: if 2+ indicators declining across quarters → elevated predicted risk; if falls rising continuously → high; confidence based on number of consistent trend signals
-- **Trend Deviation Detector utility** (`utils/trendDeviation.ts`): Compare current vs previous quarter indicators, flag if change >20% (spike/drop). Output: deviation alerts per provider with indicator name, % change, severity (critical/warning)
-- **Decision Support System utility** (`utils/decisionSupport.ts`): Given risk score + predicted risk + deviations + compliance → generate actionable recommendation ("Send audit team", "Increase monitoring", "Issue compliance warning", "Provide additional funding"), priority (High/Medium/Low), and plain-language explanation
-- **New Regulator Intelligence page** (`pages/RegulatorIntelligence.tsx`): Full-page command center with 3 tabs: (1) Risk Predictions — table of all providers with Predicted Risk column (color-coded red/yellow/green), Confidence %, tooltip explanation; (2) Deviation Alerts — alert panel listing providers with sudden changes, affected indicator, % change, severity badges; (3) Decision Support — provider table with Recommended Action column, action badges, priority classification, clickable detail modal
-- **New nav item** in Sidebar: "Regulator Intelligence" under INTELLIGENCE group, visible only to Regulator role, using `Brain` or `Cpu` Lucide icon, with `regulator_intelligence` page key
-- **Advanced visual components** in NationalOverview: Recharts RadarChart for domain performance, AreaChart for trends, heatmap-style state grid
-- **Glassmorphism card components**: backdrop-blur, semi-transparent backgrounds, glowing hover effects
-- **Loading skeletons** for all data-loading states
-- **Micro-interactions**: hover lift, glow, animated transitions on cards
+- **Scrollable Home Page**: A new `HomePage` component that replaces the role selection screen as the entry point. Multi-section layout:
+  - Hero section with N-ACRM branding, tagline, animated role cards
+  - Role selection section with interactive cards
+  - Platform capabilities/features section
+  - Insights preview section
+  - Footer section
+  - Smooth section scroll, animations, responsive design
+- **Global Role Switcher** in Header: Replace the read-only role badge with a clickable role switcher. Clicking it opens a dropdown/modal showing all 4 roles. Switching role instantly updates context and navigates to appropriate default page. Must work from ANY page.
+- **Public Bookings Page** (`PublicBookings.tsx`): Dedicated My Bookings module with:
+  - Tab system: Upcoming / Completed / Cancelled
+  - Booking cards with status badges, provider name, service, date/time
+  - Actions: Cancel booking, Reschedule (date picker), View details modal
+  - Timeline or card-based UI
+  - Empty states per tab
+- **Care Resources Page** (`CareResources.tsx`): Dedicated care content module:
+  - Categories: Fall Prevention, Medication Safety, Mental Health, Dementia Care, Exercise & Mobility
+  - Article cards with title, excerpt, read time, category chip
+  - Search bar + category filter
+  - Full article detail view/modal
+  - Independent content system (not linked to provider data)
+- **My Reviews Page** (`MyReviews.tsx`): Dedicated reviews module:
+  - List of user-submitted reviews with provider name, date, star rating, comment
+  - Edit review (open edit modal with star picker + text input)
+  - Delete review (with confirmation)
+  - Aggregate rating summary
+  - Empty state
+- **New ActivePage types**: Add `public_bookings`, `care_resources`, `my_reviews` to `ActivePage` type in `App.tsx`
 
 ### Modify
-- `App.tsx`: Add `regulator_intelligence` to `ActivePage` type
-- `Layout.tsx`: Add `RegulatorIntelligence` import and route case
-- `Sidebar.tsx`: Add "Regulator Intelligence" nav item under INTELLIGENCE group for Regulator role only, using `Brain` icon
-- `NationalOverview.tsx`: Full visual redesign — deep navy command center aesthetic with gradient hero, glassmorphism KPI cards with animated glow borders, advanced charts, alert panel with large color-coded cards
-- `Header.tsx`: Enhance with notification bell badge (showing alert count), pulsing system status, more premium futuristic styling with gradient background
-- `index.css`: Add futuristic utility classes: `.cmd-card` (glassmorphism card), `.glow-blue`, `.glow-red`, `.glow-green`, animated shimmer keyframe, `@keyframes pulse-glow`
+- **`App.tsx`**: 
+  - Change initial state to show `HomePage` instead of `RoleSelectionDashboard`
+  - Pass `onRoleSelect` and `onGoHome` to components
+  - Add new ActivePage types
+  - Pass `setCurrentRole` down to Header for global role switching
+- **`Header.tsx`**: 
+  - Replace read-only role badge with a clickable role switcher button
+  - Clicking opens inline dropdown showing 4 role options
+  - Smooth transition when switching
+  - Keep same header visual design
+- **`Sidebar.tsx`**: 
+  - Update Public Portal nav items to use new page IDs: `public_bookings`, `care_resources`, `my_reviews`
+  - Keep all existing nav items for other roles unchanged
+  - Add "Home" button/link at top or footer area
+- **`Layout.tsx`**: 
+  - Add rendering for new public pages: `public_bookings` → `PublicBookings`, `care_resources` → `CareResources`, `my_reviews` → `MyReviews`
+  - Add `onSwitchRole` and `onGoHome` props
 
 ### Remove
-- No existing features removed
+- Remove the `RoleSelectionDashboard` as the app entry point (keep the component but access it via Home page or role switcher)
+- Remove the lock that prevents role switching once inside dashboard
 
 ## Implementation Plan
-
-1. Update `index.css` with futuristic utility classes and keyframe animations (shimmer, pulse-glow, slide-up)
-2. Create `utils/riskPrediction.ts` — predict risk level + confidence from quarterly indicator trends
-3. Create `utils/trendDeviation.ts` — detect >20% changes between quarters, output alert list
-4. Create `utils/decisionSupport.ts` — generate action recommendations with priority and explanation
-5. Redesign `NationalOverview.tsx` as a futuristic command center (keep all existing data, upgrade visuals: gradient hero, glassmorphism KPI cards, animated charts, large alert cards)
-6. Redesign `Header.tsx` — add notification count, more futuristic dark gradient styling for Regulator role
-7. Create `pages/RegulatorIntelligence.tsx` — 3-tab intelligence page using all 3 new utility modules
-8. Update `App.tsx` — add `regulator_intelligence` to ActivePage
-9. Update `Layout.tsx` — add RegulatorIntelligence route
-10. Update `Sidebar.tsx` — add Regulator Intelligence nav item with Brain icon
+1. Update `App.tsx`: add HomePage state, new ActivePage types, pass role-switch capability to Header
+2. Create `HomePage.tsx`: multi-section scrollable landing with hero, role cards (that navigate into dashboard), features, insights preview, footer
+3. Update `Header.tsx`: add role switcher dropdown with smooth animations
+4. Update `Sidebar.tsx`: fix public nav IDs to new page keys; add optional Home button
+5. Update `Layout.tsx`: route new public page IDs to new components
+6. Create `PublicBookings.tsx`: full bookings system with Upcoming/Completed/Cancelled tabs, reschedule/cancel/details actions
+7. Create `CareResources.tsx`: articles with search, category filter, detail modal
+8. Create `MyReviews.tsx`: reviews list with edit/delete, star ratings, aggregate summary
+9. Ensure all new public pages use the same DS design system (glassmorphism, navy gradient hero, consistent cards, badges)

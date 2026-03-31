@@ -29,9 +29,11 @@ import {
   Calculator,
   CheckCircle2,
   Loader2,
+  Search,
   Shield,
   TrendingDown,
   TrendingUp,
+  XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -359,6 +361,14 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
   const [quarter, setQuarter] = useState(currentQuarter);
   const [screeningCompletion, setScreeningCompletion] = useState(78);
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredProviders = UNIFIED_PROVIDERS.filter(
+    (p) =>
+      searchQuery === "" ||
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.city.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
   const [indicators, setIndicators] =
     useState<IndicatorRow[]>(DEFAULT_INDICATORS);
   const [result, setResult] = useState<LocalRatingEngineResult | null>(null);
@@ -434,9 +444,20 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         ind.benchmark,
         ind.isLowerBetter,
       );
-      const starRating = scoreToFractionalStars(perfScore);
+      const starRating = overallScoreToStars(perfScore);
+      const deviation =
+        ind.benchmark !== 0
+          ? Math.abs(ind.rate - ind.benchmark) / ind.benchmark
+          : 0;
+      const devStrength = Math.min(deviation, 0.5);
       const trendAdjustment =
-        ind.trend === "improving" ? 0.2 : ind.trend === "declining" ? -0.2 : 0;
+        Math.round(
+          (ind.trend === "declining"
+            ? -(devStrength * 2)
+            : ind.trend === "improving"
+              ? devStrength * 2
+              : 0) * 100,
+        ) / 100;
       const benchmarkStatus = getBenchmarkStatus(
         ind.rate,
         ind.benchmark,
@@ -588,7 +609,19 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
         "WARNING: Declining trend detected — Not Eligible enforced",
       );
     }
+    if (starBand >= 4 && belowBenchmarkCount >= indicatorRatings.length * 0.4) {
+      warnings.push(
+        "WARNING: 40%+ indicators below benchmark — star rating capped at 3",
+      );
+    }
     setValidationWarnings(warnings);
+
+    // Cap score if 40%+ indicators below benchmark and star band was high
+    const cappedOverallScore =
+      starBand >= 4 && belowBenchmarkCount >= indicatorRatings.length * 0.4
+        ? Math.min(overallScore, 74)
+        : overallScore;
+    const finalStarBand = overallScoreToStars(cappedOverallScore);
 
     const auditNotes = [
       "Rating calculated using weighted domain model: Safety 30%, Preventive 20%, Quality 20%, Staffing 15%, Compliance 10%, Experience 5%.",
@@ -601,9 +634,9 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
       providerId,
       quarter,
       calculatedAt: BigInt(Date.now()) * BigInt(1_000_000),
-      overallScore,
-      overallStars: starBand,
-      previousOverallStars: Math.max(0, starBand - 1),
+      overallScore: cappedOverallScore,
+      overallStars: finalStarBand,
+      previousOverallStars: Math.max(0, finalStarBand - 1),
       auditNotes,
       domainScores,
       indicatorRatings,
@@ -669,22 +702,120 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
 
   return (
     <div className="p-6 space-y-5">
-      {/* Page header */}
-      <div className="border-b pb-4">
-        <div className="flex items-center gap-2.5">
-          <Calculator
-            className="w-5 h-5"
-            style={{ color: "oklch(var(--gov-navy))" }}
-          />
-          <h1 className="text-xl font-bold text-gov-navy">Rating Engine</h1>
+      {/* Enhanced Search Bar */}
+      <div className="section-card p-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+              style={{ color: "oklch(0.55 0.025 252)" }}
+            />
+            <input
+              type="text"
+              placeholder="Search by provider name, ID, or location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-9 py-2.5 rounded-lg border text-sm bg-white transition-all duration-200 outline-none"
+              style={{
+                borderColor: searchQuery
+                  ? "oklch(0.22 0.07 258)"
+                  : "oklch(0.88 0.008 252)",
+                boxShadow: searchQuery
+                  ? "0 0 0 2px oklch(0.22 0.07 258 / 0.15)"
+                  : undefined,
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "oklch(0.22 0.07 258)";
+                e.currentTarget.style.boxShadow =
+                  "0 0 0 2px oklch(0.22 0.07 258 / 0.15)";
+              }}
+              onBlur={(e) => {
+                if (!searchQuery) {
+                  e.currentTarget.style.borderColor = "oklch(0.88 0.008 252)";
+                  e.currentTarget.style.boxShadow = "";
+                }
+              }}
+              data-ocid="rating_engine.search.input"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 hover:opacity-75 transition-opacity"
+                aria-label="Clear search"
+                data-ocid="rating_engine.search.clear"
+              >
+                <XCircle
+                  className="w-4 h-4"
+                  style={{ color: "oklch(0.55 0.025 252)" }}
+                />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span
+              className="text-xs font-medium"
+              style={{
+                color:
+                  filteredProviders.length === 0
+                    ? "oklch(0.52 0.22 25)"
+                    : "oklch(0.44 0.018 252)",
+              }}
+            >
+              {searchQuery
+                ? filteredProviders.length === 0
+                  ? "No results found"
+                  : `${filteredProviders.length} of ${UNIFIED_PROVIDERS.length} providers`
+                : `${UNIFIED_PROVIDERS.length} providers`}
+            </span>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Automated indicator-to-rating calculation engine — N-ACRM
-        </p>
+        {searchQuery && filteredProviders.length === 0 && (
+          <div
+            className="mt-3 flex items-center gap-2 animate-fade-in"
+            style={{ color: "oklch(0.52 0.22 25)" }}
+          >
+            <Search className="w-4 h-4" />
+            <span className="text-xs">
+              No providers match <strong>&quot;{searchQuery}&quot;</strong> —
+              try a different name, ID, or location
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Page hero */}
+      <div
+        className="relative rounded-xl overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.20 0.06 254) 0%, oklch(0.28 0.08 254) 50%, oklch(0.22 0.10 220) 100%)",
+        }}
+      >
+        <div className="relative px-6 py-5 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
+              <Calculator className="w-5 h-5" />
+              Rating Engine
+            </h1>
+            <p
+              className="text-sm mt-1"
+              style={{ color: "oklch(0.80 0.04 254)" }}
+            >
+              Automated indicator-to-rating calculation engine — N-ACRM
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Rating Calculation Rules Panel */}
-      <Card className="rounded-none border">
+      <Card
+        className="rounded-none border shadow-md"
+        style={{
+          background: "rgba(255,255,255,0.85)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
         <CardHeader className="pb-2 pt-4 px-4 border-b">
           <CardTitle className="text-sm font-semibold text-gov-navy flex items-center gap-2">
             <Shield className="w-4 h-4" />
@@ -745,7 +876,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                   {[
                     {
                       trend: "Improving",
-                      adj: "+0.2",
+                      adj: "+0.0 to +1.0",
                       color: "oklch(0.45 0.15 145)",
                     },
                     {
@@ -755,7 +886,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                     },
                     {
                       trend: "Declining",
-                      adj: "−0.2",
+                      adj: "−0.0 to −1.0",
                       color: "oklch(0.52 0.22 25)",
                     },
                   ].map(({ trend, adj, color }) => (
@@ -772,7 +903,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                 </tbody>
               </table>
               <p className="text-xs text-muted-foreground mt-2">
-                Clamped to [1.0 – 5.0]
+                Dynamic (deviation-based)
               </p>
             </div>
 
@@ -873,7 +1004,7 @@ export default function RatingEngine({ currentQuarter }: RatingEngineProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {UNIFIED_PROVIDERS.map((p) => (
+                  {filteredProviders.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name} ({p.city})
                     </SelectItem>

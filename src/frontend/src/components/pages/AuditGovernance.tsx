@@ -332,27 +332,50 @@ export default function AuditGovernance({
 
   return (
     <div className="p-6 space-y-5">
-      <div className="border-b pb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-bold text-gov-navy">
-            Audit &amp; Governance
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            System audit log, event timeline, and governance flags — Privacy Act
-            1988 compliant
-          </p>
+      {/* Page hero banner */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.18 0.055 258) 0%, oklch(0.24 0.04 240) 100%)",
+        }}
+      >
+        <div className="px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.74 0.14 86)" }}
+            >
+              <Shield
+                className="w-5 h-5"
+                style={{ color: "oklch(0.14 0.055 258)" }}
+              />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white">
+                Audit &amp; Governance
+              </h1>
+              <p
+                className="text-xs mt-0.5"
+                style={{ color: "oklch(0.72 0.03 252)" }}
+              >
+                System Integrity &amp; Compliance Tracking — Privacy Act 1988
+                Compliant
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-2 border-white/20 bg-white/10 text-white hover:bg-white/20"
+            onClick={handleExport}
+            aria-label="Export audit log as CSV"
+            data-ocid="audit.export.button"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-none gap-2 text-xs"
-          onClick={handleExport}
-          aria-label="Export audit log as CSV"
-          data-ocid="audit.export.button"
-        >
-          <Download className="w-3.5 h-3.5" />
-          Export CSV
-        </Button>
       </div>
 
       <Tabs defaultValue="log" className="space-y-4">

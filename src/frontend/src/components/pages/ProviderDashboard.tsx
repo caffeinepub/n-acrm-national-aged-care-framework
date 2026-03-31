@@ -932,27 +932,48 @@ export default function ProviderDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-[#1E3A8A] text-white px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">
-              Facility Performance Dashboard
-            </h1>
-            <p className="text-blue-200 text-sm mt-0.5">
-              N-ACRM · Provider Self-Service Portal · Q4 2024–25
-            </p>
+      {/* Page hero banner */}
+      <div
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.18 0.06 258) 0%, oklch(0.24 0.08 200) 100%)",
+        }}
+      >
+        <div className="px-6 py-5 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center"
+              style={{ background: "oklch(0.74 0.14 86)" }}
+            >
+              <ShieldCheck
+                className="w-5 h-5"
+                style={{ color: "oklch(0.14 0.055 258)" }}
+              />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white">
+                Provider Performance Dashboard
+              </h1>
+              <p
+                className="text-xs mt-0.5"
+                style={{ color: "oklch(0.72 0.03 252)" }}
+              >
+                N-ACRM · Facility Management &amp; Care Quality Monitoring
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-blue-200 text-sm">Viewing facility:</span>
-            <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded px-2">
-              <Search className="w-3.5 h-3.5 text-blue-200 flex-shrink-0" />
+            <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5">
+              <Search
+                className="w-3.5 h-3.5 flex-shrink-0"
+                style={{ color: "oklch(0.75 0.04 252)" }}
+              />
               <input
                 type="text"
                 placeholder="Search provider..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-white placeholder-blue-300 text-sm outline-none w-36"
+                className="bg-transparent text-white placeholder:text-white/50 text-sm outline-none w-36"
                 data-ocid="provider.search.input"
               />
             </div>
