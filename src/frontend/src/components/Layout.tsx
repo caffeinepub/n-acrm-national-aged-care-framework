@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ActivePage, AppRole } from "../App";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
+import AIAssistant from "./pages/AIAssistant";
 import AuditGovernance from "./pages/AuditGovernance";
 import CareResources from "./pages/CareResources";
 import DataQuality from "./pages/DataQuality";
@@ -10,6 +11,7 @@ import MyReviews from "./pages/MyReviews";
 import NationalOverview from "./pages/NationalOverview";
 import PayForImprovement from "./pages/PayForImprovement";
 import PolicyAnalytics from "./pages/PolicyAnalytics";
+import ProviderComparison from "./pages/ProviderComparison";
 import ProviderDashboard from "./pages/ProviderDashboard";
 import ProviderPerformance from "./pages/ProviderPerformance";
 import PublicBookings from "./pages/PublicBookings";
@@ -50,6 +52,20 @@ export default function Layout({
           return <CareResources />;
         case "my_reviews":
           return <MyReviews />;
+        case "provider_comparison":
+          return (
+            <ProviderComparison
+              currentQuarter={currentQuarter}
+              currentRole={currentRole}
+            />
+          );
+        case "ai_assistant":
+          return (
+            <AIAssistant
+              currentRole={currentRole}
+              currentQuarter={currentQuarter}
+            />
+          );
         default:
           return <PublicView currentQuarter={currentQuarter} />;
       }
@@ -89,6 +105,20 @@ export default function Layout({
         return <RatingEngine currentQuarter={currentQuarter} />;
       case "regulator_intelligence":
         return <RegulatorIntelligence currentQuarter={currentQuarter} />;
+      case "provider_comparison":
+        return (
+          <ProviderComparison
+            currentQuarter={currentQuarter}
+            currentRole={currentRole}
+          />
+        );
+      case "ai_assistant":
+        return (
+          <AIAssistant
+            currentRole={currentRole}
+            currentQuarter={currentQuarter}
+          />
+        );
       default:
         return (
           <NationalOverview

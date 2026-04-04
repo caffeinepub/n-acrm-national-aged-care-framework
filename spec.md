@@ -1,75 +1,50 @@
 # N-ACRM National Aged Care Framework
 
 ## Current State
-- App starts with full-screen `RoleSelectionDashboard` (glassmorphic cards, animated)
-- After selecting role → `Layout` (Header + Sidebar + page content)
-- Header has role badge (read-only) — no way to switch roles once inside
-- Sidebar has unified dark navy design across all roles
-- Public role has 4 sidebar items: Find Providers, My Bookings, Care Resources, My Reviews — but all map to existing ActivePage IDs (`national_overview`, `pay_for_improvement`, `policy_analytics`, `audit_governance`) which show non-public content
-- `PublicView.tsx` handles Find Providers with full provider search/booking/comparison/AI chatbot features
-- My Bookings, Care Resources, My Reviews currently show non-public-specific pages
+- Full-stack app with 4 roles: Regulator, Provider, Policy Analyst, Public
+- Sidebar has most nav items but is missing: Provider Comparison, AI Assistant for all roles
+- Design system exists (design-system.css, components/ds/index.tsx) with OKLCH tokens and 11+ DS components
+- Some inner pages (DataQuality, HighRiskCohorts, ScreeningTracking, CohortRiskDetail) use basic Card/border styles without the full DS hero banners and glassmorphism patterns
+- No `ProviderComparison` or `AIAssistant` pages exist
+- ActivePage type in App.tsx does not include `provider_comparison` or `ai_assistant`
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Scrollable Home Page**: A new `HomePage` component that replaces the role selection screen as the entry point. Multi-section layout:
-  - Hero section with N-ACRM branding, tagline, animated role cards
-  - Role selection section with interactive cards
-  - Platform capabilities/features section
-  - Insights preview section
-  - Footer section
-  - Smooth section scroll, animations, responsive design
-- **Global Role Switcher** in Header: Replace the read-only role badge with a clickable role switcher. Clicking it opens a dropdown/modal showing all 4 roles. Switching role instantly updates context and navigates to appropriate default page. Must work from ANY page.
-- **Public Bookings Page** (`PublicBookings.tsx`): Dedicated My Bookings module with:
-  - Tab system: Upcoming / Completed / Cancelled
-  - Booking cards with status badges, provider name, service, date/time
-  - Actions: Cancel booking, Reschedule (date picker), View details modal
-  - Timeline or card-based UI
-  - Empty states per tab
-- **Care Resources Page** (`CareResources.tsx`): Dedicated care content module:
-  - Categories: Fall Prevention, Medication Safety, Mental Health, Dementia Care, Exercise & Mobility
-  - Article cards with title, excerpt, read time, category chip
-  - Search bar + category filter
-  - Full article detail view/modal
-  - Independent content system (not linked to provider data)
-- **My Reviews Page** (`MyReviews.tsx`): Dedicated reviews module:
-  - List of user-submitted reviews with provider name, date, star rating, comment
-  - Edit review (open edit modal with star picker + text input)
-  - Delete review (with confirmation)
-  - Aggregate rating summary
-  - Empty state
-- **New ActivePage types**: Add `public_bookings`, `care_resources`, `my_reviews` to `ActivePage` type in `App.tsx`
+- `ProviderComparison.tsx` page — available for Regulator, Policy Analyst, Public roles
+  - Side-by-side comparison of 2–5 providers: star ratings, domain scores, risk, trend
+  - Grouped bar chart + radar chart using Recharts
+  - Provider multi-select with search
+  - Uses `getProviderRatingForQuarter` and `PROVIDER_MASTER` as data source
+- `AIAssistant.tsx` page — available for all 4 roles
+  - Full-page AI chat interface (not a floating widget)
+  - Context-aware: responds based on real provider data from mockData
+  - Typing animation, message bubbles, suggested queries
+  - Quick action chips per role (Regulator: "Show high-risk providers", Provider: "How can I improve my rating?", etc.)
+  - Multi-turn conversation with real data-driven responses
+- Nav items added to Sidebar:
+  - `provider_comparison` for Regulator, Policy Analyst, Public (in ANALYTICS / TOOLS group)
+  - `ai_assistant` for all 4 roles (in a new AI TOOLS group)
+- ActivePage union in App.tsx: add `provider_comparison` | `ai_assistant`
+- Layout.tsx routing: handle `provider_comparison` and `ai_assistant` cases
 
 ### Modify
-- **`App.tsx`**: 
-  - Change initial state to show `HomePage` instead of `RoleSelectionDashboard`
-  - Pass `onRoleSelect` and `onGoHome` to components
-  - Add new ActivePage types
-  - Pass `setCurrentRole` down to Header for global role switching
-- **`Header.tsx`**: 
-  - Replace read-only role badge with a clickable role switcher button
-  - Clicking opens inline dropdown showing 4 role options
-  - Smooth transition when switching
-  - Keep same header visual design
-- **`Sidebar.tsx`**: 
-  - Update Public Portal nav items to use new page IDs: `public_bookings`, `care_resources`, `my_reviews`
-  - Keep all existing nav items for other roles unchanged
-  - Add "Home" button/link at top or footer area
-- **`Layout.tsx`**: 
-  - Add rendering for new public pages: `public_bookings` → `PublicBookings`, `care_resources` → `CareResources`, `my_reviews` → `MyReviews`
-  - Add `onSwitchRole` and `onGoHome` props
+- Sidebar: Add Provider Comparison and AI Assistant items with proper icons (GitCompare/Bot)
+- App.tsx: Extend ActivePage type
+- Layout.tsx: Add route cases for new pages, pass currentRole to AIAssistant and ProviderComparison
+- DataQuality.tsx: Apply DS hero banner, DSCard, DSKpiCard patterns for visual consistency
+- HighRiskCohorts.tsx: Apply DS hero banner and card styles
+- ScreeningTracking.tsx: Apply DS hero banner and card styles
+- All pages that use plain `<Card>` with `rounded-none border`: upgrade to `ds-card` with proper spacing
 
 ### Remove
-- Remove the `RoleSelectionDashboard` as the app entry point (keep the component but access it via Home page or role switcher)
-- Remove the lock that prevents role switching once inside dashboard
+- Nothing removed (backwards-compatible additions only)
 
 ## Implementation Plan
-1. Update `App.tsx`: add HomePage state, new ActivePage types, pass role-switch capability to Header
-2. Create `HomePage.tsx`: multi-section scrollable landing with hero, role cards (that navigate into dashboard), features, insights preview, footer
-3. Update `Header.tsx`: add role switcher dropdown with smooth animations
-4. Update `Sidebar.tsx`: fix public nav IDs to new page keys; add optional Home button
-5. Update `Layout.tsx`: route new public page IDs to new components
-6. Create `PublicBookings.tsx`: full bookings system with Upcoming/Completed/Cancelled tabs, reschedule/cancel/details actions
-7. Create `CareResources.tsx`: articles with search, category filter, detail modal
-8. Create `MyReviews.tsx`: reviews list with edit/delete, star ratings, aggregate summary
-9. Ensure all new public pages use the same DS design system (glassmorphism, navy gradient hero, consistent cards, badges)
+1. Extend `ActivePage` type in App.tsx to include `provider_comparison` and `ai_assistant`
+2. Add nav items in Sidebar.tsx under appropriate groups with GitCompare and Bot icons
+3. Create `src/frontend/src/components/pages/ProviderComparison.tsx`
+4. Create `src/frontend/src/components/pages/AIAssistant.tsx`
+5. Add routing in Layout.tsx for both new pages
+6. Apply DS hero banner + DSCard patterns to DataQuality, HighRiskCohorts, ScreeningTracking pages
+7. Validate build passes with no type errors

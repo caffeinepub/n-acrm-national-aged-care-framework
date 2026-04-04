@@ -20,7 +20,9 @@ export type ActivePage =
   | "regulator_intelligence"
   | "public_bookings"
   | "care_resources"
-  | "my_reviews";
+  | "my_reviews"
+  | "provider_comparison"
+  | "ai_assistant";
 
 function App() {
   const [hasSelectedRole, setHasSelectedRole] = useState(false);
@@ -38,7 +40,6 @@ function App() {
     setCurrentRole(role);
     setHasSelectedRole(true);
     setShowHome(false);
-    // Reset to default page for that role
     setActivePage("national_overview");
   };
 

@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   BarChart3,
   BookOpen,
+  Bot,
   Brain,
   Building2,
   Calculator,
@@ -16,6 +17,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Database,
+  GitCompare,
   LayoutDashboard,
   MapPin,
   Search,
@@ -120,6 +122,13 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["Regulator", "Provider"],
         ocid: "nav.rating_engine.link",
       },
+      {
+        id: "provider_comparison",
+        label: "Provider Comparison",
+        icon: GitCompare,
+        roles: ["Regulator", "Policy Analyst", "Public"],
+        ocid: "nav.provider_comparison.link",
+      },
     ],
   },
   {
@@ -138,6 +147,18 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Shield,
         roles: ["Regulator", "Provider", "Policy Analyst"],
         ocid: "nav.audit_governance.link",
+      },
+    ],
+  },
+  {
+    title: "AI TOOLS",
+    items: [
+      {
+        id: "ai_assistant",
+        label: "AI Assistant",
+        icon: Bot,
+        roles: ["Regulator", "Provider", "Policy Analyst", "Public"],
+        ocid: "nav.ai_assistant.link",
       },
     ],
   },
@@ -176,7 +197,6 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/** Role → CSS color variable mapping */
 function getRoleColor(role: AppRole): string {
   switch (role) {
     case "Regulator":
@@ -222,7 +242,7 @@ export default function Sidebar({
         }}
         aria-label="Main navigation"
       >
-        {/* ── Logo / App Identity Block ── */}
+        {/* Logo / App Identity */}
         <div
           className="flex-shrink-0 overflow-hidden"
           style={{
@@ -342,7 +362,7 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* ── Navigation Groups ── */}
+        {/* Navigation Groups */}
         <nav
           className="flex-1 overflow-y-auto overflow-x-hidden"
           style={{ paddingTop: "6px", paddingBottom: "6px" }}
@@ -446,7 +466,7 @@ export default function Sidebar({
           })}
         </nav>
 
-        {/* ── Footer + Collapse Toggle ── */}
+        {/* Footer + Collapse Toggle */}
         <div
           className="flex-shrink-0"
           style={{

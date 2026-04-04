@@ -177,11 +177,34 @@ export default function HighRiskCohorts() {
 
   return (
     <div className="p-6 space-y-5">
-      <div className="border-b pb-4">
-        <h1 className="text-xl font-bold text-gov-navy">
+      <div
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.14 0.055 258) 0%, oklch(0.10 0.042 258) 100%)",
+          padding: "24px 28px",
+          marginBottom: "24px",
+          marginLeft: "-24px",
+          marginRight: "-24px",
+          marginTop: "-24px",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "22px",
+            fontWeight: 800,
+            color: "#fff",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          }}
+        >
           High-Risk Cohort Monitoring
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <p
+          style={{
+            fontSize: "13px",
+            color: "oklch(0.65 0.025 252)",
+            marginTop: "4px",
+          }}
+        >
           HRSM — Automated high-risk cohort detection and mandatory screening
           workflow triggers
         </p>

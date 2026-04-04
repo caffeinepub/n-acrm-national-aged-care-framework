@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, AlertTriangle, CheckCircle2, Database } from "lucide-react";
 import { DATA_QUALITY_RECORDS } from "../../data/mockData";
 
@@ -50,11 +49,35 @@ export default function DataQuality() {
 
   return (
     <div className="p-6 space-y-5">
-      <div className="border-b pb-4">
-        <h1 className="text-xl font-bold text-gov-navy">
+      {/* DS Hero Banner */}
+      <div
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.14 0.055 258) 0%, oklch(0.10 0.042 258) 100%)",
+          padding: "24px 28px",
+          marginBottom: "24px",
+          marginLeft: "-24px",
+          marginRight: "-24px",
+          marginTop: "-24px",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "22px",
+            fontWeight: 800,
+            color: "#fff",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          }}
+        >
           Data Quality Dashboard
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <p
+          style={{
+            fontSize: "13px",
+            color: "oklch(0.65 0.025 252)",
+            marginTop: "4px",
+          }}
+        >
           Submission ingestion pipeline status and data quality metrics —
           Q4-2025
         </p>
@@ -62,86 +85,91 @@ export default function DataQuality() {
 
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="rounded-none border">
-          <CardContent className="p-3 flex items-center gap-3">
-            <Database className="w-6 h-6 text-gov-navy flex-shrink-0" />
-            <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
-                Total Submissions
-              </div>
-              <div className="text-2xl font-bold text-gov-navy">
-                {totalSubmissions}
-              </div>
+        <div className="ds-card p-3 flex items-center gap-3">
+          <Database className="w-6 h-6 text-gov-navy flex-shrink-0" />
+          <div>
+            <div className="text-xs text-muted-foreground uppercase font-semibold">
+              Total Submissions
             </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-none border">
-          <CardContent className="p-3 flex items-center gap-3">
-            <CheckCircle2
-              className="w-6 h-6 flex-shrink-0"
+            <div className="text-2xl font-bold text-gov-navy">
+              {totalSubmissions}
+            </div>
+          </div>
+        </div>
+        <div className="ds-card p-3 flex items-center gap-3">
+          <CheckCircle2
+            className="w-6 h-6 flex-shrink-0"
+            style={{ color: "oklch(var(--gov-green))" }}
+          />
+          <div>
+            <div className="text-xs text-muted-foreground uppercase font-semibold">
+              Processed
+            </div>
+            <div
+              className="text-2xl font-bold"
               style={{ color: "oklch(var(--gov-green))" }}
-            />
-            <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
-                Processed
-              </div>
-              <div
-                className="text-2xl font-bold"
-                style={{ color: "oklch(var(--gov-green))" }}
-              >
-                {processed}
-              </div>
+            >
+              {processed}
             </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-none border">
-          <CardContent className="p-3 flex items-center gap-3">
-            <AlertTriangle
-              className="w-6 h-6 flex-shrink-0"
+          </div>
+        </div>
+        <div className="ds-card p-3 flex items-center gap-3">
+          <AlertTriangle
+            className="w-6 h-6 flex-shrink-0"
+            style={{ color: "oklch(var(--gov-red))" }}
+          />
+          <div>
+            <div className="text-xs text-muted-foreground uppercase font-semibold">
+              Validation Errors
+            </div>
+            <div
+              className="text-2xl font-bold"
               style={{ color: "oklch(var(--gov-red))" }}
-            />
-            <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
-                Validation Errors
-              </div>
-              <div
-                className="text-2xl font-bold"
-                style={{ color: "oklch(var(--gov-red))" }}
-              >
-                {validationErrors}
-              </div>
+            >
+              {validationErrors}
             </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-none border">
-          <CardContent className="p-3 flex items-center gap-3">
-            <Activity
-              className="w-6 h-6 flex-shrink-0"
+          </div>
+        </div>
+        <div className="ds-card p-3 flex items-center gap-3">
+          <Activity
+            className="w-6 h-6 flex-shrink-0"
+            style={{ color: "oklch(var(--gov-blue))" }}
+          />
+          <div>
+            <div className="text-xs text-muted-foreground uppercase font-semibold">
+              Avg Quality Score
+            </div>
+            <div
+              className="text-2xl font-bold"
               style={{ color: "oklch(var(--gov-blue))" }}
-            />
-            <div>
-              <div className="text-xs text-muted-foreground uppercase font-semibold">
-                Avg Quality Score
-              </div>
-              <div
-                className="text-2xl font-bold"
-                style={{ color: "oklch(var(--gov-blue))" }}
-              >
-                {avgQuality.toFixed(1)}%
-              </div>
+            >
+              {avgQuality.toFixed(1)}%
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Pipeline status */}
-      <Card className="rounded-none border">
-        <CardHeader className="pb-2 pt-4 px-4 border-b">
-          <CardTitle className="text-sm font-semibold text-gov-navy">
+      <div className="ds-card overflow-hidden">
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: "1px solid oklch(0.90 0.01 252)",
+            background: "oklch(0.97 0.008 258)",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "13px",
+              fontWeight: 700,
+              color: "oklch(0.18 0.055 258)",
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+          >
             Ingestion Pipeline Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4">
+          </h3>
+        </div>
+        <div style={{ padding: "16px" }}>
           <div className="flex items-center justify-center gap-0">
             {PIPELINE_STAGES.map((stage, idx) => (
               <div key={stage.label} className="flex items-center">
@@ -188,15 +216,28 @@ export default function DataQuality() {
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Table */}
-      <Card className="rounded-none border">
-        <CardHeader className="pb-2 pt-4 px-4 border-b">
-          <CardTitle className="text-sm font-semibold text-gov-navy">
+      <div className="ds-card overflow-hidden">
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: "1px solid oklch(0.90 0.01 252)",
+            background: "oklch(0.97 0.008 258)",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "13px",
+              fontWeight: 700,
+              color: "oklch(0.18 0.055 258)",
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+          >
             Data Submissions Log
-          </CardTitle>
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Quality score:{" "}
             <span className="text-gov-green font-semibold">≥90% Good</span> ·{" "}
@@ -205,64 +246,62 @@ export default function DataQuality() {
             </span>{" "}
             · <span className="text-gov-red font-semibold">&lt;75% Poor</span>
           </p>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full gov-table">
-              <thead>
-                <tr>
-                  <th className="text-left">Submission ID</th>
-                  <th className="text-left">Provider</th>
-                  <th className="text-left">Quarter</th>
-                  <th className="text-left">Type</th>
-                  <th className="text-right">Records</th>
-                  <th className="text-right">Validation Errors</th>
-                  <th className="text-right">Quality Score</th>
-                  <th className="text-left">Submitted</th>
-                  <th className="text-left">Status</th>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full gov-table">
+            <thead>
+              <tr>
+                <th className="text-left">Submission ID</th>
+                <th className="text-left">Provider</th>
+                <th className="text-left">Quarter</th>
+                <th className="text-left">Type</th>
+                <th className="text-right">Records</th>
+                <th className="text-right">Validation Errors</th>
+                <th className="text-right">Quality Score</th>
+                <th className="text-left">Submitted</th>
+                <th className="text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DATA_QUALITY_RECORDS.map((record, idx) => (
+                <tr
+                  key={record.id}
+                  data-ocid={`data_quality.table.row.${idx + 1}`}
+                >
+                  <td className="font-mono text-xs">{record.id}</td>
+                  <td className="font-medium">{record.provider}</td>
+                  <td>{record.quarter}</td>
+                  <td>
+                    <SubmissionTypeBadge type={record.type} />
+                  </td>
+                  <td className="text-right">
+                    {record.records.toLocaleString()}
+                  </td>
+                  <td className="text-right">
+                    {record.validationErrors > 0 ? (
+                      <span
+                        className="font-semibold"
+                        style={{ color: "oklch(var(--gov-red))" }}
+                      >
+                        {record.validationErrors}
+                      </span>
+                    ) : (
+                      <span className="text-gov-green font-semibold">0</span>
+                    )}
+                  </td>
+                  <td className="text-right">
+                    <QualityScore score={record.qualityScore} />
+                  </td>
+                  <td>{record.submittedDate}</td>
+                  <td>
+                    <StatusBadge status={record.status} />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {DATA_QUALITY_RECORDS.map((record, idx) => (
-                  <tr
-                    key={record.id}
-                    data-ocid={`data_quality.table.row.${idx + 1}`}
-                  >
-                    <td className="font-mono text-xs">{record.id}</td>
-                    <td className="font-medium">{record.provider}</td>
-                    <td>{record.quarter}</td>
-                    <td>
-                      <SubmissionTypeBadge type={record.type} />
-                    </td>
-                    <td className="text-right">
-                      {record.records.toLocaleString()}
-                    </td>
-                    <td className="text-right">
-                      {record.validationErrors > 0 ? (
-                        <span
-                          className="font-semibold"
-                          style={{ color: "oklch(var(--gov-red))" }}
-                        >
-                          {record.validationErrors}
-                        </span>
-                      ) : (
-                        <span className="text-gov-green font-semibold">0</span>
-                      )}
-                    </td>
-                    <td className="text-right">
-                      <QualityScore score={record.qualityScore} />
-                    </td>
-                    <td>{record.submittedDate}</td>
-                    <td>
-                      <StatusBadge status={record.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
