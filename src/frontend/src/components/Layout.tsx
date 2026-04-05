@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { ActivePage, AppRole } from "../App";
+import FloatingHelpButton from "./FloatingHelpButton";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import AIAssistant from "./pages/AIAssistant";
 import AuditGovernance from "./pages/AuditGovernance";
 import CareResources from "./pages/CareResources";
+import ContactSupport from "./pages/ContactSupport";
 import DataQuality from "./pages/DataQuality";
 import HighRiskCohorts from "./pages/HighRiskCohorts";
 import MyReviews from "./pages/MyReviews";
@@ -66,6 +68,13 @@ export default function Layout({
               currentQuarter={currentQuarter}
             />
           );
+        case "contact_support":
+          return (
+            <ContactSupport
+              currentRole={currentRole}
+              currentQuarter={currentQuarter}
+            />
+          );
         default:
           return <PublicView currentQuarter={currentQuarter} />;
       }
@@ -119,6 +128,13 @@ export default function Layout({
             currentQuarter={currentQuarter}
           />
         );
+      case "contact_support":
+        return (
+          <ContactSupport
+            currentRole={currentRole}
+            currentQuarter={currentQuarter}
+          />
+        );
       default:
         return (
           <NationalOverview
@@ -150,6 +166,11 @@ export default function Layout({
           {renderPage()}
         </main>
       </div>
+      <FloatingHelpButton
+        currentRole={currentRole}
+        currentQuarter={currentQuarter}
+        setActivePage={setActivePage}
+      />
     </div>
   );
 }

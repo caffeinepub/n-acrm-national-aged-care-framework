@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import RoleSelectionDashboard from "./components/RoleSelectionDashboard";
 import HomePage from "./components/pages/HomePage";
 import { BookingProvider } from "./context/BookingContext";
+import { SupportProvider } from "./context/SupportContext";
 
 export type AppRole = "Regulator" | "Provider" | "Policy Analyst" | "Public";
 export type ActivePage =
@@ -23,7 +24,8 @@ export type ActivePage =
   | "care_resources"
   | "my_reviews"
   | "provider_comparison"
-  | "ai_assistant";
+  | "ai_assistant"
+  | "contact_support";
 
 function App() {
   const [hasSelectedRole, setHasSelectedRole] = useState(false);
@@ -56,34 +58,40 @@ function App() {
 
   if (showHome && !hasSelectedRole) {
     return (
-      <BookingProvider currentQuarter={currentQuarter}>
-        <HomePage onRoleSelect={handleRoleSelectFromHome} />
-        <Toaster />
-      </BookingProvider>
+      <SupportProvider>
+        <BookingProvider currentQuarter={currentQuarter}>
+          <HomePage onRoleSelect={handleRoleSelectFromHome} />
+          <Toaster />
+        </BookingProvider>
+      </SupportProvider>
     );
   }
 
   if (!hasSelectedRole) {
     return (
-      <BookingProvider currentQuarter={currentQuarter}>
-        <RoleSelectionDashboard onRoleSelect={handleRoleSelect} />
-      </BookingProvider>
+      <SupportProvider>
+        <BookingProvider currentQuarter={currentQuarter}>
+          <RoleSelectionDashboard onRoleSelect={handleRoleSelect} />
+        </BookingProvider>
+      </SupportProvider>
     );
   }
 
   return (
-    <BookingProvider currentQuarter={currentQuarter}>
-      <Layout
-        currentRole={currentRole}
-        activePage={activePage}
-        setActivePage={setActivePage}
-        currentQuarter={currentQuarter}
-        setCurrentQuarter={setCurrentQuarter}
-        onRoleSwitch={handleRoleSwitch}
-        onGoHome={handleGoHome}
-      />
-      <Toaster />
-    </BookingProvider>
+    <SupportProvider>
+      <BookingProvider currentQuarter={currentQuarter}>
+        <Layout
+          currentRole={currentRole}
+          activePage={activePage}
+          setActivePage={setActivePage}
+          currentQuarter={currentQuarter}
+          setCurrentQuarter={setCurrentQuarter}
+          onRoleSwitch={handleRoleSwitch}
+          onGoHome={handleGoHome}
+        />
+        <Toaster />
+      </BookingProvider>
+    </SupportProvider>
   );
 }
 

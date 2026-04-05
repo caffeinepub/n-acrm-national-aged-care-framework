@@ -19,6 +19,7 @@ import {
   Database,
   GitCompare,
   LayoutDashboard,
+  LifeBuoy,
   MapPin,
   Search,
   Shield,
@@ -192,6 +193,18 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Star,
         roles: ["Public"],
         ocid: "nav.public.reviews",
+      },
+    ],
+  },
+  {
+    title: "SUPPORT",
+    items: [
+      {
+        id: "contact_support",
+        label: "Contact & Support",
+        icon: LifeBuoy,
+        roles: ["Regulator", "Provider", "Policy Analyst", "Public"],
+        ocid: "nav.contact_support.link",
       },
     ],
   },
@@ -483,7 +496,7 @@ export default function Sidebar({
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                 }}
               >
-                Version 24 · Q4-2025
+                Version 25 · Q4-2025
               </div>
               <div
                 style={{
