@@ -611,4 +611,238 @@ actor {
     };
     screeningWorkflows.values().filter(func(w) { w.providerId == providerId }).toArray().sort(ScreeningWorkflow.compareByProviderId);
   };
+
+  // ======== START OF BOOKING AND RATING SYSTEM ========
+
+  let bookings = Map.empty<Text, Booking>();
+  let publicRatings = Map.empty<Text, PublicRating>();
+
+  public type Booking = {
+    id : Text;
+    userId : Text;
+    providerId : Text;
+    providerName : Text;
+    userName : Text;
+    userPhone : Text;
+    service : Text;
+    date : Text;
+    time : Text;
+    address : Text;
+    confirmationNumber : Text;
+    status : Text;
+    feedbackSubmitted : Bool;
+  };
+
+  public type PublicRating = {
+    id : Text;
+    bookingId : Text;
+    userId : Text;
+    providerId : Text;
+    overallRating : Float;
+    safetyRating : Float;
+    qualityRating : Float;
+    experienceRating : Float;
+    preventiveRating : Float;
+    feedbackText : Text;
+    submittedAt : Int;
+    status : Text;
+  };
+
+  module PublicRating {
+    public func compare(a : PublicRating, b : PublicRating) : Order.Order {
+      Text.compare(a.id, b.id);
+    };
+
+    public func compareByProviderId(a : PublicRating, b : PublicRating) : Order.Order {
+      Text.compare(a.providerId, b.providerId);
+    };
+  };
+
+  public type PublicRatingAggregate = {
+    overallAverage : Float;
+    safetyAverage : Float;
+    qualityAverage : Float;
+    experienceAverage : Float;
+    preventiveAverage : Float;
+    count : Nat;
+  };
+
+  public shared ({ caller }) func createBooking(booking : Booking) : async Text {
+    // Verify caller owns the userId in the booking
+    let callerText = caller.toText();
+    if (booking.userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only create bookings for yourself");
+    };
+    bookings.add(booking.id, booking);
+    booking.confirmationNumber;
+  };
+
+  public query ({ caller }) func getUserBookings(userId : Text) : async [Booking] {
+    // Verify caller can only see their own bookings (or admin can see all)
+    let callerText = caller.toText();
+    if (userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only view your own bookings");
+    };
+    bookings.values().filter(func(b) { b.userId == userId }).toArray();
+  };
+
+  public shared ({ caller }) func updateBookingStatus(id : Text, status : Text) : async Bool {
+    switch (bookings.get(id)) {
+      case (null) { false };
+      case (?booking) {
+        // Verify caller owns the booking
+        let callerText = caller.toText();
+        if (booking.userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Can only update your own bookings");
+        };
+        bookings.add(
+          id,
+          {
+            booking with
+            status
+          },
+        );
+        true;
+      };
+    };
+  };
+
+  public shared ({ caller }) func markBookingComplete(id : Text) : async Bool {
+    switch (bookings.get(id)) {
+      case (null) { false };
+      case (?booking) {
+        // Verify caller owns the booking
+        let callerText = caller.toText();
+        if (booking.userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Can only update your own bookings");
+        };
+        bookings.add(
+          id,
+          {
+            booking with
+            status = "Completed";
+          },
+        );
+        true;
+      };
+    };
+  };
+
+  public query ({ caller }) func getProviderBookings(providerId : Text) : async [Booking] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can perform this action");
+    };
+    bookings.values().filter(func(b) { b.providerId == providerId }).toArray();
+  };
+
+  public query ({ caller }) func getBookingById(id : Text) : async ?Booking {
+    switch (bookings.get(id)) {
+      case (null) { null };
+      case (?booking) {
+        // Verify caller owns the booking or is admin
+        let callerText = caller.toText();
+        if (booking.userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Can only view your own bookings");
+        };
+        ?booking;
+      };
+    };
+  };
+
+  public shared ({ caller }) func submitPublicRating(rating : PublicRating) : async Bool {
+    // Verify caller owns the userId in the rating
+    let callerText = caller.toText();
+    if (rating.userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only submit ratings for yourself");
+    };
+
+    if (publicRatings.get(rating.bookingId) != null) {
+      Runtime.trap("Rating already submitted for this booking");
+    };
+
+    switch (bookings.get(rating.bookingId)) {
+      case (null) { Runtime.trap("Booking does not exist") };
+      case (?booking) {
+        // Verify the booking belongs to the caller
+        if (booking.userId != callerText and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Can only rate your own bookings");
+        };
+        if (not Text.equal(booking.status, "Completed")) {
+          Runtime.trap("Booking must be completed to submit a rating");
+        };
+        publicRatings.add(rating.bookingId, rating);
+        bookings.add(
+          rating.bookingId,
+          {
+            booking with
+            feedbackSubmitted = true;
+          },
+        );
+        true;
+      };
+    };
+  };
+
+  public query ({ caller }) func getProviderPublicRatings(providerId : Text) : async [PublicRating] {
+    // Public read - anyone can view provider ratings
+    publicRatings.values().filter(func(r) { r.providerId == providerId }).toArray();
+  };
+
+  public query ({ caller }) func getPublicRatingAverage(providerId : Text) : async PublicRatingAggregate {
+    // Public read - anyone can view provider rating averages
+    var overallSum = 0.0;
+    var safetySum = 0.0;
+    var qualitySum = 0.0;
+    var experienceSum = 0.0;
+    var preventiveSum = 0.0;
+    var count = 0;
+
+    for (rating in publicRatings.values()) {
+      if (Text.equal(rating.providerId, providerId)) {
+        overallSum += rating.overallRating;
+        safetySum += rating.safetyRating;
+        qualitySum += rating.qualityRating;
+        experienceSum += rating.experienceRating;
+        preventiveSum += rating.preventiveRating;
+        count += 1;
+      };
+    };
+
+    {
+      overallAverage = if (count == 0) { 0.0 } else { overallSum / count.toFloat() };
+      safetyAverage = if (count == 0) { 0.0 } else { safetySum / count.toFloat() };
+      qualityAverage = if (count == 0) { 0.0 } else { qualitySum / count.toFloat() };
+      experienceAverage = if (count == 0) { 0.0 } else { experienceSum / count.toFloat() };
+      preventiveAverage = if (count == 0) { 0.0 } else { preventiveSum / count.toFloat() };
+      count;
+    };
+  };
+
+  public query ({ caller }) func getAllPublicBookings() : async [Booking] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can access all bookings");
+    };
+    bookings.values().toArray();
+  };
+
+  public query ({ caller }) func getAllPublicRatings() : async [PublicRating] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can access all ratings");
+    };
+    publicRatings.values().toArray();
+  };
+
+  public shared ({ caller }) func deletePublicBooking(id : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can delete bookings");
+    };
+    bookings.remove(id);
+  };
+
+  public shared ({ caller }) func deletePublicRating(bookingId : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can delete ratings");
+    };
+    publicRatings.remove(bookingId);
+  };
 };

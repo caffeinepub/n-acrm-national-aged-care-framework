@@ -13,6 +13,21 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const Booking = IDL.Record({
+  'id' : IDL.Text,
+  'service' : IDL.Text,
+  'status' : IDL.Text,
+  'userName' : IDL.Text,
+  'feedbackSubmitted' : IDL.Bool,
+  'userId' : IDL.Text,
+  'date' : IDL.Text,
+  'time' : IDL.Text,
+  'userPhone' : IDL.Text,
+  'address' : IDL.Text,
+  'providerName' : IDL.Text,
+  'confirmationNumber' : IDL.Text,
+  'providerId' : IDL.Text,
+});
 export const HighRiskCohort = IDL.Record({
   'id' : IDL.Text,
   'status' : IDL.Text,
@@ -20,6 +35,20 @@ export const HighRiskCohort = IDL.Record({
   'riskCriteria' : IDL.Text,
   'flagDate' : IDL.Int,
   'cohortSize' : IDL.Nat,
+  'providerId' : IDL.Text,
+});
+export const PublicRating = IDL.Record({
+  'id' : IDL.Text,
+  'status' : IDL.Text,
+  'bookingId' : IDL.Text,
+  'preventiveRating' : IDL.Float64,
+  'experienceRating' : IDL.Float64,
+  'userId' : IDL.Text,
+  'feedbackText' : IDL.Text,
+  'submittedAt' : IDL.Int,
+  'overallRating' : IDL.Float64,
+  'safetyRating' : IDL.Float64,
+  'qualityRating' : IDL.Float64,
   'providerId' : IDL.Text,
 });
 export const RatingEngineDomainScores = IDL.Record({
@@ -100,6 +129,14 @@ export const NationalOverviewStats = IDL.Record({
   'totalResidents' : IDL.Nat,
   'avgSafetyScore' : IDL.Float64,
 });
+export const PublicRatingAggregate = IDL.Record({
+  'overallAverage' : IDL.Float64,
+  'safetyAverage' : IDL.Float64,
+  'count' : IDL.Nat,
+  'preventiveAverage' : IDL.Float64,
+  'qualityAverage' : IDL.Float64,
+  'experienceAverage' : IDL.Float64,
+});
 export const ProviderScorecard = IDL.Record({
   'id' : IDL.Text,
   'experienceScore' : IDL.Float64,
@@ -139,7 +176,12 @@ export const idlService = IDL.Service({
       [],
     ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'createBooking' : IDL.Func([Booking], [IDL.Text], []),
+  'deletePublicBooking' : IDL.Func([IDL.Text], [], []),
+  'deletePublicRating' : IDL.Func([IDL.Text], [], []),
   'getAllHighRiskCohorts' : IDL.Func([], [IDL.Vec(HighRiskCohort)], ['query']),
+  'getAllPublicBookings' : IDL.Func([], [IDL.Vec(Booking)], ['query']),
+  'getAllPublicRatings' : IDL.Func([], [IDL.Vec(PublicRating)], ['query']),
   'getAllRatingEngineResults' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(RatingEngineResult)],
@@ -151,6 +193,7 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getAuditLogs' : IDL.Func([], [IDL.Vec(AuditLog)], ['query']),
+  'getBookingById' : IDL.Func([IDL.Text], [IDL.Opt(Booking)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getHighRiskCohorts' : IDL.Func(
@@ -168,9 +211,20 @@ export const idlService = IDL.Service({
       [NationalOverviewStats],
       ['query'],
     ),
+  'getProviderBookings' : IDL.Func([IDL.Text], [IDL.Vec(Booking)], ['query']),
+  'getProviderPublicRatings' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(PublicRating)],
+      ['query'],
+    ),
   'getProviderScorecardV2' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Opt(RatingEngineResult)],
+      ['query'],
+    ),
+  'getPublicRatingAverage' : IDL.Func(
+      [IDL.Text],
+      [PublicRatingAggregate],
       ['query'],
     ),
   'getRatingEngineResult' : IDL.Func(
@@ -188,18 +242,22 @@ export const idlService = IDL.Service({
       [IDL.Vec(ScreeningWorkflow)],
       ['query'],
     ),
+  'getUserBookings' : IDL.Func([IDL.Text], [IDL.Vec(Booking)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'markBookingComplete' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'submitIndicatorData' : IDL.Func(
       [ProviderIndicatorSubmission],
       [RatingEngineResult],
       [],
     ),
+  'submitPublicRating' : IDL.Func([PublicRating], [IDL.Bool], []),
+  'updateBookingStatus' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   'updateScreeningStatus' : IDL.Func([IDL.Text, IDL.Text], [], []),
 });
 
@@ -211,6 +269,21 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const Booking = IDL.Record({
+    'id' : IDL.Text,
+    'service' : IDL.Text,
+    'status' : IDL.Text,
+    'userName' : IDL.Text,
+    'feedbackSubmitted' : IDL.Bool,
+    'userId' : IDL.Text,
+    'date' : IDL.Text,
+    'time' : IDL.Text,
+    'userPhone' : IDL.Text,
+    'address' : IDL.Text,
+    'providerName' : IDL.Text,
+    'confirmationNumber' : IDL.Text,
+    'providerId' : IDL.Text,
+  });
   const HighRiskCohort = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -218,6 +291,20 @@ export const idlFactory = ({ IDL }) => {
     'riskCriteria' : IDL.Text,
     'flagDate' : IDL.Int,
     'cohortSize' : IDL.Nat,
+    'providerId' : IDL.Text,
+  });
+  const PublicRating = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'bookingId' : IDL.Text,
+    'preventiveRating' : IDL.Float64,
+    'experienceRating' : IDL.Float64,
+    'userId' : IDL.Text,
+    'feedbackText' : IDL.Text,
+    'submittedAt' : IDL.Int,
+    'overallRating' : IDL.Float64,
+    'safetyRating' : IDL.Float64,
+    'qualityRating' : IDL.Float64,
     'providerId' : IDL.Text,
   });
   const RatingEngineDomainScores = IDL.Record({
@@ -298,6 +385,14 @@ export const idlFactory = ({ IDL }) => {
     'totalResidents' : IDL.Nat,
     'avgSafetyScore' : IDL.Float64,
   });
+  const PublicRatingAggregate = IDL.Record({
+    'overallAverage' : IDL.Float64,
+    'safetyAverage' : IDL.Float64,
+    'count' : IDL.Nat,
+    'preventiveAverage' : IDL.Float64,
+    'qualityAverage' : IDL.Float64,
+    'experienceAverage' : IDL.Float64,
+  });
   const ProviderScorecard = IDL.Record({
     'id' : IDL.Text,
     'experienceScore' : IDL.Float64,
@@ -337,11 +432,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'createBooking' : IDL.Func([Booking], [IDL.Text], []),
+    'deletePublicBooking' : IDL.Func([IDL.Text], [], []),
+    'deletePublicRating' : IDL.Func([IDL.Text], [], []),
     'getAllHighRiskCohorts' : IDL.Func(
         [],
         [IDL.Vec(HighRiskCohort)],
         ['query'],
       ),
+    'getAllPublicBookings' : IDL.Func([], [IDL.Vec(Booking)], ['query']),
+    'getAllPublicRatings' : IDL.Func([], [IDL.Vec(PublicRating)], ['query']),
     'getAllRatingEngineResults' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(RatingEngineResult)],
@@ -353,6 +453,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getAuditLogs' : IDL.Func([], [IDL.Vec(AuditLog)], ['query']),
+    'getBookingById' : IDL.Func([IDL.Text], [IDL.Opt(Booking)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getHighRiskCohorts' : IDL.Func(
@@ -370,9 +471,20 @@ export const idlFactory = ({ IDL }) => {
         [NationalOverviewStats],
         ['query'],
       ),
+    'getProviderBookings' : IDL.Func([IDL.Text], [IDL.Vec(Booking)], ['query']),
+    'getProviderPublicRatings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(PublicRating)],
+        ['query'],
+      ),
     'getProviderScorecardV2' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Opt(RatingEngineResult)],
+        ['query'],
+      ),
+    'getPublicRatingAverage' : IDL.Func(
+        [IDL.Text],
+        [PublicRatingAggregate],
         ['query'],
       ),
     'getRatingEngineResult' : IDL.Func(
@@ -390,18 +502,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(ScreeningWorkflow)],
         ['query'],
       ),
+    'getUserBookings' : IDL.Func([IDL.Text], [IDL.Vec(Booking)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'markBookingComplete' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'submitIndicatorData' : IDL.Func(
         [ProviderIndicatorSubmission],
         [RatingEngineResult],
         [],
       ),
+    'submitPublicRating' : IDL.Func([PublicRating], [IDL.Bool], []),
+    'updateBookingStatus' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     'updateScreeningStatus' : IDL.Func([IDL.Text, IDL.Text], [], []),
   });
 };

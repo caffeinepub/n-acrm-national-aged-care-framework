@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useBookingContext } from "@/context/BookingContext";
+import type { FeedbackData as CtxFeedbackData } from "@/context/BookingContext";
 import {
   CITY_LIST,
   CITY_PROVIDERS,
@@ -2525,8 +2527,41 @@ export default function PublicView({
   const seedReviews = useMemo(() => initReviews(), []);
   const [reviews, setReviews] = useState<Record<string, Review[]>>(seedReviews);
 
-  // Bookings
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  // Bookings — sourced from BookingContext (single source of truth)
+  const bookingCtx = useBookingContext();
+  const {
+    bookings: ctxBookings,
+    ratingOverrides,
+    createBooking: ctxCreateBooking,
+    markComplete: ctxMarkComplete,
+    submitRating: ctxSubmitRating,
+  } = bookingCtx;
+
+  // Local view bookings (only the ones created via this component's wizard)
+  const [localBookings, setLocalBookings] = useState<Booking[]>([]);
+  // merged view: context bookings + local internal-status bookings (confirmed/in_progress)
+  const bookings = [
+    ...localBookings,
+    ...ctxBookings
+      .filter((b) => !localBookings.some((lb) => lb.id === b.id))
+      .map((b) => ({
+        id: b.id,
+        providerId: b.providerId,
+        providerName: b.providerName,
+        service: b.service,
+        date: b.date,
+        time: b.time,
+        userName: b.userName,
+        userPhone: b.userPhone,
+        status: (b.status === "Booked"
+          ? "confirmed"
+          : b.status === "Completed"
+            ? "completed"
+            : "cancelled") as BookingStatus,
+        feedbackSubmitted: b.feedbackSubmitted,
+      })),
+  ];
+
   const [bookingModal, setBookingModal] = useState<{
     provider: CityProvider;
     service: string;
@@ -2539,6 +2574,25 @@ export default function PublicView({
     pct: number;
   } | null>(null);
   const [userRatings, setUserRatings] = useState<UserRatings>({});
+
+  // Apply ratingOverrides to displayed scores
+  function getDisplayRating(providerId: string, quarter: string) {
+    const base = getProviderRatingForQuarter(providerId, quarter);
+    const override = ratingOverrides[providerId];
+    if (!override) return base;
+    return {
+      ...base,
+      stars: override.overallStars,
+      domainScores: {
+        ...base.domainScores,
+        safety: override.safetyScore / 20,
+        quality: override.qualityScore / 20,
+        experience: override.experienceScore / 20,
+      },
+    };
+  }
+  // Use getDisplayRating instead of getProviderRatingForQuarter where scores are displayed
+  void getDisplayRating; // prevent unused variable warning
 
   const SERVICES_LIST = [
     "General Care",
@@ -2708,7 +2762,15 @@ export default function PublicView({
       status: "confirmed",
       feedbackSubmitted: false,
     };
-    setBookings((prev) => [...prev, newBooking]);
+    setLocalBookings((prev) => [...prev, newBooking]);
+    // Also store in context for cross-page visibility
+    ctxCreateBooking({
+      ...booking,
+      userId: "guest_user",
+      address: "—",
+      status: "Booked",
+      feedbackSubmitted: false,
+    });
     // Decrease capacity
     const capKey = `${booking.providerId}-${booking.service}`;
     setCapacityState((prev) => {
@@ -2725,13 +2787,15 @@ export default function PublicView({
     const booking = bookings.find((b) => b.id === id);
     if (!booking) return;
     if (booking.status === "confirmed") {
-      setBookings((prev) =>
+      setLocalBookings((prev) =>
         prev.map((b) => (b.id === id ? { ...b, status: "in_progress" } : b)),
       );
     } else if (booking.status === "in_progress") {
-      setBookings((prev) =>
+      setLocalBookings((prev) =>
         prev.map((b) => (b.id === id ? { ...b, status: "completed" } : b)),
       );
+      // Mark in context for cross-page sync
+      ctxMarkComplete(id);
       setFeedbackModal({ booking: { ...booking, status: "completed" } });
     }
   }
@@ -2758,11 +2822,28 @@ export default function PublicView({
       ...prev,
       [booking.providerId]: { ...data, count: newCount },
     }));
-    setBookings((prev) =>
+    setLocalBookings((prev) =>
       prev.map((b) =>
         b.id === bookingId ? { ...b, feedbackSubmitted: true } : b,
       ),
     );
+
+    // Sync rating to context (updates ALL modules via applyRatingOverride)
+    const ctxData: CtxFeedbackData = {
+      overall: data.overall,
+      safety: data.safety,
+      quality: data.quality,
+      experience: data.experience,
+      preventive: data.preventive,
+      comment: data.comment,
+    };
+    ctxSubmitRating(
+      bookingId,
+      booking.providerId,
+      booking.providerName,
+      ctxData,
+    );
+
     setFeedbackModal(null);
     setFeedbackImpact({ name: booking.providerName, pct });
     setTimeout(() => setFeedbackImpact(null), 5000);

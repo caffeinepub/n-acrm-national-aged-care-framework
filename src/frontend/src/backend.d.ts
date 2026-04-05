@@ -36,6 +36,20 @@ export interface RatingEngineIncentiveEligibility {
     eligible: boolean;
     improvementScore: number;
 }
+export interface PublicRating {
+    id: string;
+    status: string;
+    bookingId: string;
+    preventiveRating: number;
+    experienceRating: number;
+    userId: string;
+    feedbackText: string;
+    submittedAt: bigint;
+    overallRating: number;
+    safetyRating: number;
+    qualityRating: number;
+    providerId: string;
+}
 export interface IndicatorResult {
     id: string;
     trend: string;
@@ -47,6 +61,14 @@ export interface IndicatorResult {
     dimension: string;
     providerId: string;
     quintileRank: bigint;
+}
+export interface PublicRatingAggregate {
+    overallAverage: number;
+    safetyAverage: number;
+    count: bigint;
+    preventiveAverage: number;
+    qualityAverage: number;
+    experienceAverage: number;
 }
 export interface NationalOverviewStats {
     dataQualityScore: number;
@@ -83,6 +105,21 @@ export interface RatingEngineDomainScores {
     staffing: number;
     experience: number;
     preventive: number;
+}
+export interface Booking {
+    id: string;
+    service: string;
+    status: string;
+    userName: string;
+    feedbackSubmitted: boolean;
+    userId: string;
+    date: string;
+    time: string;
+    userPhone: string;
+    address: string;
+    providerName: string;
+    confirmationNumber: string;
+    providerId: string;
 }
 export interface ScreeningWorkflow {
     id: string;
@@ -134,22 +171,35 @@ export enum UserRole {
 export interface backendInterface {
     addAuditLogEntry(userId: string, userRole: string, action: string, entityType: string, details: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    createBooking(booking: Booking): Promise<string>;
+    deletePublicBooking(id: string): Promise<void>;
+    deletePublicRating(bookingId: string): Promise<void>;
     getAllHighRiskCohorts(): Promise<Array<HighRiskCohort>>;
+    getAllPublicBookings(): Promise<Array<Booking>>;
+    getAllPublicRatings(): Promise<Array<PublicRating>>;
     getAllRatingEngineResults(quarter: string): Promise<Array<RatingEngineResult>>;
     getAllScreeningWorkflows(): Promise<Array<ScreeningWorkflow>>;
     getAuditLogs(): Promise<Array<AuditLog>>;
+    getBookingById(id: string): Promise<Booking | null>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getHighRiskCohorts(providerId: string): Promise<Array<HighRiskCohort>>;
     getIndicatorResults(providerId: string, quarter: string): Promise<Array<IndicatorResult>>;
     getNationalOverviewStats(_quarter: string): Promise<NationalOverviewStats>;
+    getProviderBookings(providerId: string): Promise<Array<Booking>>;
+    getProviderPublicRatings(providerId: string): Promise<Array<PublicRating>>;
     getProviderScorecardV2(providerId: string, quarter: string): Promise<RatingEngineResult | null>;
+    getPublicRatingAverage(providerId: string): Promise<PublicRatingAggregate>;
     getRatingEngineResult(providerId: string, quarter: string): Promise<RatingEngineResult | null>;
     getScorecardsByProvider(providerId: string): Promise<Array<ProviderScorecard>>;
     getScreeningWorkflows(providerId: string): Promise<Array<ScreeningWorkflow>>;
+    getUserBookings(userId: string): Promise<Array<Booking>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    markBookingComplete(id: string): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitIndicatorData(submission: ProviderIndicatorSubmission): Promise<RatingEngineResult>;
+    submitPublicRating(rating: PublicRating): Promise<boolean>;
+    updateBookingStatus(id: string, status: string): Promise<boolean>;
     updateScreeningStatus(workflowId: string, status: string): Promise<void>;
 }

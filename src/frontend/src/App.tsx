@@ -3,6 +3,7 @@ import { useState } from "react";
 import Layout from "./components/Layout";
 import RoleSelectionDashboard from "./components/RoleSelectionDashboard";
 import HomePage from "./components/pages/HomePage";
+import { BookingProvider } from "./context/BookingContext";
 
 export type AppRole = "Regulator" | "Provider" | "Policy Analyst" | "Public";
 export type ActivePage =
@@ -55,19 +56,23 @@ function App() {
 
   if (showHome && !hasSelectedRole) {
     return (
-      <>
+      <BookingProvider currentQuarter={currentQuarter}>
         <HomePage onRoleSelect={handleRoleSelectFromHome} />
         <Toaster />
-      </>
+      </BookingProvider>
     );
   }
 
   if (!hasSelectedRole) {
-    return <RoleSelectionDashboard onRoleSelect={handleRoleSelect} />;
+    return (
+      <BookingProvider currentQuarter={currentQuarter}>
+        <RoleSelectionDashboard onRoleSelect={handleRoleSelect} />
+      </BookingProvider>
+    );
   }
 
   return (
-    <>
+    <BookingProvider currentQuarter={currentQuarter}>
       <Layout
         currentRole={currentRole}
         activePage={activePage}
@@ -78,7 +83,7 @@ function App() {
         onGoHome={handleGoHome}
       />
       <Toaster />
-    </>
+    </BookingProvider>
   );
 }
 

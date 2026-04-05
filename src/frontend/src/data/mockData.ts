@@ -5406,6 +5406,31 @@ export const COHORT_DETAIL_DATA: Record<string, CohortDetail> = {
   },
 };
 
+// ── Rating Override Store (for BookingContext real-time sync) ─────────────────
+const _ratingOverrides: Record<
+  string,
+  {
+    overallStars: number;
+    domainAdjustments: Record<string, number>;
+  }
+> = {};
+
+/**
+ * Called by BookingContext after a user submits a rating.
+ * Causes getProviderRatingForQuarter to return blended scores for ALL modules.
+ */
+export function applyRatingOverride(
+  providerId: string,
+  overallStars: number,
+  domainAdjustments: Record<string, number>,
+): void {
+  _ratingOverrides[providerId] = { overallStars, domainAdjustments };
+}
+
+export function clearRatingOverride(providerId: string): void {
+  delete _ratingOverrides[providerId];
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -5455,6 +5480,29 @@ export function getProviderRatingForQuarter(
   );
   const estimatedPayment =
     tier === "Highly Eligible" ? 180000 : tier === "Eligible" ? 75000 : 0;
+
+  // Apply any user rating overrides (from BookingContext)
+  const override = _ratingOverrides[providerId];
+  if (override) {
+    const blendedStars = Math.round(override.overallStars * 2) / 2;
+    const adj = override.domainAdjustments;
+    return {
+      domainScores: {
+        safety: adj.safety != null ? adj.safety : domainScores.safety,
+        preventive:
+          adj.preventive != null ? adj.preventive : domainScores.preventive,
+        quality: adj.quality != null ? adj.quality : domainScores.quality,
+        staffing: adj.staffing != null ? adj.staffing : domainScores.staffing,
+        compliance:
+          adj.compliance != null ? adj.compliance : domainScores.compliance,
+        experience:
+          adj.experience != null ? adj.experience : domainScores.experience,
+      },
+      overallScore,
+      stars: blendedStars,
+      eligibility: { tier, eligible, estimatedPayment },
+    };
+  }
 
   return {
     domainScores,

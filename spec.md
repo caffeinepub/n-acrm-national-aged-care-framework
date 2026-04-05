@@ -1,50 +1,73 @@
-# N-ACRM National Aged Care Framework
+# N-ACRM Public User Journey System
 
 ## Current State
-- Full-stack app with 4 roles: Regulator, Provider, Policy Analyst, Public
-- Sidebar has most nav items but is missing: Provider Comparison, AI Assistant for all roles
-- Design system exists (design-system.css, components/ds/index.tsx) with OKLCH tokens and 11+ DS components
-- Some inner pages (DataQuality, HighRiskCohorts, ScreeningTracking, CohortRiskDetail) use basic Card/border styles without the full DS hero banners and glassmorphism patterns
-- No `ProviderComparison` or `AIAssistant` pages exist
-- ActivePage type in App.tsx does not include `provider_comparison` or `ai_assistant`
+
+The application has:
+- `PublicView.tsx`: Large component (~2000+ lines) containing internal booking wizard state, provider cards, comparison tool, AI chatbot, Care Journey tracker, Trust Score, Outcome Prediction, and rating feedback modal. All state is local (useState) — bookings created here never leave this component.
+- `PublicBookings.tsx`: A completely separate page with its own incompatible `Booking` type (status: `upcoming|completed|cancelled`, no `providerId`, no `feedbackSubmitted`), seeded with hardcoded static data. "Leave Review" button only fires a toast.
+- No shared booking store — the two systems are entirely disconnected.
+- Rating submissions in `PublicView.tsx` update local state via a blending formula but are not stored in any persistent/shared layer.
+- Backend (`main.mo`) has no Booking or PublicRating types — only RatingEngineResult, AuditLog, IndicatorResults, etc.
+- `mockData.ts` has `getProviderRatingForQuarter(id, quarter)` as the central rating function but user ratings are applied only to local component state.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `ProviderComparison.tsx` page — available for Regulator, Policy Analyst, Public roles
-  - Side-by-side comparison of 2–5 providers: star ratings, domain scores, risk, trend
-  - Grouped bar chart + radar chart using Recharts
-  - Provider multi-select with search
-  - Uses `getProviderRatingForQuarter` and `PROVIDER_MASTER` as data source
-- `AIAssistant.tsx` page — available for all 4 roles
-  - Full-page AI chat interface (not a floating widget)
-  - Context-aware: responds based on real provider data from mockData
-  - Typing animation, message bubbles, suggested queries
-  - Quick action chips per role (Regulator: "Show high-risk providers", Provider: "How can I improve my rating?", etc.)
-  - Multi-turn conversation with real data-driven responses
-- Nav items added to Sidebar:
-  - `provider_comparison` for Regulator, Policy Analyst, Public (in ANALYTICS / TOOLS group)
-  - `ai_assistant` for all 4 roles (in a new AI TOOLS group)
-- ActivePage union in App.tsx: add `provider_comparison` | `ai_assistant`
-- Layout.tsx routing: handle `provider_comparison` and `ai_assistant` cases
+- **Motoko backend**: `Booking` and `PublicRating` types with full CRUD:
+  - `createBooking(booking)` → stores booking with userId, providerId, service, date, time, status
+  - `getUserBookings(userId)` → returns all bookings for a user
+  - `updateBookingStatus(id, status)` → updates status (Booked/Completed/Cancelled)
+  - `submitPublicRating(rating)` → stores rating with bookingId, providerId, overall+indicators scores, feedback text
+  - `getProviderPublicRatings(providerId)` → returns all ratings for a provider
+  - `getPublicRatingAverage(providerId)` → returns aggregated average scores
+  - Validation: prevent duplicate ratings for same booking
+- **Shared booking context** (`BookingContext.tsx`): React context that holds all bookings in memory, shared between `PublicView.tsx` and `PublicBookings.tsx`
+- **Unified `Booking` type**: Single type with fields: id, userId, providerId, providerName, service, date, time, userName, userPhone, address, confirmationNumber, status (`Booked|Completed|Cancelled`), feedbackSubmitted
+- **Real-time rating sync**: After rating submission, `userRatingOverrides` map in BookingContext updates the provider's blended score, which `getProviderRatingForQuarter` reads — syncing Public view, Provider Dashboard, Regulator, and Policy Analyst
+- **Feedback popup trigger**: When a booking status changes to Completed (via `markComplete` in My Bookings), automatically open the rating modal
+- **Validation engine**: Prevent rating if booking not Completed, prevent duplicate ratings per booking, validate required fields
 
 ### Modify
-- Sidebar: Add Provider Comparison and AI Assistant items with proper icons (GitCompare/Bot)
-- App.tsx: Extend ActivePage type
-- Layout.tsx: Add route cases for new pages, pass currentRole to AIAssistant and ProviderComparison
-- DataQuality.tsx: Apply DS hero banner, DSCard, DSKpiCard patterns for visual consistency
-- HighRiskCohorts.tsx: Apply DS hero banner and card styles
-- ScreeningTracking.tsx: Apply DS hero banner and card styles
-- All pages that use plain `<Card>` with `rounded-none border`: upgrade to `ds-card` with proper spacing
+- **`PublicView.tsx`**: 
+  - Replace local `bookings` state with BookingContext `bookings` array
+  - Replace local `addBooking()` with `createBooking()` from context
+  - Replace local `userRatings` state with context-shared `userRatingOverrides`
+  - After feedback submit, call `submitRating()` from context which persists and syncs
+  - Remove the local Care Journey inline panel — bookings now live in shared context (My Bookings page reads them)
+  - Keep all existing UI: provider cards, comparison tool, AI chatbot, Trust Score, Outcome Prediction, search/filter, smart recommendations
+- **`PublicBookings.tsx`**:
+  - Replace `SEED_BOOKINGS` static array with bookings from `BookingContext`
+  - Add `markComplete(id)` action that sets status to Completed AND triggers feedback modal
+  - "Leave Review" button opens the full rating modal (stars + indicators + text) instead of a toast
+  - Reschedule and cancel actions update the shared context
+  - Show real booking data from context (no more disconnected static seed)
+- **`App.tsx`**: Wrap the app in `BookingProvider` so context is available to all pages
+- **`main.mo`**: Add Booking and PublicRating actor types and methods
 
 ### Remove
-- Nothing removed (backwards-compatible additions only)
+- Static `SEED_BOOKINGS` array from `PublicBookings.tsx`
+- The disconnected local `bookings` useState in `PublicView.tsx` (replaced by context)
+- The local `userRatings` useState in `PublicView.tsx` (replaced by context-level override map)
 
 ## Implementation Plan
-1. Extend `ActivePage` type in App.tsx to include `provider_comparison` and `ai_assistant`
-2. Add nav items in Sidebar.tsx under appropriate groups with GitCompare and Bot icons
-3. Create `src/frontend/src/components/pages/ProviderComparison.tsx`
-4. Create `src/frontend/src/components/pages/AIAssistant.tsx`
-5. Add routing in Layout.tsx for both new pages
-6. Apply DS hero banner + DSCard patterns to DataQuality, HighRiskCohorts, ScreeningTracking pages
-7. Validate build passes with no type errors
+
+1. **Backend** (`main.mo`): Add `Booking`, `PublicRating` types and CRUD methods (`createBooking`, `getUserBookings`, `updateBookingStatus`, `submitPublicRating`, `getProviderPublicRatings`, `getPublicRatingAverage`). Validation: one rating per booking.
+
+2. **BookingContext** (`src/frontend/src/context/BookingContext.tsx`): 
+   - Holds `bookings: Booking[]` in state
+   - Holds `userRatingOverrides: Record<string, BlendedRating>` in state
+   - Exports: `createBooking`, `cancelBooking`, `rescheduleBooking`, `markComplete`, `submitRating`, `hasRated(bookingId)`
+   - `submitRating` blends user score (30%) with existing provider score (70%) and stores result in `userRatingOverrides`
+   - `userRatingOverrides` is exported so `getProviderRatingForQuarter` callers can apply the override
+
+3. **Update `mockData.ts`**: Export a `applyUserRatingOverride(providerId, override)` helper that merges user ratings into the provider's score — used by both PublicView and all other modules that call `getProviderRatingForQuarter`.
+
+4. **Update `PublicView.tsx`**: Use BookingContext for bookings and rating overrides. Rating modal on feedback submit calls `context.submitRating()`. Capacity tracking still managed locally per-session.
+
+5. **Rebuild `PublicBookings.tsx`**: Reads from BookingContext. `markComplete(id)` → status = Completed + opens FeedbackModal. Rating modal is the same component as used in PublicView (extracted to shared component). Full timeline/status display with card-based UI.
+
+6. **Extract `FeedbackModal`** to `src/frontend/src/components/ui/FeedbackModal.tsx`: Shared between PublicView and PublicBookings. Props: providerId, providerName, bookingId, onSubmit(data), onClose.
+
+7. **Update `App.tsx`**: Wrap with `<BookingProvider>`. Seed 5 realistic bookings (mix of Booked, Completed with feedback not yet submitted) into context on initialization so My Bookings page is not empty.
+
+8. **UI Design**: Light-theme card-based booking list, animated rating popup with star pickers + sliders for indicators, success/error toast messages, hover effects throughout. Consistent with global DS design system (design-system.css / components/ds/index.tsx).

@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { UnifiedBooking } from "@/context/BookingContext";
+import { useBookingContext } from "@/context/BookingContext";
 import {
   Calendar,
   CheckCircle,
@@ -24,92 +26,8 @@ import {
   Star,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-interface Booking {
-  id: string;
-  providerName: string;
-  service: string;
-  date: string;
-  time: string;
-  status: "upcoming" | "completed" | "cancelled";
-  address: string;
-  confirmationNumber: string;
-}
-
-const SEED_BOOKINGS: Booking[] = [
-  {
-    id: "BK001",
-    providerName: "Yarra Valley Life Care",
-    service: "General Care",
-    date: "2026-04-14",
-    time: "10:00 AM",
-    status: "upcoming",
-    address: "12 Yarra Road, Melbourne VIC 3000",
-    confirmationNumber: "YVC-2026-1401",
-  },
-  {
-    id: "BK002",
-    providerName: "Bondi Aged Care Centre",
-    service: "Physiotherapy",
-    date: "2026-04-22",
-    time: "2:30 PM",
-    status: "upcoming",
-    address: "88 Campbell Parade, Bondi NSW 2026",
-    confirmationNumber: "BAC-2026-2201",
-  },
-  {
-    id: "BK003",
-    providerName: "Southbank Senior Living",
-    service: "Medication Review",
-    date: "2026-05-05",
-    time: "9:00 AM",
-    status: "upcoming",
-    address: "3 Southbank Blvd, Brisbane QLD 4101",
-    confirmationNumber: "SSL-2026-0501",
-  },
-  {
-    id: "BK004",
-    providerName: "Glenelg Senior Services",
-    service: "Home Care",
-    date: "2026-03-10",
-    time: "11:00 AM",
-    status: "completed",
-    address: "47 Glenelg Drive, Adelaide SA 5045",
-    confirmationNumber: "GSS-2026-1001",
-  },
-  {
-    id: "BK005",
-    providerName: "Fremantle Aged Care",
-    service: "Mental Health Support",
-    date: "2026-02-28",
-    time: "3:00 PM",
-    status: "completed",
-    address: "22 Marine Terrace, Fremantle WA 6160",
-    confirmationNumber: "FAC-2026-2801",
-  },
-  {
-    id: "BK006",
-    providerName: "Darwin Senior Hub",
-    service: "Physiotherapy",
-    date: "2026-03-20",
-    time: "1:00 PM",
-    status: "cancelled",
-    address: "5 Mitchell Street, Darwin NT 0800",
-    confirmationNumber: "DSH-2026-2001",
-  },
-  {
-    id: "BK007",
-    providerName: "Hobart Care Connect",
-    service: "General Care",
-    date: "2026-03-15",
-    time: "10:30 AM",
-    status: "cancelled",
-    address: "18 Elizabeth Street, Hobart TAS 7000",
-    confirmationNumber: "HCC-2026-1501",
-  },
-];
 
 const TIME_SLOTS = [
   "9:00 AM",
@@ -126,22 +44,24 @@ const TIME_SLOTS = [
   "3:30 PM",
 ];
 
+type TabStatus = "Booked" | "Completed" | "Cancelled";
+
 const STATUS_CONFIG = {
-  upcoming: {
+  Booked: {
     label: "Upcoming",
     color: "#3b82f6",
     bg: "rgba(59,130,246,0.12)",
     border: "rgba(59,130,246,0.3)",
     icon: Calendar,
   },
-  completed: {
+  Completed: {
     label: "Completed",
     color: "#10b981",
     bg: "rgba(16,185,129,0.12)",
     border: "rgba(16,185,129,0.3)",
     icon: CheckCircle,
   },
-  cancelled: {
+  Cancelled: {
     label: "Cancelled",
     color: "#ef4444",
     bg: "rgba(239,68,68,0.12)",
@@ -158,80 +78,113 @@ const CARD_STYLE = {
   color: "white",
 };
 
+const SERVICE_COLORS: Record<string, string> = {
+  "General Care": "#3b82f6",
+  Physiotherapy: "#8b5cf6",
+  "Medication Review": "#06b6d4",
+  "Home Care": "#10b981",
+  "Mental Health Support": "#f59e0b",
+};
+
+function formatDate(d: string) {
+  const dt = new Date(d);
+  return dt.toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function PublicBookings({
   currentQuarter: _currentQuarter,
 }: { currentQuarter: string }) {
-  const [bookings, setBookings] = useState<Booking[]>(SEED_BOOKINGS);
-  const [activeTab, setActiveTab] = useState<
-    "upcoming" | "completed" | "cancelled"
-  >("upcoming");
+  const ctx = useBookingContext();
+  const {
+    bookings,
+    cancelBooking,
+    rescheduleBooking,
+    markComplete,
+    submitRating,
+    pendingFeedbackBookingId,
+    clearPendingFeedback,
+  } = ctx;
+
+  const [activeTab, setActiveTab] = useState<TabStatus>("Booked");
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
-  const [detailsBooking, setDetailsBooking] = useState<Booking | null>(null);
-  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(
+  const [detailsBooking, setDetailsBooking] = useState<UnifiedBooking | null>(
     null,
   );
+  const [rescheduleTarget, setRescheduleTarget] =
+    useState<UnifiedBooking | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
+
+  // FeedbackModal state
+  const [feedbackTarget, setFeedbackTarget] = useState<UnifiedBooking | null>(
+    null,
+  );
+
+  // Auto-open feedback when markComplete sets pendingFeedbackBookingId
+  useEffect(() => {
+    if (!pendingFeedbackBookingId) return;
+    const b = bookings.find((x) => x.id === pendingFeedbackBookingId);
+    if (b && b.status === "Completed" && !b.feedbackSubmitted) {
+      setFeedbackTarget(b);
+      clearPendingFeedback();
+      setActiveTab("Completed");
+    }
+  }, [pendingFeedbackBookingId, bookings, clearPendingFeedback]);
 
   const filtered = bookings.filter((b) => b.status === activeTab);
 
   const counts = {
-    upcoming: bookings.filter((b) => b.status === "upcoming").length,
-    completed: bookings.filter((b) => b.status === "completed").length,
-    cancelled: bookings.filter((b) => b.status === "cancelled").length,
+    Booked: bookings.filter((b) => b.status === "Booked").length,
+    Completed: bookings.filter((b) => b.status === "Completed").length,
+    Cancelled: bookings.filter((b) => b.status === "Cancelled").length,
   };
 
-  const handleCancel = (id: string) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status: "cancelled" } : b)),
-    );
+  function handleCancel(id: string) {
+    cancelBooking(id);
     setCancelConfirm(null);
     toast.success("Booking cancelled successfully");
-  };
+  }
 
-  const handleRebook = (booking: Booking) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id
-          ? {
-              ...b,
-              status: "upcoming",
-              date: new Date(Date.now() + 14 * 86400000)
-                .toISOString()
-                .split("T")[0],
-            }
-          : b,
-      ),
-    );
+  function handleRebook(booking: UnifiedBooking) {
+    // Re-create as a new upcoming booking
+    ctx.createBooking({
+      ...booking,
+      status: "Booked",
+      feedbackSubmitted: false,
+      date: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+    });
     toast.success(
       "Booking reinstated. Please confirm a new date with the provider.",
     );
-  };
+  }
 
-  const handleRescheduleConfirm = () => {
-    if (!rescheduleBooking || !rescheduleDate || !rescheduleTime) return;
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === rescheduleBooking.id
-          ? { ...b, date: rescheduleDate, time: rescheduleTime }
-          : b,
-      ),
-    );
-    setRescheduleBooking(null);
+  function handleRescheduleConfirm() {
+    if (!rescheduleTarget || !rescheduleDate || !rescheduleTime) return;
+    rescheduleBooking(rescheduleTarget.id, rescheduleDate, rescheduleTime);
+    setRescheduleTarget(null);
     setRescheduleDate("");
     setRescheduleTime("");
     toast.success("Booking rescheduled successfully");
-  };
+  }
 
-  const formatDate = (d: string) => {
-    const dt = new Date(d);
-    return dt.toLocaleDateString("en-AU", {
-      weekday: "short",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  };
+  function handleFeedbackSubmit(
+    data: import("@/context/BookingContext").FeedbackData,
+  ) {
+    if (!feedbackTarget) return;
+    submitRating(
+      feedbackTarget.id,
+      feedbackTarget.providerId,
+      feedbackTarget.providerName,
+      data,
+    );
+    setFeedbackTarget(null);
+    toast.success("Rating submitted! Provider score updated in real time.");
+  }
 
   const PAGE_BG = "#0a0f1e";
 
@@ -280,9 +233,82 @@ export default function PublicBookings({
               margin: 0,
             }}
           >
-            Manage your aged care appointments — reschedule, cancel, or review
+            Manage your aged care appointments — reschedule, cancel, or rate
             completed visits.
           </p>
+
+          {/* KPI cards */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3,1fr)",
+              gap: "16px",
+              marginTop: "24px",
+            }}
+          >
+            {[
+              {
+                label: "Upcoming",
+                key: "Booked" as TabStatus,
+                color: "#3b82f6",
+                icon: Calendar,
+              },
+              {
+                label: "Completed",
+                key: "Completed" as TabStatus,
+                color: "#10b981",
+                icon: CheckCircle,
+              },
+              {
+                label: "Cancelled",
+                key: "Cancelled" as TabStatus,
+                color: "#ef4444",
+                icon: XCircle,
+              },
+            ].map(({ label, key, color, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: `1px solid ${color}33`,
+                  borderRadius: "12px",
+                  padding: "16px",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  outline: activeTab === key ? `2px solid ${color}` : "none",
+                  textAlign: "left",
+                }}
+                onClick={() => setActiveTab(key)}
+                data-ocid={`bookings.${key.toLowerCase()}.tab`}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "6px",
+                  }}
+                >
+                  <Icon size={16} color={color} />
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "rgba(255,255,255,0.5)",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {label}
+                  </span>
+                </div>
+                <div style={{ fontSize: "28px", fontWeight: 800, color }}>
+                  {counts[key]}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -302,14 +328,14 @@ export default function PublicBookings({
             border: "1px solid rgba(255,255,255,0.08)",
           }}
         >
-          {(["upcoming", "completed", "cancelled"] as const).map((tab) => {
+          {(["Booked", "Completed", "Cancelled"] as TabStatus[]).map((tab) => {
             const cfg = STATUS_CONFIG[tab];
             const isActive = activeTab === tab;
             return (
               <button
                 key={tab}
                 type="button"
-                data-ocid={`bookings.${tab}.tab`}
+                data-ocid={`bookings.${tab.toLowerCase()}.tab`}
                 onClick={() => setActiveTab(tab)}
                 style={{
                   padding: "8px 20px",
@@ -347,7 +373,8 @@ export default function PublicBookings({
               style={{ margin: "0 auto 12px" }}
             />
             <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "14px" }}>
-              No {activeTab} bookings to display.
+              No {STATUS_CONFIG[activeTab].label.toLowerCase()} bookings to
+              display.
             </p>
           </div>
         ) : (
@@ -356,6 +383,7 @@ export default function PublicBookings({
               const cfg = STATUS_CONFIG[booking.status];
               const StatusIcon = cfg.icon;
               const isCancelConfirming = cancelConfirm === booking.id;
+              const svcColor = SERVICE_COLORS[booking.service] ?? "#3b82f6";
 
               return (
                 <div
@@ -367,6 +395,7 @@ export default function PublicBookings({
                     display: "flex",
                     flexDirection: "column",
                     gap: "16px",
+                    transition: "all 0.2s",
                   }}
                 >
                   <div
@@ -400,11 +429,11 @@ export default function PublicBookings({
                           style={{
                             padding: "2px 10px",
                             borderRadius: "12px",
-                            background: "rgba(59,130,246,0.15)",
-                            border: "1px solid rgba(59,130,246,0.3)",
+                            background: `${svcColor}22`,
+                            border: `1px solid ${svcColor}44`,
                             fontSize: "11px",
                             fontWeight: 600,
-                            color: "#60a5fa",
+                            color: svcColor,
                           }}
                         >
                           {booking.service}
@@ -501,14 +530,14 @@ export default function PublicBookings({
                       View Details
                     </Button>
 
-                    {booking.status === "upcoming" && (
+                    {booking.status === "Booked" && (
                       <>
                         <Button
                           size="sm"
                           variant="outline"
                           data-ocid={`bookings.reschedule.button.${idx + 1}`}
                           onClick={() => {
-                            setRescheduleBooking(booking);
+                            setRescheduleTarget(booking);
                             setRescheduleDate(booking.date);
                             setRescheduleTime(booking.time);
                           }}
@@ -581,31 +610,78 @@ export default function PublicBookings({
                             </Button>
                           </div>
                         )}
+
+                        {/* Mark complete button for upcoming */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          data-ocid={`bookings.complete.button.${idx + 1}`}
+                          onClick={() => {
+                            markComplete(booking.id);
+                            toast.info(
+                              "Booking marked as completed. Please rate your experience!",
+                            );
+                          }}
+                          style={{
+                            fontSize: "12px",
+                            borderColor: "rgba(16,185,129,0.4)",
+                            color: "#34d399",
+                            background: "transparent",
+                          }}
+                        >
+                          <CheckCircle size={12} className="mr-1" /> Mark
+                          Complete
+                        </Button>
                       </>
                     )}
 
-                    {booking.status === "completed" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        data-ocid={`bookings.leave_review.button.${idx + 1}`}
-                        onClick={() =>
-                          toast.info(
-                            "Navigate to My Reviews to manage your reviews",
-                          )
-                        }
-                        style={{
-                          fontSize: "12px",
-                          borderColor: "rgba(251,191,36,0.4)",
-                          color: "#fbbf24",
-                          background: "transparent",
-                        }}
-                      >
-                        <Star size={12} className="mr-1" /> Leave Review
-                      </Button>
-                    )}
+                    {booking.status === "Completed" &&
+                      !booking.feedbackSubmitted && (
+                        <Button
+                          size="sm"
+                          data-ocid={`bookings.leave_review.button.${idx + 1}`}
+                          onClick={() => setFeedbackTarget(booking)}
+                          style={{
+                            fontSize: "12px",
+                            background:
+                              "linear-gradient(135deg,#f59e0b,#d97706)",
+                            color: "#fff",
+                            border: "none",
+                            fontWeight: 700,
+                            boxShadow: "0 2px 8px rgba(245,158,11,0.3)",
+                          }}
+                        >
+                          <Star
+                            size={12}
+                            className="mr-1"
+                            fill="currentColor"
+                          />{" "}
+                          Leave Review
+                        </Button>
+                      )}
 
-                    {booking.status === "cancelled" && (
+                    {booking.status === "Completed" &&
+                      booking.feedbackSubmitted && (
+                        <span
+                          data-ocid={`bookings.reviewed_badge.${idx + 1}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            padding: "5px 12px",
+                            borderRadius: "20px",
+                            background: "rgba(16,185,129,0.12)",
+                            border: "1px solid rgba(16,185,129,0.3)",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            color: "#34d399",
+                          }}
+                        >
+                          <CheckCircle size={11} /> Reviewed ✓
+                        </span>
+                      )}
+
+                    {booking.status === "Cancelled" && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -658,6 +734,8 @@ export default function PublicBookings({
                   ["Time", detailsBooking.time],
                   ["Address", detailsBooking.address],
                   ["Confirmation #", detailsBooking.confirmationNumber],
+                  ["Patient", detailsBooking.userName],
+                  ["Phone", detailsBooking.userPhone],
                   ["Status", STATUS_CONFIG[detailsBooking.status].label],
                 ] as [string, string][]
               ).map(([key, val]) => (
@@ -702,8 +780,8 @@ export default function PublicBookings({
 
       {/* Reschedule Dialog */}
       <Dialog
-        open={!!rescheduleBooking}
-        onOpenChange={() => setRescheduleBooking(null)}
+        open={!!rescheduleTarget}
+        onOpenChange={() => setRescheduleTarget(null)}
       >
         <DialogContent
           data-ocid="bookings.reschedule.dialog"
@@ -787,7 +865,7 @@ export default function PublicBookings({
             <Button
               variant="outline"
               data-ocid="bookings.reschedule.cancel_button"
-              onClick={() => setRescheduleBooking(null)}
+              onClick={() => setRescheduleTarget(null)}
               style={{
                 borderColor: "rgba(255,255,255,0.15)",
                 color: "rgba(255,255,255,0.6)",
@@ -807,6 +885,17 @@ export default function PublicBookings({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        open={!!feedbackTarget}
+        onClose={() => setFeedbackTarget(null)}
+        bookingId={feedbackTarget?.id ?? ""}
+        providerId={feedbackTarget?.providerId ?? ""}
+        providerName={feedbackTarget?.providerName ?? ""}
+        service={feedbackTarget?.service ?? ""}
+        onSubmit={handleFeedbackSubmit}
+      />
     </div>
   );
 }

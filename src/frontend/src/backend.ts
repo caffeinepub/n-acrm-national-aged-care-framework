@@ -118,6 +118,20 @@ export interface RatingEngineIncentiveEligibility {
     eligible: boolean;
     improvementScore: number;
 }
+export interface PublicRating {
+    id: string;
+    status: string;
+    bookingId: string;
+    preventiveRating: number;
+    experienceRating: number;
+    userId: string;
+    feedbackText: string;
+    submittedAt: bigint;
+    overallRating: number;
+    safetyRating: number;
+    qualityRating: number;
+    providerId: string;
+}
 export interface IndicatorResult {
     id: string;
     trend: string;
@@ -129,6 +143,14 @@ export interface IndicatorResult {
     dimension: string;
     providerId: string;
     quintileRank: bigint;
+}
+export interface PublicRatingAggregate {
+    overallAverage: number;
+    safetyAverage: number;
+    count: bigint;
+    preventiveAverage: number;
+    qualityAverage: number;
+    experienceAverage: number;
 }
 export interface NationalOverviewStats {
     dataQualityScore: number;
@@ -165,6 +187,21 @@ export interface RatingEngineDomainScores {
     staffing: number;
     experience: number;
     preventive: number;
+}
+export interface Booking {
+    id: string;
+    service: string;
+    status: string;
+    userName: string;
+    feedbackSubmitted: boolean;
+    userId: string;
+    date: string;
+    time: string;
+    userPhone: string;
+    address: string;
+    providerName: string;
+    confirmationNumber: string;
+    providerId: string;
 }
 export interface ScreeningWorkflow {
     id: string;
@@ -217,26 +254,39 @@ export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addAuditLogEntry(userId: string, userRole: string, action: string, entityType: string, details: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    createBooking(booking: Booking): Promise<string>;
+    deletePublicBooking(id: string): Promise<void>;
+    deletePublicRating(bookingId: string): Promise<void>;
     getAllHighRiskCohorts(): Promise<Array<HighRiskCohort>>;
+    getAllPublicBookings(): Promise<Array<Booking>>;
+    getAllPublicRatings(): Promise<Array<PublicRating>>;
     getAllRatingEngineResults(quarter: string): Promise<Array<RatingEngineResult>>;
     getAllScreeningWorkflows(): Promise<Array<ScreeningWorkflow>>;
     getAuditLogs(): Promise<Array<AuditLog>>;
+    getBookingById(id: string): Promise<Booking | null>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getHighRiskCohorts(providerId: string): Promise<Array<HighRiskCohort>>;
     getIndicatorResults(providerId: string, quarter: string): Promise<Array<IndicatorResult>>;
     getNationalOverviewStats(_quarter: string): Promise<NationalOverviewStats>;
+    getProviderBookings(providerId: string): Promise<Array<Booking>>;
+    getProviderPublicRatings(providerId: string): Promise<Array<PublicRating>>;
     getProviderScorecardV2(providerId: string, quarter: string): Promise<RatingEngineResult | null>;
+    getPublicRatingAverage(providerId: string): Promise<PublicRatingAggregate>;
     getRatingEngineResult(providerId: string, quarter: string): Promise<RatingEngineResult | null>;
     getScorecardsByProvider(providerId: string): Promise<Array<ProviderScorecard>>;
     getScreeningWorkflows(providerId: string): Promise<Array<ScreeningWorkflow>>;
+    getUserBookings(userId: string): Promise<Array<Booking>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    markBookingComplete(id: string): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitIndicatorData(submission: ProviderIndicatorSubmission): Promise<RatingEngineResult>;
+    submitPublicRating(rating: PublicRating): Promise<boolean>;
+    updateBookingStatus(id: string, status: string): Promise<boolean>;
     updateScreeningStatus(workflowId: string, status: string): Promise<void>;
 }
-import type { RatingEngineResult as _RatingEngineResult, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { Booking as _Booking, RatingEngineResult as _RatingEngineResult, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -281,6 +331,48 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async createBooking(arg0: Booking): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createBooking(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createBooking(arg0);
+            return result;
+        }
+    }
+    async deletePublicBooking(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deletePublicBooking(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deletePublicBooking(arg0);
+            return result;
+        }
+    }
+    async deletePublicRating(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deletePublicRating(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deletePublicRating(arg0);
+            return result;
+        }
+    }
     async getAllHighRiskCohorts(): Promise<Array<HighRiskCohort>> {
         if (this.processError) {
             try {
@@ -292,6 +384,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getAllHighRiskCohorts();
+            return result;
+        }
+    }
+    async getAllPublicBookings(): Promise<Array<Booking>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllPublicBookings();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllPublicBookings();
+            return result;
+        }
+    }
+    async getAllPublicRatings(): Promise<Array<PublicRating>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllPublicRatings();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllPublicRatings();
             return result;
         }
     }
@@ -337,32 +457,46 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getCallerUserProfile(): Promise<UserProfile | null> {
+    async getBookingById(arg0: string): Promise<Booking | null> {
         if (this.processError) {
             try {
-                const result = await this.actor.getCallerUserProfile();
+                const result = await this.actor.getBookingById(arg0);
                 return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getCallerUserProfile();
+            const result = await this.actor.getBookingById(arg0);
             return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCallerUserProfile(): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallerUserProfile();
+                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallerUserProfile();
+            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n5(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n5(this._uploadFile, this._downloadFile, result);
         }
     }
     async getHighRiskCohorts(arg0: string): Promise<Array<HighRiskCohort>> {
@@ -407,32 +541,74 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getProviderBookings(arg0: string): Promise<Array<Booking>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getProviderBookings(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getProviderBookings(arg0);
+            return result;
+        }
+    }
+    async getProviderPublicRatings(arg0: string): Promise<Array<PublicRating>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getProviderPublicRatings(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getProviderPublicRatings(arg0);
+            return result;
+        }
+    }
     async getProviderScorecardV2(arg0: string, arg1: string): Promise<RatingEngineResult | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getProviderScorecardV2(arg0, arg1);
-                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getProviderScorecardV2(arg0, arg1);
-            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getPublicRatingAverage(arg0: string): Promise<PublicRatingAggregate> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPublicRatingAverage(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPublicRatingAverage(arg0);
+            return result;
         }
     }
     async getRatingEngineResult(arg0: string, arg1: string): Promise<RatingEngineResult | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getRatingEngineResult(arg0, arg1);
-                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getRatingEngineResult(arg0, arg1);
-            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
         }
     }
     async getScorecardsByProvider(arg0: string): Promise<Array<ProviderScorecard>> {
@@ -463,18 +639,32 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getUserBookings(arg0: string): Promise<Array<Booking>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserBookings(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserBookings(arg0);
+            return result;
+        }
+    }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
         }
     }
     async isCallerAdmin(): Promise<boolean> {
@@ -488,6 +678,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.isCallerAdmin();
+            return result;
+        }
+    }
+    async markBookingComplete(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.markBookingComplete(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.markBookingComplete(arg0);
             return result;
         }
     }
@@ -519,6 +723,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async submitPublicRating(arg0: PublicRating): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.submitPublicRating(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.submitPublicRating(arg0);
+            return result;
+        }
+    }
+    async updateBookingStatus(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateBookingStatus(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateBookingStatus(arg0, arg1);
+            return result;
+        }
+    }
     async updateScreeningStatus(arg0: string, arg1: string): Promise<void> {
         if (this.processError) {
             try {
@@ -534,16 +766,19 @@ export class Backend implements backendInterface {
         }
     }
 }
-function from_candid_UserRole_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n5(_uploadFile, _downloadFile, value);
+function from_candid_UserRole_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n6(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Booking]): Booking | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_RatingEngineResult]): RatingEngineResult | null {
+function from_candid_opt_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_RatingEngineResult]): RatingEngineResult | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_variant_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;

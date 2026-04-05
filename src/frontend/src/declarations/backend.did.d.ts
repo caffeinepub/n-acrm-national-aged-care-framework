@@ -19,6 +19,21 @@ export interface AuditLog {
   'details' : string,
   'entityType' : string,
 }
+export interface Booking {
+  'id' : string,
+  'service' : string,
+  'status' : string,
+  'userName' : string,
+  'feedbackSubmitted' : boolean,
+  'userId' : string,
+  'date' : string,
+  'time' : string,
+  'userPhone' : string,
+  'address' : string,
+  'providerName' : string,
+  'confirmationNumber' : string,
+  'providerId' : string,
+}
 export interface HighRiskCohort {
   'id' : string,
   'status' : string,
@@ -79,6 +94,28 @@ export interface ProviderScorecard {
   'equityScore' : number,
   'quintileRank' : bigint,
 }
+export interface PublicRating {
+  'id' : string,
+  'status' : string,
+  'bookingId' : string,
+  'preventiveRating' : number,
+  'experienceRating' : number,
+  'userId' : string,
+  'feedbackText' : string,
+  'submittedAt' : bigint,
+  'overallRating' : number,
+  'safetyRating' : number,
+  'qualityRating' : number,
+  'providerId' : string,
+}
+export interface PublicRatingAggregate {
+  'overallAverage' : number,
+  'safetyAverage' : number,
+  'count' : bigint,
+  'preventiveAverage' : number,
+  'qualityAverage' : number,
+  'experienceAverage' : number,
+}
 export interface RatingEngineDomainScores {
   'safety' : number,
   'compliance' : number,
@@ -137,35 +174,48 @@ export interface _SERVICE {
     undefined
   >,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'createBooking' : ActorMethod<[Booking], string>,
+  'deletePublicBooking' : ActorMethod<[string], undefined>,
+  'deletePublicRating' : ActorMethod<[string], undefined>,
   'getAllHighRiskCohorts' : ActorMethod<[], Array<HighRiskCohort>>,
+  'getAllPublicBookings' : ActorMethod<[], Array<Booking>>,
+  'getAllPublicRatings' : ActorMethod<[], Array<PublicRating>>,
   'getAllRatingEngineResults' : ActorMethod<
     [string],
     Array<RatingEngineResult>
   >,
   'getAllScreeningWorkflows' : ActorMethod<[], Array<ScreeningWorkflow>>,
   'getAuditLogs' : ActorMethod<[], Array<AuditLog>>,
+  'getBookingById' : ActorMethod<[string], [] | [Booking]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getHighRiskCohorts' : ActorMethod<[string], Array<HighRiskCohort>>,
   'getIndicatorResults' : ActorMethod<[string, string], Array<IndicatorResult>>,
   'getNationalOverviewStats' : ActorMethod<[string], NationalOverviewStats>,
+  'getProviderBookings' : ActorMethod<[string], Array<Booking>>,
+  'getProviderPublicRatings' : ActorMethod<[string], Array<PublicRating>>,
   'getProviderScorecardV2' : ActorMethod<
     [string, string],
     [] | [RatingEngineResult]
   >,
+  'getPublicRatingAverage' : ActorMethod<[string], PublicRatingAggregate>,
   'getRatingEngineResult' : ActorMethod<
     [string, string],
     [] | [RatingEngineResult]
   >,
   'getScorecardsByProvider' : ActorMethod<[string], Array<ProviderScorecard>>,
   'getScreeningWorkflows' : ActorMethod<[string], Array<ScreeningWorkflow>>,
+  'getUserBookings' : ActorMethod<[string], Array<Booking>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'markBookingComplete' : ActorMethod<[string], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'submitIndicatorData' : ActorMethod<
     [ProviderIndicatorSubmission],
     RatingEngineResult
   >,
+  'submitPublicRating' : ActorMethod<[PublicRating], boolean>,
+  'updateBookingStatus' : ActorMethod<[string, string], boolean>,
   'updateScreeningStatus' : ActorMethod<[string, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
