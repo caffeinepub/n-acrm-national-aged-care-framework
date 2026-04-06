@@ -42,6 +42,13 @@ import {
   YAxis,
 } from "recharts";
 
+import { useContactContext } from "@/context/ContactContext";
+import { PROVIDER_CONTACTS } from "@/data/providerContacts";
+import {
+  CALL_TOPICS,
+  deriveContactIntelligence,
+  generateCallSummary,
+} from "@/utils/providerContactIntelligence";
 import {
   Activity,
   AlertTriangle,
@@ -58,16 +65,20 @@ import {
   Clock,
   Edit2,
   Heart,
+  History,
   Info,
+  Mail,
   MapPin,
   MessageCircle,
   Phone,
+  PhoneCall,
   Search,
   Send,
   Shield,
   ShieldCheck,
   Sparkles,
   Star,
+  ThumbsDown,
   ThumbsUp,
   Trash2,
   TrendingDown,
@@ -1354,6 +1365,916 @@ function AIChatbot({
   );
 }
 
+// ── Provider Contact Panel ─────────────────────────────────────────────────────
+function ProviderContactPanel({
+  provider,
+  capacityState,
+}: {
+  provider: import("@/data/mockData").CityProvider;
+  capacityState: Record<string, { total: number; booked: number }>;
+}) {
+  const {
+    submitCallbackRequest,
+    logInteraction,
+    submitContactFeedback,
+    getProviderCallbacks,
+    interactions,
+  } = useContactContext();
+
+  const contact = PROVIDER_CONTACTS[provider.id];
+
+  // Calculate booking load for this provider
+  const bookingLoad = useMemo(() => {
+    const entries = Object.entries(capacityState).filter(([key]) =>
+      key.startsWith(provider.id),
+    );
+    if (entries.length === 0) return 0;
+    const avg =
+      entries.reduce((sum, [, v]) => sum + (v.booked / v.total) * 100, 0) /
+      entries.length;
+    return Math.round(avg);
+  }, [capacityState, provider.id]);
+
+  const intelligence = useMemo(() => {
+    if (!contact) return null;
+    return deriveContactIntelligence(contact, bookingLoad);
+  }, [contact, bookingLoad]);
+
+  // AI Call Assist state
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<string | undefined>(
+    undefined,
+  );
+
+  // Callback form state
+  const [showCallbackForm, setShowCallbackForm] = useState(false);
+  const [callbackForm, setCallbackForm] = useState({
+    userName: "Alex Chen",
+    userPhone: "",
+    preferredDate: "",
+    preferredTimeSlot: "",
+    topic: "",
+    service: "",
+  });
+  const [callbackSuccess, setCallbackSuccess] = useState(false);
+  const [callbackError, setCallbackError] = useState("");
+
+  // Feedback state per interaction
+  const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
+  const [feedbackForm, setFeedbackForm] = useState<{
+    resolved: boolean | null;
+    rating: number;
+    comment: string;
+  }>({ resolved: null, rating: 0, comment: "" });
+  const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+
+  const providerCallbacks = getProviderCallbacks(provider.id);
+  // Use live context state for interactions to pick up newly-logged entries
+  const liveInteractions = interactions.filter(
+    (i) => i.providerId === provider.id,
+  );
+
+  function handleCallProvider() {
+    logInteraction({
+      providerId: provider.id,
+      providerName: provider.name,
+      type: "call",
+      topic: selectedTopicId
+        ? (CALL_TOPICS.find((t) => t.id === selectedTopicId)?.label ??
+          "General")
+        : "General",
+      service: selectedService,
+      outcome: "pending",
+    });
+    if (contact) {
+      window.location.href = `tel:${contact.phone.replace(/\s/g, "")}`;
+    }
+  }
+
+  function handleSubmitCallback() {
+    setCallbackError("");
+    if (!callbackForm.preferredDate) {
+      setCallbackError("Please select a preferred date.");
+      return;
+    }
+    if (!callbackForm.preferredTimeSlot) {
+      setCallbackError("Please select a preferred time slot.");
+      return;
+    }
+    if (!callbackForm.topic) {
+      setCallbackError("Please select a topic.");
+      return;
+    }
+    if (!callbackForm.userName.trim()) {
+      setCallbackError("Please enter your name.");
+      return;
+    }
+    submitCallbackRequest({
+      providerId: provider.id,
+      providerName: provider.name,
+      userName: callbackForm.userName,
+      userPhone: callbackForm.userPhone || undefined,
+      preferredDate: callbackForm.preferredDate,
+      preferredTimeSlot: callbackForm.preferredTimeSlot,
+      topic: callbackForm.topic,
+      service: callbackForm.service || undefined,
+    });
+    setCallbackSuccess(true);
+  }
+
+  function handleSubmitFeedback(interactionId: string) {
+    if (feedbackForm.resolved === null) return;
+    submitContactFeedback({
+      interactionId,
+      providerId: provider.id,
+      resolved: feedbackForm.resolved,
+      rating: feedbackForm.rating,
+      comment: feedbackForm.comment,
+    });
+    setFeedbackSuccess(interactionId);
+    setFeedbackFor(null);
+    setFeedbackForm({ resolved: null, rating: 0, comment: "" });
+  }
+
+  function relativeTime(ts: number): string {
+    const diffMs = Date.now() - ts;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins} min ago`;
+    const diffHrs = Math.floor(diffMins / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    const diffDays = Math.floor(diffHrs / 24);
+    return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+  }
+
+  const selectedTopic = CALL_TOPICS.find((t) => t.id === selectedTopicId);
+  const callSummary = selectedTopicId
+    ? generateCallSummary(provider.name, selectedTopicId, selectedService)
+    : null;
+
+  const availabilityColors = {
+    available: "bg-green-100 text-green-700 border-green-200",
+    busy: "bg-amber-100 text-amber-700 border-amber-200",
+    closed: "bg-red-100 text-red-700 border-red-200",
+  };
+
+  const statusDot = {
+    available: "bg-green-500",
+    busy: "bg-amber-500",
+    closed: "bg-red-500",
+  };
+
+  return (
+    <div className="space-y-4" data-ocid="provider.contact.panel">
+      {/* ── Section 1: Contact Details ───────────────────────────────────── */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div
+          className="px-4 py-3 flex items-center gap-2"
+          style={{ background: "linear-gradient(90deg,#EFF6FF,#DBEAFE)" }}
+        >
+          <Phone className="h-4 w-4 text-blue-700" />
+          <h3 className="text-sm font-semibold text-blue-800">
+            Contact Details
+          </h3>
+        </div>
+        <div className="p-4">
+          {!contact ? (
+            <p className="text-sm text-gray-400 italic">
+              Contact information not available for this provider.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {/* Phone */}
+              <div className="flex items-center gap-3">
+                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-700 flex-1">
+                  {contact.phone}
+                </span>
+                <a
+                  href={`tel:${contact.phone.replace(/\s/g, "")}`}
+                  onClick={() =>
+                    logInteraction({
+                      providerId: provider.id,
+                      providerName: provider.name,
+                      type: "call",
+                      topic: "General",
+                      outcome: "pending",
+                    })
+                  }
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs rounded-full font-medium hover:bg-blue-700 transition-colors"
+                  data-ocid="provider.contact.call_button"
+                >
+                  <Phone className="h-3 w-3" />
+                  Call
+                </a>
+              </div>
+              {/* Email */}
+              <div className="flex items-center gap-3">
+                <Mail className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-700 flex-1 break-all">
+                  {contact.email}
+                </span>
+                <a
+                  href={`mailto:${contact.email}`}
+                  onClick={() =>
+                    logInteraction({
+                      providerId: provider.id,
+                      providerName: provider.name,
+                      type: "email",
+                      topic: "General Enquiry",
+                      outcome: "pending",
+                    })
+                  }
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 text-white text-xs rounded-full font-medium hover:bg-amber-600 transition-colors"
+                  data-ocid="provider.contact.email_button"
+                >
+                  <Mail className="h-3 w-3" />
+                  Email
+                </a>
+              </div>
+              {/* Address */}
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                <span className="text-sm text-gray-600">{contact.address}</span>
+              </div>
+              {/* Operating info */}
+              <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
+                <Clock className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="text-xs text-gray-500">
+                  {contact.operatingDays} · {contact.operatingHours}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Section 2: Smart Contact Insights ───────────────────────────── */}
+      {intelligence && (
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div
+            className="px-4 py-3 flex items-center gap-2"
+            style={{ background: "linear-gradient(90deg,#EFF6FF,#DBEAFE)" }}
+          >
+            <Sparkles className="h-4 w-4 text-blue-700" />
+            <h3 className="text-sm font-semibold text-blue-800">
+              Smart Contact Insights
+            </h3>
+          </div>
+          <div className="p-4 space-y-3">
+            {/* Availability badge */}
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${availabilityColors[intelligence.availabilityStatus]}`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${statusDot[intelligence.availabilityStatus]}`}
+                />
+                {intelligence.availabilityLabel}
+              </span>
+            </div>
+            {/* Response time */}
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <Clock className="h-4 w-4 text-blue-500 shrink-0" />
+              <span>
+                Responds within{" "}
+                <strong>{intelligence.responseTimeLabel}</strong>
+              </span>
+            </div>
+            {/* Response rate */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Response rate</span>
+                <span className="font-semibold text-gray-800">
+                  {intelligence.responseRate}%
+                </span>
+              </div>
+              <Progress value={intelligence.responseRate} className="h-2" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 3: Best Time to Contact ─────────────────────────────── */}
+      {intelligence && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 shadow-sm p-4 flex gap-3">
+          <Clock className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-blue-800">
+              Best time to contact: {intelligence.bestTimeLabel}
+            </p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              {intelligence.bestTimeRationale}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 4: AI Call Assist ────────────────────────────────────── */}
+      <div className="rounded-xl border border-indigo-100 bg-white shadow-sm overflow-hidden">
+        <div
+          className="px-4 py-3 flex items-center gap-2"
+          style={{ background: "linear-gradient(90deg,#EEF2FF,#E0E7FF)" }}
+        >
+          <Bot className="h-4 w-4 text-indigo-600" />
+          <h3 className="text-sm font-semibold text-indigo-800">
+            AI Call Assist
+          </h3>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-gray-600">What do you want to discuss?</p>
+          {/* Topic chips */}
+          <div className="flex flex-wrap gap-2">
+            {CALL_TOPICS.map((topic) => (
+              <button
+                key={topic.id}
+                type="button"
+                onClick={() =>
+                  setSelectedTopicId(
+                    selectedTopicId === topic.id ? null : topic.id,
+                  )
+                }
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  selectedTopicId === topic.id
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
+                }`}
+                data-ocid="provider.contact.topic.toggle"
+              >
+                <span>{topic.icon}</span>
+                {topic.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Service selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Service (optional):</span>
+            <select
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              value={selectedService ?? ""}
+              onChange={(e) => setSelectedService(e.target.value || undefined)}
+            >
+              <option value="">Any service</option>
+              {[
+                "General Care",
+                "Physiotherapy",
+                "Medication Review",
+                "Home Care",
+                "Mental Health Support",
+              ].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Generated summary */}
+          {callSummary && (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+              <p className="text-xs font-medium text-indigo-700 mb-1 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Call Prep Summary
+              </p>
+              <p className="text-sm text-indigo-800 leading-relaxed">
+                {callSummary}
+              </p>
+            </div>
+          )}
+
+          {/* Call button */}
+          {contact && (
+            <button
+              type="button"
+              onClick={handleCallProvider}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors"
+              data-ocid="provider.contact.ai_call_button"
+            >
+              <Phone className="h-4 w-4" />
+              Call Provider
+              {selectedTopic && (
+                <span className="opacity-80 text-xs">
+                  · {selectedTopic.label}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Section 5: Direct Action Buttons ────────────────────────────── */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div
+          className="px-4 py-3 flex items-center gap-2"
+          style={{ background: "linear-gradient(90deg,#EFF6FF,#DBEAFE)" }}
+        >
+          <PhoneCall className="h-4 w-4 text-blue-700" />
+          <h3 className="text-sm font-semibold text-blue-800">
+            Direct Contact
+          </h3>
+        </div>
+        <div className="p-4 grid grid-cols-3 gap-2">
+          {contact ? (
+            <a
+              href={`tel:${contact.phone.replace(/\s/g, "")}`}
+              onClick={() =>
+                logInteraction({
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  type: "call",
+                  topic: "Direct Call",
+                  outcome: "pending",
+                })
+              }
+              className="flex flex-col items-center gap-1.5 px-3 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-xs transition-all hover:shadow-md text-center"
+              data-ocid="provider.contact.direct_call_button"
+            >
+              <Phone className="h-5 w-5" />
+              Call Provider
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex flex-col items-center gap-1.5 px-3 py-3 bg-gray-200 text-gray-400 rounded-xl font-medium text-xs text-center cursor-not-allowed"
+            >
+              <Phone className="h-5 w-5" />
+              Call Provider
+            </button>
+          )}
+
+          {contact ? (
+            <a
+              href={`mailto:${contact.email}`}
+              onClick={() =>
+                logInteraction({
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  type: "email",
+                  topic: "Direct Email",
+                  outcome: "pending",
+                })
+              }
+              className="flex flex-col items-center gap-1.5 px-3 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium text-xs transition-all hover:shadow-md text-center"
+              data-ocid="provider.contact.direct_email_button"
+            >
+              <Mail className="h-5 w-5" />
+              Email Provider
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex flex-col items-center gap-1.5 px-3 py-3 bg-gray-200 text-gray-400 rounded-xl font-medium text-xs text-center cursor-not-allowed"
+            >
+              <Mail className="h-5 w-5" />
+              Email Provider
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowCallbackForm(!showCallbackForm);
+              setCallbackSuccess(false);
+              setCallbackError("");
+            }}
+            className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl font-medium text-xs transition-all hover:shadow-md text-center ${showCallbackForm ? "bg-green-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
+            data-ocid="provider.contact.callback_button"
+          >
+            <Calendar className="h-5 w-5" />
+            Request Callback
+          </button>
+        </div>
+      </div>
+
+      {/* ── Section 6: Callback Request Form ────────────────────────────── */}
+      {showCallbackForm && (
+        <div className="rounded-xl border border-green-200 bg-white shadow-sm overflow-hidden">
+          <div
+            className="px-4 py-3 flex items-center gap-2"
+            style={{ background: "linear-gradient(90deg,#F0FDF4,#DCFCE7)" }}
+          >
+            <Calendar className="h-4 w-4 text-green-700" />
+            <h3 className="text-sm font-semibold text-green-800">
+              Request a Callback
+            </h3>
+          </div>
+          <div className="p-4 space-y-3">
+            {callbackSuccess ? (
+              <div className="flex flex-col items-center gap-2 py-4 text-center">
+                <CheckCircle className="h-10 w-10 text-green-500" />
+                <p className="font-semibold text-green-700">
+                  Callback Requested!
+                </p>
+                <p className="text-sm text-gray-500">
+                  Status:{" "}
+                  <span className="font-medium text-amber-600">Pending</span>
+                </p>
+                <p className="text-xs text-gray-400">
+                  {provider.name} will contact you at your preferred time.
+                </p>
+              </div>
+            ) : (
+              <>
+                {callbackError && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                    {callbackError}
+                  </div>
+                )}
+                {/* Name */}
+                <div>
+                  <span className="block text-xs font-medium text-gray-600 mb-1">
+                    Your Name *
+                  </span>
+                  <input
+                    type="text"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+                    value={callbackForm.userName}
+                    onChange={(e) =>
+                      setCallbackForm((p) => ({
+                        ...p,
+                        userName: e.target.value,
+                      }))
+                    }
+                    data-ocid="provider.contact.callback_name.input"
+                  />
+                </div>
+                {/* Phone */}
+                <div>
+                  <span className="block text-xs font-medium text-gray-600 mb-1">
+                    Your Phone (optional)
+                  </span>
+                  <input
+                    type="tel"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+                    placeholder="04XX XXX XXX"
+                    value={callbackForm.userPhone}
+                    onChange={(e) =>
+                      setCallbackForm((p) => ({
+                        ...p,
+                        userPhone: e.target.value,
+                      }))
+                    }
+                    data-ocid="provider.contact.callback_phone.input"
+                  />
+                </div>
+                {/* Date */}
+                <div>
+                  <span className="block text-xs font-medium text-gray-600 mb-1">
+                    Preferred Date *
+                  </span>
+                  <input
+                    type="date"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+                    value={callbackForm.preferredDate}
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={(e) =>
+                      setCallbackForm((p) => ({
+                        ...p,
+                        preferredDate: e.target.value,
+                      }))
+                    }
+                    data-ocid="provider.contact.callback_date.input"
+                  />
+                </div>
+                {/* Time slot */}
+                <div>
+                  <span className="block text-xs font-medium text-gray-600 mb-1">
+                    Preferred Time Slot *
+                  </span>
+                  <select
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                    value={callbackForm.preferredTimeSlot}
+                    onChange={(e) =>
+                      setCallbackForm((p) => ({
+                        ...p,
+                        preferredTimeSlot: e.target.value,
+                      }))
+                    }
+                    data-ocid="provider.contact.callback_slot.select"
+                  >
+                    <option value="">Select time slot...</option>
+                    <option>Morning (8am–12pm)</option>
+                    <option>Afternoon (12pm–4pm)</option>
+                    <option>Late Afternoon (4pm–6pm)</option>
+                  </select>
+                </div>
+                {/* Topic */}
+                <div>
+                  <span className="block text-xs font-medium text-gray-600 mb-1">
+                    Topic *
+                  </span>
+                  <select
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                    value={callbackForm.topic}
+                    onChange={(e) =>
+                      setCallbackForm((p) => ({ ...p, topic: e.target.value }))
+                    }
+                    data-ocid="provider.contact.callback_topic.select"
+                  >
+                    <option value="">Select topic...</option>
+                    {CALL_TOPICS.map((t) => (
+                      <option key={t.id} value={t.label}>
+                        {t.icon} {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Service */}
+                <div>
+                  <span className="block text-xs font-medium text-gray-600 mb-1">
+                    Service (optional)
+                  </span>
+                  <select
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                    value={callbackForm.service}
+                    onChange={(e) =>
+                      setCallbackForm((p) => ({
+                        ...p,
+                        service: e.target.value,
+                      }))
+                    }
+                    data-ocid="provider.contact.callback_service.select"
+                  >
+                    <option value="">Any service</option>
+                    {[
+                      "General Care",
+                      "Physiotherapy",
+                      "Medication Review",
+                      "Home Care",
+                      "Mental Health Support",
+                    ].map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSubmitCallback}
+                  className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
+                  data-ocid="provider.contact.callback_submit.button"
+                >
+                  Request Callback
+                </button>
+              </>
+            )}
+
+            {/* Existing callbacks for this provider */}
+            {providerCallbacks.length > 0 && !callbackSuccess && (
+              <div className="pt-3 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-500 mb-2">
+                  Your existing requests:
+                </p>
+                <div className="space-y-1.5">
+                  {providerCallbacks.slice(0, 3).map((cb) => (
+                    <div
+                      key={cb.id}
+                      className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2"
+                      data-ocid="provider.contact.callback.item"
+                    >
+                      <span className="text-gray-600">
+                        {cb.preferredDate} ·{" "}
+                        {cb.preferredTimeSlot.split(" ")[0]}
+                      </span>
+                      <span
+                        className={`font-medium px-2 py-0.5 rounded-full ${
+                          cb.status === "Pending"
+                            ? "bg-amber-100 text-amber-700"
+                            : cb.status === "Accepted"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {cb.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 7 & 8: Contact History + Feedback ───────────────────── */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div
+          className="px-4 py-3 flex items-center gap-2"
+          style={{ background: "linear-gradient(90deg,#EFF6FF,#DBEAFE)" }}
+        >
+          <History className="h-4 w-4 text-blue-700" />
+          <h3 className="text-sm font-semibold text-blue-800">
+            Contact History
+          </h3>
+          {liveInteractions.length > 0 && (
+            <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+              {liveInteractions.length}
+            </span>
+          )}
+        </div>
+        <div className="p-4">
+          {liveInteractions.length === 0 ? (
+            <div
+              className="text-center py-6 text-gray-400 text-sm"
+              data-ocid="provider.contact.history.empty_state"
+            >
+              <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              No contact history yet
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {liveInteractions.map((interaction, idx) => {
+                const isLeavingFeedback = feedbackFor === interaction.id;
+                const alreadySucceeded = feedbackSuccess === interaction.id;
+                return (
+                  <div
+                    key={interaction.id}
+                    className="border border-gray-100 rounded-xl p-3 space-y-2"
+                    data-ocid={`provider.contact.history.item.${idx + 1}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {interaction.type === "call" ? (
+                        <Phone className="h-4 w-4 text-blue-500 shrink-0" />
+                      ) : interaction.type === "email" ? (
+                        <Mail className="h-4 w-4 text-amber-500 shrink-0" />
+                      ) : (
+                        <PhoneCall className="h-4 w-4 text-green-500 shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 capitalize">
+                          {interaction.type} · {interaction.topic}
+                        </p>
+                        {interaction.service && (
+                          <p className="text-xs text-gray-500">
+                            {interaction.service}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-gray-400">
+                          {relativeTime(interaction.createdAt)}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            interaction.outcome === "resolved"
+                              ? "bg-green-100 text-green-700"
+                              : interaction.outcome === "unresolved"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {interaction.outcome === "resolved"
+                            ? "Resolved"
+                            : interaction.outcome === "unresolved"
+                              ? "Unresolved"
+                              : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Feedback button / form */}
+                    {alreadySucceeded ? (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Thank you for your feedback!
+                      </p>
+                    ) : !interaction.feedbackSubmitted &&
+                      interaction.outcome !== "pending" ? (
+                      isLeavingFeedback ? (
+                        <div className="bg-gray-50 rounded-lg p-3 space-y-2 border border-gray-100">
+                          {/* Resolved toggle */}
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs text-gray-600">
+                              Was your issue resolved?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFeedbackForm((p) => ({
+                                  ...p,
+                                  resolved: true,
+                                }))
+                              }
+                              className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${feedbackForm.resolved === true ? "bg-green-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:border-green-400"}`}
+                              data-ocid="provider.contact.feedback.yes_button"
+                            >
+                              <ThumbsUp className="h-3 w-3" />
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFeedbackForm((p) => ({
+                                  ...p,
+                                  resolved: false,
+                                }))
+                              }
+                              className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${feedbackForm.resolved === false ? "bg-red-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:border-red-400"}`}
+                              data-ocid="provider.contact.feedback.no_button"
+                            >
+                              <ThumbsDown className="h-3 w-3" />
+                              No
+                            </button>
+                          </div>
+                          {/* Star rating */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">
+                              Rating:
+                            </span>
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() =>
+                                    setFeedbackForm((p) => ({
+                                      ...p,
+                                      rating: i,
+                                    }))
+                                  }
+                                  className="transition-transform hover:scale-110"
+                                >
+                                  <Star
+                                    className={`h-5 w-5 ${i <= feedbackForm.rating ? "fill-amber-400 text-amber-400" : "fill-gray-100 text-gray-300"}`}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Comment */}
+                          <textarea
+                            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                            placeholder="Optional comments..."
+                            rows={2}
+                            value={feedbackForm.comment}
+                            onChange={(e) =>
+                              setFeedbackForm((p) => ({
+                                ...p,
+                                comment: e.target.value,
+                              }))
+                            }
+                            data-ocid="provider.contact.feedback.textarea"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFeedbackFor(null)}
+                              className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                              data-ocid="provider.contact.feedback.cancel_button"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={feedbackForm.resolved === null}
+                              onClick={() =>
+                                handleSubmitFeedback(interaction.id)
+                              }
+                              className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              data-ocid="provider.contact.feedback.submit_button"
+                            >
+                              Submit Feedback
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeedbackFor(interaction.id);
+                            setFeedbackForm({
+                              resolved: null,
+                              rating: 0,
+                              comment: "",
+                            });
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 underline transition-colors"
+                          data-ocid="provider.contact.leave_feedback.button"
+                        >
+                          Leave Feedback
+                        </button>
+                      )
+                    ) : interaction.feedbackSubmitted ? (
+                      <p className="text-xs text-gray-400 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3 text-green-400" />
+                        Feedback submitted
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Provider Detail Modal ─────────────────────────────────────────────────────
 function ProviderDetailModal({
   provider,
@@ -1379,7 +2300,7 @@ function ProviderDetailModal({
   capacityState: Record<string, { total: number; booked: number }>;
 }) {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "trends" | "services" | "reviews"
+    "overview" | "trends" | "services" | "reviews" | "contact"
   >("overview");
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, comment: "" });
@@ -1578,19 +2499,25 @@ function ProviderDetailModal({
             </div>
             {/* Tabs */}
             <div className="flex gap-1 mt-3">
-              {(["overview", "trends", "services", "reviews"] as const).map(
-                (tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setActiveTab(tab)}
-                    data-ocid={`provider.${tab}.tab`}
-                    className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors capitalize ${activeTab === tab ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"}`}
-                  >
-                    {tab}
-                  </button>
-                ),
-              )}
+              {(
+                [
+                  "overview",
+                  "trends",
+                  "services",
+                  "reviews",
+                  "contact",
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  data-ocid={`provider.${tab}.tab`}
+                  className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors capitalize ${activeTab === tab ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -2084,6 +3011,13 @@ function ProviderDetailModal({
                   </div>
                 )}
               </>
+            )}
+
+            {activeTab === "contact" && (
+              <ProviderContactPanel
+                provider={provider}
+                capacityState={capacityState}
+              />
             )}
           </div>
         </div>
